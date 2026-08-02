@@ -1,0 +1,39 @@
+[project]
+name = "data-processing-tools"
+version = "0.1.0"
+description = "Personal data-processing tools"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1,<1",
+    "imagehash>=4.3.2,<5",
+    "pillow>=11.3.0,<13",
+]
+
+[project.scripts]
+x-likes = "x_likes.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1,<10",
+    "ruff>=0.12.7,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/x_likes"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
