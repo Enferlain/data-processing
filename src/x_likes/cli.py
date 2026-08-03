@@ -74,7 +74,8 @@ def main(argv: list[str] | None = None) -> None:
         summary = database.summary()
         print(
             "Summary: "
-            f"{summary['posts']} posts, {summary['fetched']} enriched, "
+            f"{summary['posts']} posts, {summary['accounts']} accounts, "
+            f"{summary['fetched']} enriched, "
             f"{summary['unavailable']} unavailable, {summary['fetch_errors']} fetch errors, "
             f"{summary['images']} images, "
             f"{summary['downloaded']} downloaded"

@@ -12,6 +12,24 @@ from x_likes.archive import ArchivedLike
 from x_likes.provider import PostMetadata
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS accounts (
+    author_id TEXT PRIMARY KEY,
+    handle TEXT,
+    display_name TEXT,
+    bio TEXT,
+    profile_url TEXT,
+    avatar_url TEXT,
+    banner_url TEXT,
+    location TEXT,
+    website_url TEXT,
+    followers INTEGER,
+    following INTEGER,
+    verified INTEGER,
+    verification_type TEXT,
+    fetched_at TEXT NOT NULL,
+    raw_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS posts (
     post_id TEXT PRIMARY KEY,
     post_url TEXT NOT NULL,
@@ -48,6 +66,7 @@ CREATE TABLE IF NOT EXISTS media (
 );
 
 CREATE INDEX IF NOT EXISTS posts_fetch_status_idx ON posts(fetch_status);
+CREATE INDEX IF NOT EXISTS accounts_handle_idx ON accounts(handle);
 CREATE INDEX IF NOT EXISTS media_sha256_idx ON media(sha256);
 CREATE INDEX IF NOT EXISTS media_phash_idx ON media(phash);
 """
@@ -116,6 +135,50 @@ class LikesDatabase:
 
     def save_metadata(self, metadata: PostMetadata, *, provider: str) -> None:
         with self.transaction():
+            fetched_at = _now()
+            if metadata.account is not None:
+                account = metadata.account
+                self.connection.execute(
+                    """
+                    INSERT INTO accounts (
+                        author_id, handle, display_name, bio, profile_url, avatar_url,
+                        banner_url, location, website_url, followers, following, verified,
+                        verification_type, fetched_at, raw_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(author_id) DO UPDATE SET
+                        handle = excluded.handle,
+                        display_name = excluded.display_name,
+                        bio = excluded.bio,
+                        profile_url = excluded.profile_url,
+                        avatar_url = excluded.avatar_url,
+                        banner_url = excluded.banner_url,
+                        location = excluded.location,
+                        website_url = excluded.website_url,
+                        followers = excluded.followers,
+                        following = excluded.following,
+                        verified = excluded.verified,
+                        verification_type = excluded.verification_type,
+                        fetched_at = excluded.fetched_at,
+                        raw_json = excluded.raw_json
+                    """,
+                    (
+                        account.account_id,
+                        account.handle,
+                        account.display_name,
+                        account.bio,
+                        account.profile_url,
+                        account.avatar_url,
+                        account.banner_url,
+                        account.location,
+                        account.website_url,
+                        account.followers,
+                        account.following,
+                        account.verified,
+                        account.verification_type,
+                        fetched_at,
+                        json.dumps(account.raw, ensure_ascii=False, separators=(",", ":")),
+                    ),
+                )
             self.connection.execute(
                 """
                 UPDATE posts SET
@@ -132,7 +195,7 @@ class LikesDatabase:
                     metadata.author_name,
                     metadata.text,
                     metadata.created_at,
-                    _now(),
+                    fetched_at,
                     provider,
                     json.dumps(metadata.raw, ensure_ascii=False, separators=(",", ":")),
                     metadata.post_id,
@@ -236,6 +299,7 @@ class LikesDatabase:
     def summary(self) -> dict[str, int]:
         result = {
             "posts": self.connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0],
+            "accounts": self.connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0],
             "fetched": self.connection.execute(
                 "SELECT COUNT(*) FROM posts WHERE fetch_status = 'fetched'"
             ).fetchone()[0],

@@ -37,8 +37,17 @@ x-likes-output/
 ```
 
 The database retains the archive text and complete raw provider JSON alongside normalized
-post, author, and image fields. Downloaded images receive MD5, SHA-256, and perceptual hashes.
-MD5 is included only for matching existing collections; SHA-256 is the exact-file identity.
+post, account, and image fields. The `accounts` table stores the account ID, handle, display
+name, bio, profile/avatar/banner URLs, website, location, follower counts, verification data,
+fetch time, and raw account JSON. Account details are a snapshot from enrichment time rather
+than necessarily the values shown when the post was originally liked.
+
+If a database was created with an earlier version of this tool, run once with `--refresh` to
+populate its normalized `accounts` table from fresh provider responses.
+
+Downloaded images receive MD5, SHA-256, and perceptual hashes. Hashes require reading the image
+bytes and are therefore only created with `--download-images`. MD5 is included only for matching
+existing collections; SHA-256 is the exact-file identity.
 
 ### Operational notes
 

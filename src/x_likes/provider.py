@@ -33,16 +33,44 @@ class ImageMetadata:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountMetadata:
+    account_id: str
+    handle: str | None
+    display_name: str | None
+    bio: str | None
+    profile_url: str | None
+    avatar_url: str | None
+    banner_url: str | None
+    location: str | None
+    website_url: str | None
+    followers: int | None
+    following: int | None
+    verified: bool | None
+    verification_type: str | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
 class PostMetadata:
     post_id: str
     post_url: str
     text: str | None
-    author_id: str | None
-    author_handle: str | None
-    author_name: str | None
+    account: AccountMetadata | None
     created_at: str | None
     images: tuple[ImageMetadata, ...]
     raw: dict[str, Any]
+
+    @property
+    def author_id(self) -> str | None:
+        return self.account.account_id if self.account else None
+
+    @property
+    def author_handle(self) -> str | None:
+        return self.account.handle if self.account else None
+
+    @property
+    def author_name(self) -> str | None:
+        return self.account.display_name if self.account else None
 
 
 class FxTwitterClient:
@@ -128,6 +156,7 @@ def normalize_fxtwitter(payload: dict[str, Any], *, expected_post_id: str) -> Po
         raise ProviderError(f"FxTwitter could not resolve the post: {message}", raw=payload)
 
     author = status.get("author") if isinstance(status.get("author"), dict) else {}
+    account = _normalize_account(author)
     media = status.get("media") if isinstance(status.get("media"), dict) else {}
     photos = media.get("photos") if isinstance(media.get("photos"), list) else []
     images: list[ImageMetadata] = []
@@ -152,12 +181,43 @@ def normalize_fxtwitter(payload: dict[str, Any], *, expected_post_id: str) -> Po
         post_id=post_id,
         post_url=_string(status, "url") or f"https://x.com/i/web/status/{post_id}",
         text=_string(status, "text"),
-        author_id=_string(author, "id"),
-        author_handle=_string(author, "screen_name", "handle", "username"),
-        author_name=_string(author, "name"),
+        account=account,
         created_at=_string(status, "created_at", "createdAt"),
         images=tuple(images),
         raw=payload,
+    )
+
+
+def _normalize_account(author: dict[str, Any]) -> AccountMetadata | None:
+    account_id = _string(author, "id")
+    if account_id is None:
+        return None
+
+    website = author.get("website")
+    if isinstance(website, dict):
+        website_url = _string(website, "url", "expanded_url")
+    else:
+        website_url = str(website).strip() if website is not None else None
+
+    verification = author.get("verification")
+    verification_data = verification if isinstance(verification, dict) else {}
+    verified_value = verification_data.get("verified", author.get("verified"))
+
+    return AccountMetadata(
+        account_id=account_id,
+        handle=_string(author, "screen_name", "handle", "username"),
+        display_name=_text(author, "name"),
+        bio=_text(author, "description", "bio"),
+        profile_url=_string(author, "url"),
+        avatar_url=_string(author, "avatar_url", "profile_image_url_https"),
+        banner_url=_string(author, "banner_url", "profile_banner_url"),
+        location=_text(author, "location"),
+        website_url=website_url,
+        followers=_integer(author, "followers"),
+        following=_integer(author, "following"),
+        verified=_boolean(verified_value),
+        verification_type=_string(verification_data, "type"),
+        raw=author,
     )
 
 
@@ -166,6 +226,28 @@ def _string(data: dict[str, Any], *keys: str) -> str | None:
         value = data.get(key)
         if value is not None and str(value).strip():
             return str(value).strip()
+    return None
+
+
+def _text(data: dict[str, Any], *keys: str) -> str | None:
+    """Return text while preserving the meaningful present-but-empty distinction."""
+    for key in keys:
+        if key in data and data[key] is not None:
+            return str(data[key]).strip()
+    return None
+
+
+def _boolean(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1"}:
+            return True
+        if normalized in {"false", "0"}:
+            return False
     return None
 
 
