@@ -76,6 +76,54 @@ uv run catalog stats catalog-output/catalog.sqlite3 --event bookmarked --json
 Default output and errors show source/catalog basenames rather than absolute private paths. Raw
 profile and post content is not printed by inspection or import summaries.
 
+## Discover external links offline
+
+Back up the catalog, then derive links already present in normalized profiles/posts and retained
+X/xarchive JSON:
+
+```bash
+uv run catalog discover-links catalog-output/catalog.sqlite3
+uv run catalog links catalog-output/catalog.sqlite3 --platform pixiv
+uv run catalog links catalog-output/catalog.sqlite3 --subject-kind account --object-kind account
+uv run catalog links catalog-output/catalog.sqlite3 --subject-kind post --subject-id 42
+uv run catalog links catalog-output/catalog.sqlite3 --state unresolved --json
+```
+
+Discovery never follows redirects or contacts a site. It keeps the original URL, conservative
+canonical URL, source field/JSON path, algorithm versions, and recognized instance-qualified ID.
+Shorteners, link hubs, personal sites, malformed URLs, and unsupported routes remain visible with a
+bounded resolution state instead of being guessed. Repeating discovery is safe: observations,
+references, candidates, and evidence use stable identities, while each run retains its own counts.
+
+## Inspect and review matches
+
+Profile links can produce account candidates; links from posts to artworks/posts can produce post
+source candidates. They are separate claims—post-source evidence does not establish artist identity.
+
+```bash
+uv run catalog matches catalog-output/catalog.sqlite3 --state pending
+uv run catalog matches catalog-output/catalog.sqlite3 --kind post --json
+uv run catalog match-show catalog-output/catalog.sqlite3 post:1
+uv run catalog match-review catalog-output/catalog.sqlite3 post:1 \
+  --decision confirm --note "checked source metadata" --expected-revision 0
+uv run catalog match-review catalog-output/catalog.sqlite3 account:1 \
+  --decision reject --note "different artist"
+```
+
+Scores are deterministic review-order hints, never confirmations. Decisions are append-only;
+reconsidering a candidate adds history. Use the `review_revision` shown by `match-show` as
+`--expected-revision` to reject a concurrent stale decision. Reversing an account confirmation
+rebuilds active identity memberships from the remaining confirmed pair decisions. Confirming a
+supported stable account reference may create a metadata-empty local account and identity membership,
+but never invents a handle, display name,
+bio, or transitive pair confirmation. Conflicting existing identity groups are reported for review.
+
+Current discovery records manually supplied broad relation/variation facts but does not fetch media,
+calculate MD5/pHash, compare pixels, choose originals, crawl accounts, or pull additional works.
+Those are boundaries for future network adapters and image/work matching. Booru hashes and source
+URLs are evidence, not proof of authorship. Keep private exports and catalog backups out of version
+control, and run `catalog doctor` after restoring or migrating a catalog.
+
 ## Recovery and reconciliation
 
 - A malformed import rolls back normalized records, records a failed import run, and retains a
@@ -86,5 +134,5 @@ profile and post content is not printed by inspection or import summaries.
   with independently queryable `liked` and `bookmarked` provenance.
 
 The existing online `x-likes` workflow remains documented in [its guide](x-likes.md). Network
-adapters, content-addressed downloads, Pixiv/booru matching, and identity review are later catalog
-changes, not hidden behavior of these import commands.
+adapters, content-addressed downloads, live Pixiv/booru lookup, and image matching remain later
+catalog changes, not hidden behavior of these commands.

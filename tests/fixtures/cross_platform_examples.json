@@ -1,0 +1,71 @@
+{
+  "fixture_version": "public-metadata-v1",
+  "media_fetched": false,
+  "synthetic_cases": [
+    {
+      "kind": "account_bio_link",
+      "source_handle": "different-name",
+      "bio": "Portfolio: https://www.pixiv.net/users/123",
+      "expected": {"object_kind": "account", "native_id": "123"}
+    },
+    {
+      "kind": "instance_collision",
+      "urls": ["https://one.example/@artist/123", "https://two.example/@artist/123"],
+      "expected_instances": ["one.example", "two.example"]
+    },
+    {
+      "kind": "unresolved_link_hub",
+      "url": "https://linktr.ee/example",
+      "expected_state": "unresolved"
+    },
+    {
+      "kind": "booru_role_separation",
+      "post_id": "55",
+      "uploader": "fixture_uploader",
+      "artist_tag": "fixture_artist",
+      "expected_same_account": false
+    },
+    {
+      "kind": "pixiv_multi_page",
+      "artwork_id": "99",
+      "page_count": 3,
+      "expected_post_references": 1
+    }
+  ],
+  "public_cases": [
+    {
+      "case": 1,
+      "accounts": {"pixiv_user_id": "27631291", "x_handle": "yyqw7151"},
+      "posts": {"pixiv": "133416234", "x": "1950567258528547071", "danbooru": ["9714844", "9729919"], "gelbooru": "12370900"},
+      "assets": [
+        {"posts": ["danbooru:9714844", "gelbooru:12370900"], "md5": "fef8d5889c2fe425dd50cfade909cec9", "width": 1150, "height": 1750, "format": "jpeg"},
+        {"posts": ["danbooru:9729919"], "md5_prefix": "7f9", "width": 1150, "height": 1750, "format": "png"}
+      ],
+      "expected_relations": ["exact_bytes", "same_work", "technical_variation"]
+    },
+    {
+      "case": 2,
+      "posts": {"x": "1900654502380007860", "baraag": "114162817218658720", "danbooru": "8996458", "gelbooru": "11605534", "e621": "5433323"},
+      "assets": [
+        {"posts": ["danbooru:8996458", "gelbooru:11605534"], "md5": "7cd330523b8e34b97c40e02c7e87d98c", "width": 1153, "height": 1333, "source_platform": "baraag"},
+        {"posts": ["e621:5433323"], "md5": "47f89865202da62a62467bbcec220818", "width": 1153, "height": 1333, "source_platform": "x"}
+      ],
+      "expected_relations": ["same_work", "unknown_transformation"]
+    },
+    {
+      "case": 3,
+      "labels": {
+        "variation_1_text": ["x:1837662117949800671", "danbooru:8186581", "gelbooru:10720246"],
+        "variation_1_no_text": ["gelbooru:10791439"],
+        "variation_2": ["gelbooru:10791440"]
+      },
+      "assets": [
+        {"posts": ["danbooru:8186581", "gelbooru:10720246"], "md5": "072b69605a05873a2443626b7600ed69", "width": 1401, "height": 2048, "format": "jpeg"},
+        {"posts": ["gelbooru:10791439"], "md5_prefix": "98ea", "width": 1471, "height": 2151, "format": "png"},
+        {"posts": ["gelbooru:10791440"], "md5_prefix": "e2d", "width": 1471, "height": 2151, "format": "png"}
+      ],
+      "expected_relations": ["same_work", "text_removed", "variant_of"],
+      "labels_are_user_supplied": true
+    }
+  ]
+}

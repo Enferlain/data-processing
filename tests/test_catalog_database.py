@@ -11,8 +11,8 @@ from media_catalog.database import CatalogDatabase, SchemaVersionError, current_
 def test_fresh_catalog_applies_current_migration(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "catalog.sqlite3"
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 1
-        assert database.summary()["platforms"] == 1
+        assert database.schema_version == current_schema_version() == 2
+        assert database.summary()["platforms"] == 6
         assert database.doctor()["ok"] is True
 
 
@@ -35,9 +35,6 @@ def test_platform_namespaces_allow_the_same_native_id(tmp_path: Path) -> None:
     with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
         now = "2026-08-05T00:00:00Z"
         with database.transaction():
-            database.connection.execute(
-                "INSERT INTO platforms (platform_key, display_name) VALUES ('pixiv', 'Pixiv')"
-            )
             platform_ids = {
                 row["platform_key"]: row["platform_id"]
                 for row in database.connection.execute(
@@ -78,7 +75,7 @@ def test_reopening_current_catalog_is_idempotent(tmp_path: Path) -> None:
             )
         }
     with CatalogDatabase(path) as database:
-        assert database.schema_version == 1
+        assert database.schema_version == current_schema_version()
         assert original_tables <= {
             row[0]
             for row in database.connection.execute(

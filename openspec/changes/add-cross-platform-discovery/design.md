@@ -201,12 +201,13 @@ dimensions, relationship metadata, and user-supplied expected labels.
   lookup at check time. This is a same-work candidate with an unresolved transformation, not an
   exact match, and demonstrates why durable source metadata must outlive remote availability.
 - **Case 3 — X/Danbooru/Gelbooru variations:** X post `1837662117949800671`, Danbooru post `8186581`,
-  reports one 1401x2048 photo. Danbooru post `8186581` and Gelbooru post `10720246` cite that X post
-  and share MD5 `072b69605a05873a2443626b7600ed69`. Gelbooru posts `10791439` and `10791440` are
-  distinct 1471x2151 PNG assets with different MD5 values and blank source fields. The user identifies
-  three related variations: a text/no-text pair and a third content variation. That assertion remains
-  user-supplied evidence until later byte/perceptual analysis can refine the relationships; no X byte
-  hash is claimed from metadata alone.
+  and Gelbooru post `10720246` are user-labelled **variation 1 with text**. Danbooru `8186581` and
+  Gelbooru `10720246` cite that X post and share the 1401x2048 JPEG MD5
+  `072b69605a05873a2443626b7600ed69`; the X page reports one 1401x2048 photo but does not expose a
+  verified byte hash. Gelbooru post `10791439` is user-labelled **variation 1 without text**, while
+  Gelbooru post `10791440` is user-labelled **variation 2**. Those two posts are distinct 1471x2151
+  PNG assets with different MD5 values and blank source fields. These labels remain user-supplied
+  evidence until later byte/perceptual analysis can refine the relationships.
 
 These cases are regression inputs, not live integration tests. Tests never depend on the sites being
 available and never fetch their media URLs.

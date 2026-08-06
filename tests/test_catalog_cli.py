@@ -22,6 +22,11 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ["search", str(catalog), "artist", "--event", "bookmarked"],
         ["ingest", "x-likes-db", str(source), "--catalog", str(catalog)],
         ["ingest", "xarchive", str(source), "--catalog", str(catalog), "--json"],
+        ["discover-links", str(catalog), "--json"],
+        ["links", str(catalog), "--platform", "pixiv", "--subject-id", "1"],
+        ["matches", str(catalog), "--kind", "post", "--state", "pending"],
+        ["match-show", str(catalog), "post:1", "--json"],
+        ["match-review", str(catalog), "post:1", "--decision", "reject"],
     )
     for argv in cases:
         assert parser.parse_args(argv).command == argv[0]
@@ -79,3 +84,22 @@ def test_both_ingest_commands_run_with_human_and_json_output(
     human = capsys.readouterr().out
     assert "source_kind: x-likes-db" in human
     assert str(tmp_path) not in human
+
+
+def test_discovery_cli_has_stable_json_and_bounded_candidate_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    main(["init", str(catalog), "--json"])
+    capsys.readouterr()
+    main(["discover-links", str(catalog), "--json"])
+    discovered = json.loads(capsys.readouterr().out)
+    assert discovered["status"] == "complete"
+    assert discovered["versions"]["recognizer"] == "platform-recognizers-v1"
+    main(["links", str(catalog), "--state", "unresolved", "--json"])
+    assert json.loads(capsys.readouterr().out)["results"] == []
+    main(["matches", str(catalog), "--state", "pending", "--json"])
+    assert json.loads(capsys.readouterr().out)["results"] == []
+    with pytest.raises(SystemExit, match="candidate not found") as raised:
+        main(["match-show", str(catalog), "post:999"])
+    assert str(tmp_path) not in str(raised.value)
