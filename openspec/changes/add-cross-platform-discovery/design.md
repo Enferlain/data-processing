@@ -189,11 +189,11 @@ dimensions, relationship metadata, and user-supplied expected labels.
 
 - **Case 1 — Pixiv/X/Danbooru/Gelbooru:** Pixiv artwork `133416234` belongs to numeric user
   `27631291` and its description links the X handle `yyqw7151`. X post `1950567258528547071`,
-  Danbooru post `9714844`, and Gelbooru post `12370900` describe a 1150x1750 JPEG with MD5
-  `fef8d5889c2fe425dd50cfade909cec9`. Danbooru marks it as a child of Pixiv-backed post `9729919`,
-  a 1150x1750 PNG with a different MD5. This supports exact cross-booru asset evidence, strong
-  account-link evidence, and same-work/technical-variant evidence without proving which upload time
-  identifies the creative original.
+  reports one 1150x1750 photo. Danbooru post `9714844` and Gelbooru post `12370900` both cite that X
+  post and share JPEG MD5 `fef8d5889c2fe425dd50cfade909cec9`. Danbooru marks its copy as a child
+  of Pixiv-backed post `9729919`, a 1150x1750 PNG with a different MD5. This supports exact
+  cross-booru asset evidence, strong account-link evidence, and same-work/technical-variant evidence
+  without claiming an unverified X byte hash or that upload time identifies the creative original.
 - **Case 2 — X/Baraag/Danbooru/Gelbooru/e621:** Danbooru post `8996458` and Gelbooru post `11605534`
   share MD5 `7cd330523b8e34b97c40e02c7e87d98c`, dimensions 1153x1333, and a Baraag source. e621 post
   `5433323` has the same dimensions and PNG format but MD5 `47f89865202da62a62467bbcec220818`
@@ -201,11 +201,12 @@ dimensions, relationship metadata, and user-supplied expected labels.
   lookup at check time. This is a same-work candidate with an unresolved transformation, not an
   exact match, and demonstrates why durable source metadata must outlive remote availability.
 - **Case 3 — X/Danbooru/Gelbooru variations:** X post `1837662117949800671`, Danbooru post `8186581`,
-  and Gelbooru post `10720246` share MD5 `072b69605a05873a2443626b7600ed69` and dimensions
-  1401x2048. Gelbooru posts `10791439` and `10791440` are distinct 1471x2151 PNG assets with different
-  MD5 values and blank source fields. The user identifies three related variations: a text/no-text
-  pair and a third content variation. That assertion remains user-supplied evidence until later
-  byte/perceptual analysis can refine the relationships.
+  reports one 1401x2048 photo. Danbooru post `8186581` and Gelbooru post `10720246` cite that X post
+  and share MD5 `072b69605a05873a2443626b7600ed69`. Gelbooru posts `10791439` and `10791440` are
+  distinct 1471x2151 PNG assets with different MD5 values and blank source fields. The user identifies
+  three related variations: a text/no-text pair and a third content variation. That assertion remains
+  user-supplied evidence until later byte/perceptual analysis can refine the relationships; no X byte
+  hash is claimed from metadata alone.
 
 These cases are regression inputs, not live integration tests. Tests never depend on the sites being
 available and never fetch their media URLs.
