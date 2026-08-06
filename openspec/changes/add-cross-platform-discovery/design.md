@@ -11,11 +11,11 @@ post entity links. Direct Pixiv and Danbooru-family resource URLs can therefore 
 references offline. Shorteners, link hubs, and personal sites cannot be resolved safely without a
 separate network workflow.
 
-Local references confirm several constraints: Pixiv numeric user and artwork IDs are stable while
-handles are secondary; Pixiv works can contain several page occurrences; Danbooru-family native IDs
-must be namespaced by instance hostname; booru artist records, uploaders, posts, media assets, and
-artist tags are different concepts; and a booru MD5 or source URL is evidence rather than proof of
-creative ownership.
+Local references and the public examples below confirm several constraints: Pixiv numeric user and
+artwork IDs are stable while handles are secondary; Pixiv works can contain several page occurrences;
+Danbooru-family native IDs must be namespaced by instance hostname; booru artist records, uploaders,
+posts, media assets, and artist tags are different concepts; Mastodon-compatible status IDs are also
+instance-scoped; and a booru MD5 or source URL is evidence rather than proof of creative ownership.
 
 ## Goals / Non-Goals
 
@@ -75,9 +75,10 @@ source record -> URL occurrence -> conservative canonical URL
 
 V1 extractors cover normalized account website/profile/bio fields and supported X/xarchive post text,
 entity, card, and quoted/source locations. Recognizers cover direct X account/post, Pixiv user/artwork,
-and configured Danbooru-family post/artist/media-asset patterns. Pixiv locale/legacy route aliases may
-canonicalize to their stable numeric target. Danbooru-family references retain instance hostname;
-the service family alone is not a namespace.
+Mastodon-compatible account/status, Danbooru `/posts/<id>` and `/post/show/<id>`, Gelbooru query-style
+post, e621 legacy/current post, and configured booru artist/media-asset patterns. Pixiv locale/legacy
+route aliases may canonicalize to their stable numeric target. Booru and Mastodon-compatible
+references retain instance hostname; a service family or display handle alone is not a namespace.
 
 Canonicalization removes only explicitly recognized non-semantic components. Original query and
 fragment values remain on observations; a recognizer may omit them from a direct-resource canonical
@@ -180,6 +181,35 @@ but not entire retained raw payloads. Errors reduce private catalog/source paths
 Alternative considered: fold discovery into import. Rejected because algorithm upgrades must be
 rerunnable without reimporting private exports or creating new user observations.
 
+### 8. Keep public reference examples as metadata-only fixtures
+
+The following public cases were checked on 2026-08-06 through page/API metadata only. No media files
+were opened or downloaded. Fixture copies retain only public identifiers, source URLs, hashes,
+dimensions, relationship metadata, and user-supplied expected labels.
+
+- **Case 1 — Pixiv/X/Danbooru/Gelbooru:** Pixiv artwork `133416234` belongs to numeric user
+  `27631291` and its description links the X handle `yyqw7151`. X post `1950567258528547071`,
+  Danbooru post `9714844`, and Gelbooru post `12370900` describe a 1150x1750 JPEG with MD5
+  `fef8d5889c2fe425dd50cfade909cec9`. Danbooru marks it as a child of Pixiv-backed post `9729919`,
+  a 1150x1750 PNG with a different MD5. This supports exact cross-booru asset evidence, strong
+  account-link evidence, and same-work/technical-variant evidence without proving which upload time
+  identifies the creative original.
+- **Case 2 — X/Baraag/Danbooru/Gelbooru/e621:** Danbooru post `8996458` and Gelbooru post `11605534`
+  share MD5 `7cd330523b8e34b97c40e02c7e87d98c`, dimensions 1153x1333, and a Baraag source. e621 post
+  `5433323` has the same dimensions and PNG format but MD5 `47f89865202da62a62467bbcec220818`
+  and cites X post `1900654502380007860`; both source posts were unavailable to anonymous metadata
+  lookup at check time. This is a same-work candidate with an unresolved transformation, not an
+  exact match, and demonstrates why durable source metadata must outlive remote availability.
+- **Case 3 — X/Danbooru/Gelbooru variations:** X post `1837662117949800671`, Danbooru post `8186581`,
+  and Gelbooru post `10720246` share MD5 `072b69605a05873a2443626b7600ed69` and dimensions
+  1401x2048. Gelbooru posts `10791439` and `10791440` are distinct 1471x2151 PNG assets with different
+  MD5 values and blank source fields. The user identifies three related variations: a text/no-text
+  pair and a third content variation. That assertion remains user-supplied evidence until later
+  byte/perceptual analysis can refine the relationships.
+
+These cases are regression inputs, not live integration tests. Tests never depend on the sites being
+available and never fetch their media URLs.
+
 ## Risks / Trade-offs
 
 - [Raw provider schemas evolve] -> Keep extractors source/version specific, retain JSON paths and raw
@@ -217,6 +247,7 @@ raw payloads, and source exports remain untouched.
 ## Open Questions
 
 - Which additional direct URL aliases should be admitted after testing the first 3-5 public artist
-  examples? Adding aliases does not change the data model or offline boundary.
+  examples beyond the Pixiv, X/Twitter, Mastodon-compatible, Danbooru, Gelbooru, and e621 forms now
+  represented? Adding aliases does not change the data model or offline boundary.
 - Which broad post-relation characteristics recur often enough in those examples to deserve
   normalized terms rather than preserved source labels?

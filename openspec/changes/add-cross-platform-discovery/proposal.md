@@ -10,7 +10,8 @@ and post match candidates without making unverified identity, authorship, or sam
 - Extract external URLs from normalized account/post fields and retained raw X/xarchive records,
   preserving the original value, source context, observation, and extraction version.
 - Canonicalize supported URLs and parse stable platform references such as Pixiv user/artwork IDs,
-  X account/post IDs, and Danbooru-family post or artist references without network access.
+  X account/post IDs, Mastodon-compatible account/status IDs, and instance-qualified Danbooru,
+  Gelbooru, or e621 post/artist references without network access.
 - Store unresolved links rather than discarding or guessing at shortened, link-hub, personal-site,
   or unsupported URLs.
 - Create distinct account-to-account and post-to-post candidates backed by independently stored,

@@ -47,6 +47,14 @@ booru artist record, uploader account, post, or artwork as interchangeable objec
 - **WHEN** a canonical URL identifies a supported Danbooru-family post or artist record
 - **THEN** discovery retains the specific instance, object kind, and stable identifier or artist name available in the URL
 
+#### Scenario: Recognize legacy and query-style booru post routes
+- **WHEN** a URL identifies a post through a supported `/post/show/<id>` route or a Gelbooru-style `page=post`, `s=view`, and `id=<id>` query
+- **THEN** discovery records an instance-qualified post reference while retaining the original route and query
+
+#### Scenario: Recognize a Mastodon-compatible status
+- **WHEN** a URL contains a supported instance-qualified `/@account/<status-id>` route
+- **THEN** discovery records a status/post reference for that instance without assuming the display handle is its stable account ID
+
 ### Requirement: Retain unresolved external links
 The system SHALL keep valid links that cannot be mapped to a stable supported platform reference and
 SHALL report why resolution is pending or unsupported without fabricating an identifier.

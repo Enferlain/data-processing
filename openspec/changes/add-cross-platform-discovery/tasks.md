@@ -8,8 +8,8 @@
 
 - [ ] 2.1 Implement conservative versioned URL parsing and canonicalization that retains original query/fragment data and rewrites only allowlisted non-semantic components.
 - [ ] 2.2 Implement source-specific extractors for normalized account fields and supported retained X/xarchive bio, text, entity, card, quote, and source locations, including stable source contexts and JSON paths.
-- [ ] 2.3 Implement a recognizer registry for direct X account/post, Pixiv user/artwork, and configured Danbooru-family post/artist/media-asset routes with numeric IDs, legacy aliases, and instance hostnames handled explicitly.
-- [ ] 2.4 Add table-driven recognizer/canonicalizer tests for equivalent aliases, ambiguous query parameters, invalid URLs, shorteners, personal/link-hub URLs, Pixiv numeric IDs, and colliding native IDs on different booru instances.
+- [ ] 2.3 Implement a recognizer registry for direct X account/post, Pixiv user/artwork, Mastodon-compatible account/status, Danbooru current/legacy, Gelbooru query-style, e621 current/legacy, and configured booru artist/media-asset routes with numeric IDs, aliases, and instance hostnames handled explicitly.
+- [ ] 2.4 Add table-driven recognizer/canonicalizer tests for equivalent aliases, ambiguous query parameters, invalid URLs, shorteners, personal/link-hub URLs, Pixiv numeric IDs, Mastodon instance scoping, Gelbooru query identity, and colliding native IDs on different booru instances.
 
 ## 3. Link discovery persistence and queries
 
@@ -36,5 +36,5 @@
 
 - [ ] 6.1 Add discover-links, link listing, candidate listing/show, and candidate review commands with documented filters, stable JSON documents, bounded errors, and tested exit codes.
 - [ ] 6.2 Extend the catalog usage guide with offline discovery, evidence interpretation, review semantics, identity caveats, unresolved-link handling, backups, privacy, and the boundary before future network adapters or image matching.
-- [ ] 6.3 Add synthetic/redacted fixtures representing account bio links, post source links, different handles, Pixiv multi-page works, booru artist/uploader separation, instance collisions, unresolved link hubs, and uncertain image variations; incorporate user-selected public examples only as redacted URL/expected-relation cases with no live fetch dependency.
+- [ ] 6.3 Add synthetic/redacted fixtures representing account bio links, post source links, different handles, Pixiv multi-page works, booru artist/uploader separation, instance collisions, unresolved link hubs, and uncertain image variations; encode the three documented public example groups as metadata-only identifier/hash/dimension/source/expected-relation fixtures with no media URLs or live fetch dependency.
 - [ ] 6.4 Run formatting, lint, the full Python 3.13 suite, package build/install CLI smoke tests, strict OpenSpec validation, and offline discovery/idempotency/integrity smoke tests against a user-selected catalog copy.
