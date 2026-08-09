@@ -121,7 +121,15 @@ def recognize_url(
         and match.group(1) not in {"home", "explore", "i"}
     ):
         handle = match.group(1).lstrip("@").lower()
-        reference = _reference("x", "", "account", handle, f"https://x.com/{handle}", "x-account")
+        reference = _reference(
+            "x",
+            "",
+            "account",
+            handle,
+            f"https://x.com/{handle}",
+            "x-account",
+            identifier_kind="handle",
+        )
     elif host == "www.pixiv.net" and (match := re.fullmatch(r"/(?:[a-z]{2}/)?users/(\d+)", path)):
         native_id = match.group(1)
         reference = _reference(
@@ -187,6 +195,7 @@ def recognize_url(
             asset_id,
             canonical.canonical_url,
             f"{booru_platform}-media",
+            identifier_kind="hash",
         )
     elif reference is None and booru_platform == "gelbooru":
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -228,7 +237,13 @@ def recognize_url(
     ):
         handle = match.group(1)
         reference = _reference(
-            "mastodon", host, "account", handle, f"https://{host}/@{handle}", "mastodon-account"
+            "mastodon",
+            host,
+            "account",
+            handle,
+            f"https://{host}/@{handle}",
+            "mastodon-account",
+            identifier_kind="handle",
         )
     if reference is None:
         reason = "link_hub" if host in LINK_HUB_HOSTS else "unsupported_target"
@@ -252,10 +267,24 @@ def recognize_url(
 
 
 def _reference(
-    platform: str, instance: str, kind: str, native_id: str, target: str, recognizer: str
+    platform: str,
+    instance: str,
+    kind: str,
+    native_id: str,
+    target: str,
+    recognizer: str,
+    *,
+    identifier_kind: str = "stable_id",
 ) -> PlatformReferenceRecord:
     return PlatformReferenceRecord(
-        platform, instance, kind, native_id, target, recognizer, RECOGNIZER_VERSION
+        platform,
+        instance,
+        kind,
+        native_id,
+        target,
+        recognizer,
+        RECOGNIZER_VERSION,
+        identifier_kind=identifier_kind,
     )
 
 

@@ -53,8 +53,11 @@ Add a migration whose link layer contains:
   canonicalization version.
 - `link_observations`: original URL, source subject type/id, account snapshot or post/raw observation,
   source context and JSON path, observed time, discovery run, and a stable occurrence digest.
-- `platform_references`: recognized platform/instance, object kind, native identifier, canonical
-  target URL, recognizer/version, and optional later resolution to a local account or post.
+- `platform_references`: recognized platform/instance, object kind, identifier kind and value,
+  canonical target URL, recognizer/version, and optional later resolution to a local account or
+  post. Its semantic identity does not depend on an observed URL.
+- `external_link_references`: an idempotent many-to-many association between canonical external
+  links and semantic platform references.
 
 The same canonical link may have many observations. Idempotency keys include source identity and
 context, so a profile website and a post entity pointing to the same URL remain separate provenance.
@@ -79,6 +82,9 @@ Mastodon-compatible account/status, Danbooru `/posts/<id>` and `/post/show/<id>`
 post, e621 legacy/current post, and configured booru artist/media-asset patterns. Pixiv locale/legacy
 route aliases may canonicalize to their stable numeric target. Booru and Mastodon-compatible
 references retain instance hostname; a service family or display handle alone is not a namespace.
+Recognizers classify provider-assigned stable identifiers separately from mutable handles, URL
+slugs, content hashes, and opaque identifiers. X account URLs expose handles rather than stable
+account IDs and therefore remain reference evidence only.
 
 Canonicalization removes only explicitly recognized non-semantic components. Original query and
 fragment values remain on observations; a recognizer may omit them from a direct-resource canonical
@@ -97,6 +103,8 @@ uploader account, and an external source URL is not normalized as a booru post.
 
 When an adapter later imports the referenced object, the reference may resolve to its local stable
 account/post row without changing the original link observation or candidate identity.
+Each URL-to-reference association is retained in the junction table, so aliases cannot steal a
+semantic reference from earlier observations.
 
 Alternative considered: represent every remote URL as an account or post placeholder. Rejected
 because it fabricates types and makes later adapter reconciliation unsafe.
@@ -122,6 +130,8 @@ are fetched and no hashes, perceptual comparisons, or automatic variation labels
 Canonical self-links remain valid link observations but candidate generation rejects a candidate
 whose resolved account or post endpoints are the same object. This prevents normal X profile and
 post canonical URLs from generating meaningless self matches.
+Account identity candidates require a `stable_id` target reference; handle, slug, hash, and opaque
+references remain queryable evidence but cannot become identity candidates.
 
 Existing `post_relations` remains the ledger for provider-observed quote/reply/repost facts. Reviewed
 cross-platform candidates do not overload it; a confirmed candidate is itself the durable reviewed
@@ -149,7 +159,8 @@ claim exists, confuses algorithm ranking with human judgment, and cannot preserv
 
 Add `identities` and provenance-bearing `identity_accounts`. Confirming a same-identity account
 candidate creates or extends a grouping only through the recorded decision. When its target is a
-recognized account reference with a stable native ID but no local row, confirmation first creates a
+recognized account reference whose identifier kind is `stable_id` but no local row, confirmation
+first creates a
 metadata-empty discovered account, resolves the reference to it, and then adds membership; it never
 fabricates a handle, name, profile fields, or fetched state. References without a stable account ID
 cannot form an account candidate. Confirmation does not rewrite snapshots, posts, participants, or
@@ -212,6 +223,14 @@ dimensions, relationship metadata, and user-supplied expected labels.
 These cases are regression inputs, not live integration tests. Tests never depend on the sites being
 available and never fetch their media URLs.
 
+### 9. Preserve a stable facade while decomposing discovery internals
+
+Keep `media_catalog.discovery.DiscoveryService`, its method signatures, CLI behavior, transaction
+boundaries, version overrides, and structured results as the public facade. Extract occurrence
+scanning, candidate/evidence generation, queries, review/identity handling, and manual post matching
+into focused collaborators that do not import the facade. This is a behavior-preserving refactor and
+does not add adapters, network access, downloading, or matching algorithms.
+
 ## Risks / Trade-offs
 
 - [Raw provider schemas evolve] -> Keep extractors source/version specific, retain JSON paths and raw
@@ -224,6 +243,8 @@ available and never fetch their media URLs.
   but reject self candidates after endpoint resolution.
 - [External references may later resolve differently] -> Keep reference identity separate from the
   optional local-object link and retain recognizer/version provenance.
+- [Several links resolve to one semantic reference] -> Store every association in the junction and
+  never overwrite or infer a single owning link.
 - [Identity confirmation can conflict with earlier groupings] -> Refuse silent group unions and
   require an explicit follow-up decision.
 - [A relation vocabulary can become an accidental ontology project] -> Start with broad families,
@@ -233,8 +254,9 @@ available and never fetch their media URLs.
 
 ## Migration Plan
 
-1. Add the numbered migration and validate creation, upgrade, rollback-on-failure, foreign keys,
-   doctor output, and unchanged existing catalog counts.
+1. Add numbered migrations for the discovery schema and its link/reference cardinality correction;
+   validate creation, upgrade, rollback-on-failure, foreign keys, doctor output, identifier-kind
+   backfill, and unchanged existing catalog counts.
 2. Add pure URL extraction/canonicalization/recognition records and synthetic X/xarchive fixtures.
 3. Add offline discovery-run persistence, reconciliation, rerun idempotency, and link queries.
 4. Add typed candidates, shared evidence, versioned scoring, and candidate inspection.

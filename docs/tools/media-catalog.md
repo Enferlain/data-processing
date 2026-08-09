@@ -94,6 +94,9 @@ canonical URL, source field/JSON path, algorithm versions, and recognized instan
 Shorteners, link hubs, personal sites, malformed URLs, and unsupported routes remain visible with a
 bounded resolution state instead of being guessed. Repeating discovery is safe: observations,
 references, candidates, and evidence use stable identities, while each run retains its own counts.
+Distinct URL aliases remain attached to the same semantic reference instead of replacing one
+another. Link output includes `identifier_kind`: `stable_id` values may support matching, while
+mutable `handle` or `slug` values and `hash`/`opaque` identifiers remain typed reference evidence.
 
 ## Inspect and review matches
 
@@ -114,8 +117,8 @@ Scores are deterministic review-order hints, never confirmations. Decisions are 
 reconsidering a candidate adds history. Use the `review_revision` shown by `match-show` as
 `--expected-revision` to reject a concurrent stale decision. Reversing an account confirmation
 rebuilds active identity memberships from the remaining confirmed pair decisions. Confirming a
-supported stable account reference may create a metadata-empty local account and identity membership,
-but never invents a handle, display name,
+supported `stable_id` account reference may create a metadata-empty local account and identity
+membership, but never invents a handle, display name,
 bio, or transitive pair confirmation. Conflicting existing identity groups are reported for review.
 
 Current discovery records manually supplied broad relation/variation facts but does not fetch media,

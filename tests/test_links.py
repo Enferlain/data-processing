@@ -113,6 +113,16 @@ def test_ambiguous_or_invalid_urls_do_not_fabricate_references() -> None:
     assert recognize_url("https://www.pixiv.net/users/not-numeric").reference is None
 
 
+def test_mutable_account_handles_and_content_hashes_are_typed_explicitly() -> None:
+    x_account = recognize_url("https://x.com/ArtistName").reference
+    mastodon_account = recognize_url("https://baraag.net/@ArtistName").reference
+    media = recognize_url(f"https://e621.net/data/{'a' * 32}.jpg").reference
+    assert x_account is not None and x_account.identifier_kind == "handle"
+    assert x_account.native_id == "artistname"
+    assert mastodon_account is not None and mastodon_account.identifier_kind == "handle"
+    assert media is not None and media.identifier_kind == "hash"
+
+
 def test_instance_namespaces_are_part_of_reference_identity() -> None:
     configured_mastodon = frozenset({"one.example", "two.example"})
     first = recognize_url(

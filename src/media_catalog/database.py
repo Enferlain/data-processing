@@ -91,17 +91,32 @@ class CatalogDatabase:
 
     def migrate(self) -> None:
         self._check_version()
-        for version, name, sql in available_migrations():
-            if version <= self.schema_version:
-                continue
-            try:
-                self.connection.executescript(
-                    f"BEGIN EXCLUSIVE;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;"
-                )
-            except sqlite3.Error as error:
-                with suppress(sqlite3.Error):
-                    self.connection.execute("ROLLBACK")
-                raise SchemaVersionError(f"failed to apply migration {name}: {error}") from error
+        foreign_keys_enabled = bool(self.connection.execute("PRAGMA foreign_keys").fetchone()[0])
+        if foreign_keys_enabled:
+            self.connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            for version, name, sql in available_migrations():
+                if version <= self.schema_version:
+                    continue
+                try:
+                    self.connection.executescript(
+                        f"BEGIN EXCLUSIVE;\n{sql}\nPRAGMA user_version = {version};"
+                    )
+                    violations = list(self.connection.execute("PRAGMA foreign_key_check"))
+                    if violations:
+                        raise sqlite3.IntegrityError(
+                            f"migration left {len(violations)} foreign-key violation(s)"
+                        )
+                    self.connection.commit()
+                except sqlite3.Error as error:
+                    with suppress(sqlite3.Error):
+                        self.connection.execute("ROLLBACK")
+                    raise SchemaVersionError(
+                        f"failed to apply migration {name}: {error}"
+                    ) from error
+        finally:
+            if foreign_keys_enabled:
+                self.connection.execute("PRAGMA foreign_keys = ON")
 
     def schema_info(self) -> dict[str, Any]:
         return {

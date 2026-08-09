@@ -30,18 +30,23 @@ and SHALL identify the canonicalization algorithm and version used.
 - **WHEN** removing or rewriting a URL component could change its resource identity
 - **THEN** discovery leaves that component intact rather than guessing
 
-### Requirement: Parse stable platform references
+### Requirement: Parse typed platform references
 The system SHALL use versioned recognizers to parse supported canonical URLs into a platform,
-object kind, stable native identifier when present, and canonical target URL without treating a
+object kind, identifier kind, identifier, and canonical target URL without treating a
 booru artist record, uploader account, post, or artwork as interchangeable object kinds.
 
 #### Scenario: Recognize a Pixiv user URL
 - **WHEN** a canonical URL contains a supported Pixiv user path with a stable numeric identifier
-- **THEN** discovery records a Pixiv account reference using that native identifier
+- **THEN** discovery records a Pixiv account reference using that stable identifier
 
 #### Scenario: Recognize a Pixiv artwork URL
 - **WHEN** a canonical URL contains a supported Pixiv artwork path with a stable numeric identifier
 - **THEN** discovery records a Pixiv post reference separately from any account reference
+
+#### Scenario: Recognize a mutable X handle
+- **WHEN** a canonical URL identifies an X account only by its handle
+- **THEN** discovery records a handle-kind account reference that remains ineligible for identity
+  matching or account materialization until a stable provider account ID is known
 
 #### Scenario: Recognize a Danbooru-family object
 - **WHEN** a canonical URL identifies a supported Danbooru-family post or artist record
@@ -54,6 +59,17 @@ booru artist record, uploader account, post, or artwork as interchangeable objec
 #### Scenario: Recognize a Mastodon-compatible status
 - **WHEN** a URL contains a supported instance-qualified `/@account/<status-id>` route
 - **THEN** discovery records a status/post reference for that instance without assuming the display handle is its stable account ID
+
+### Requirement: Semantic references are independent of observed URLs
+The system SHALL identify a semantic platform reference by platform, instance, object kind,
+identifier kind, identifier, and recognizer version independently of the canonical external links
+that yielded it. A semantic reference MAY be associated with many external links and one external
+link MAY yield multiple semantic references without replacing an earlier association.
+
+#### Scenario: URL aliases identify one Pixiv account
+- **WHEN** two distinct canonical URL aliases or query variants recognize the same Pixiv account
+- **THEN** both link observations remain associated with the same platform reference and link
+  queries return the platform, object kind, identifier kind, and identifier for each observation
 
 ### Requirement: Retain unresolved external links
 The system SHALL keep valid links that cannot be mapped to a stable supported platform reference and

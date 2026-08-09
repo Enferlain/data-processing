@@ -38,3 +38,9 @@
 - [x] 6.2 Extend the catalog usage guide with offline discovery, evidence interpretation, review semantics, identity caveats, unresolved-link handling, backups, privacy, and the boundary before future network adapters or image matching.
 - [x] 6.3 Add synthetic/redacted fixtures representing account bio links, post source links, different handles, Pixiv multi-page works, booru artist/uploader separation, instance collisions, unresolved link hubs, and uncertain image variations; encode the three documented public example groups as metadata-only identifier/hash/dimension/source/expected-relation fixtures with no media URLs or live fetch dependency.
 - [x] 6.4 Run formatting, lint, the full Python 3.13 suite, package build/install CLI smoke tests, strict OpenSpec validation, and offline discovery/idempotency/integrity smoke tests against a user-selected catalog copy.
+
+## 7. Corrective schema and service decomposition
+
+- [x] 7.1 Replace the singular external-link/reference association with an idempotent many-to-many junction, migrate existing references without losing IDs or candidate/evidence foreign keys, update writer/query/cleanup paths, and add alias, upgrade, idempotency, and integrity regression tests.
+- [x] 7.2 Add validated identifier kinds to records, schema, recognizers, semantic uniqueness, query output, and candidate keys; retain X/Mastodon handles as non-stable references and prevent them from creating or materializing identity candidates while stable account IDs continue to work.
+- [x] 7.3 Preserve the public `DiscoveryService` import, methods, CLI/result contracts, transaction behavior, and version overrides while extracting scanning, candidate/evidence, query, review/identity, and manual post responsibilities into focused collaborators; run characterization and full-suite verification.

@@ -14,6 +14,9 @@ and post match candidates without making unverified identity, authorship, or sam
   Gelbooru, or e621 post/artist references without network access.
 - Store unresolved links rather than discarding or guessing at shortened, link-hub, personal-site,
   or unsupported URLs.
+- Associate canonical links and semantic platform references many-to-many so URL aliases never
+  replace one another, and classify identifiers as stable IDs, handles, slugs, hashes, or opaque
+  values before they can participate in identity matching.
 - Create distinct account-to-account and post-to-post candidates backed by independently stored,
   explainable evidence and deterministic candidate scoring.
 - Support pending, confirmed, and rejected review decisions with append-only decision history; only
@@ -43,6 +46,8 @@ None.
   evidence, decisions, and confirmed relationships.
 - Extends normalized record/writer/query services and the `catalog` CLI while preserving existing
   imports, searches, observations, raw payloads, and legacy `x-likes` behavior.
+- Keeps the public `DiscoveryService` API stable while decomposing its scanning, candidate,
+  query, review, identity, and manual-post responsibilities into focused collaborators.
 - Adds deterministic URL recognizers and offline reprocessing of existing catalogs; this change adds
   no HTTP client, redirect following, account crawling, media download, or image-similarity runtime.
 - Adds synthetic/redacted fixtures and tests for URL provenance, platform parsing, idempotency,

@@ -14,6 +14,11 @@ candidate type.
 - **WHEN** an X account profile yields a stable Pixiv account reference
 - **THEN** the system can create an account candidate without creating a post candidate
 
+#### Scenario: Profile links only to a mutable account handle
+- **WHEN** an account profile yields an account reference whose identifier kind is a handle or slug
+- **THEN** the reference remains queryable but does not create an identity candidate or materialize
+  a target account
+
 #### Scenario: X post links to a Pixiv artwork
 - **WHEN** an X post yields a stable Pixiv artwork reference
 - **THEN** the system can create a post candidate without claiming that the publishing accounts have the same identity

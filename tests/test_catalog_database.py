@@ -11,7 +11,7 @@ from media_catalog.database import CatalogDatabase, SchemaVersionError, current_
 def test_fresh_catalog_applies_current_migration(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "catalog.sqlite3"
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 2
+        assert database.schema_version == current_schema_version() == 3
         assert database.summary()["platforms"] == 6
         assert database.doctor()["ok"] is True
 

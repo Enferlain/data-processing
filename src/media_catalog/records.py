@@ -28,6 +28,7 @@ SOURCE_CONTEXTS = frozenset(
     }
 )
 OBJECT_KINDS = frozenset({"account", "post", "artist", "media_asset"})
+IDENTIFIER_KINDS = frozenset({"stable_id", "handle", "slug", "hash", "opaque"})
 ACCOUNT_RELATIONS = frozenset({"same_identity", "officially_linked"})
 POST_RELATIONS = frozenset(
     {"sourced_from", "same_work", "repost_of", "variant_of", "derived_from", "unresolved"}
@@ -69,6 +70,10 @@ def validate_instance(value: str) -> str:
 
 def validate_object_kind(value: str) -> str:
     return _validate_choice(value, OBJECT_KINDS, "object kind")
+
+
+def validate_identifier_kind(value: str) -> str:
+    return _validate_choice(value, IDENTIFIER_KINDS, "identifier kind")
 
 
 def validate_relation(value: str, *, candidate_kind: str) -> str:
@@ -129,12 +134,14 @@ class PlatformReferenceRecord:
     canonical_url: str
     recognizer: str
     recognizer_version: str
+    identifier_kind: str = "stable_id"
 
     def __post_init__(self) -> None:
         validate_platform(self.platform)
         if self.instance_host:
             object.__setattr__(self, "instance_host", validate_instance(self.instance_host))
         validate_object_kind(self.object_kind)
+        validate_identifier_kind(self.identifier_kind)
         validate_native_id(self.native_id)
         validate_version(self.recognizer_version)
 

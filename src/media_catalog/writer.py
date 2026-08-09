@@ -184,21 +184,20 @@ class CatalogWriter:
                 resolved_post_id = int(row[0]) if row else None
             self.connection.execute(
                 """INSERT INTO platform_references
-                   (external_link_id, platform_id, instance_host, object_kind, native_identifier,
+                   (platform_id, instance_host, object_kind, identifier_kind, native_identifier,
                     canonical_target_url, recognizer_name, recognizer_version,
                     resolved_account_id, resolved_post_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET
-                    external_link_id = excluded.external_link_id,
                     canonical_target_url = excluded.canonical_target_url,
                     resolved_account_id = COALESCE(platform_references.resolved_account_id,
                                                    excluded.resolved_account_id),
                     resolved_post_id = COALESCE(platform_references.resolved_post_id,
                                                 excluded.resolved_post_id)""",
                 (
-                    link_id,
                     platform_id,
                     reference.instance_host,
                     reference.object_kind,
+                    reference.identifier_kind,
                     reference.native_id,
                     reference.canonical_url,
                     reference.recognizer,
@@ -211,15 +210,23 @@ class CatalogWriter:
                 self.connection.execute(
                     """SELECT platform_reference_id FROM platform_references
                        WHERE platform_id = ? AND instance_host = ? AND object_kind = ?
-                         AND native_identifier = ? AND recognizer_version = ?""",
+                         AND identifier_kind = ? AND native_identifier = ?
+                         AND recognizer_version = ?""",
                     (
                         platform_id,
                         reference.instance_host,
                         reference.object_kind,
+                        reference.identifier_kind,
                         reference.native_id,
                         reference.recognizer_version,
                     ),
                 ).fetchone()[0]
+            )
+            self.connection.execute(
+                """INSERT INTO external_link_references
+                   (external_link_id, platform_reference_id)
+                   VALUES (?, ?) ON CONFLICT DO NOTHING""",
+                (link_id, reference_id),
             )
         return WriteResult(observation_id, "existing" if existing else "inserted"), reference_id
 

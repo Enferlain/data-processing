@@ -128,6 +128,56 @@ def test_link_queries_filter_without_exposing_raw_payload(tmp_path: Path) -> Non
         assert str(tmp_path) not in encoded
 
 
+def test_url_aliases_keep_independent_links_to_one_semantic_reference(tmp_path: Path) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            writer.upsert_account(
+                AccountRecord(
+                    "x",
+                    "1",
+                    NOW,
+                    bio=("https://pixiv.net/users/123 https://www.pixiv.net/en/users/123"),
+                )
+            )
+        service = DiscoveryService(database)
+        service.discover()
+        results = service.links(platform="pixiv", object_kind="account")["results"]
+        assert len(results) == 2
+        assert {item["native_identifier"] for item in results} == {"123"}
+        assert {item["identifier_kind"] for item in results} == {"stable_id"}
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM platform_references").fetchone()[0]
+            == 1
+        )
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM external_link_references").fetchone()[
+                0
+            ]
+            == 2
+        )
+        service.discover()
+        assert len(service.links(platform="pixiv")["results"]) == 2
+
+
+def test_handle_account_references_remain_queryable_without_identity_candidates(
+    tmp_path: Path,
+) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            writer.upsert_account(
+                AccountRecord("x", "1", NOW, bio="Elsewhere https://x.com/AnotherArtist")
+            )
+        service = DiscoveryService(database)
+        service.discover()
+        links = service.links(platform="x", object_kind="account")["results"]
+        assert len(links) == 1
+        assert links[0]["identifier_kind"] == "handle"
+        assert links[0]["native_identifier"] == "anotherartist"
+        assert service.candidates(kind="account")["results"] == []
+
+
 def test_self_links_remain_observations_without_candidates(tmp_path: Path) -> None:
     with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
         writer = CatalogWriter(database)
