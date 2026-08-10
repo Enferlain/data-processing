@@ -127,6 +127,62 @@ Those are boundaries for future network adapters and image/work matching. Booru 
 URLs are evidence, not proof of authorship. Keep private exports and catalog backups out of version
 control, and run `catalog doctor` after restoring or migrating a catalog.
 
+## Adopt existing local media
+
+Asset adoption copies files already referenced by the catalog into immutable, SHA-256-addressed
+managed storage. It is offline: it never downloads a remote-only occurrence. Before the first
+adoption, stop catalog commands and make a backup of the catalog and its source database. The
+source tree is read-only to the adopter and remains your recovery input.
+
+Use separate, non-overlapping source and media roots. Start with a read-only plan:
+
+```bash
+uv run catalog assets plan catalog-output/catalog.sqlite3 \
+  --source-root /private/x-likes --media-root /private/catalog-media
+uv run catalog assets adopt catalog-output/catalog.sqlite3 \
+  --source-root /private/x-likes --media-root /private/catalog-media \
+  --max-files 100 --max-bytes 134217728 --max-pixels 100000000 --max-frames 100
+```
+
+Planning opens the catalog without migration and creates no database sidecar or media-root layout.
+It reports the number and known total size of eligible references so you can allow for the temporary
+disk cost of copying source bytes. If the schema is old, first back it up and run a normal mutating
+command such as `catalog schema` to apply migrations, then plan again. Plan and verify also fail
+closed when the catalog still has uncheckpointed WAL frames: stop mutating catalog processes,
+complete the normal checkpoint/backup workflow, and retry instead of deleting SQLite sidecars.
+
+Adoption verifies SHA-256 and MD5 before decoding, applies hard byte/pixel/frame limits, and stores
+supported raster dimensions and a versioned pHash. Other valid content is retained as exact-only.
+Managed files have paths derived only from SHA-256; duplicate bytes share one file while distinct
+occurrence/source paths remain recorded. An imported exact-hash disagreement is a failure and does
+not silently replace the imported assertion.
+
+Inspect results and managed storage with:
+
+```bash
+uv run catalog assets list catalog-output/catalog.sqlite3
+uv run catalog assets show catalog-output/catalog.sqlite3 1 --json
+uv run catalog assets duplicates catalog-output/catalog.sqlite3
+uv run catalog assets runs catalog-output/catalog.sqlite3
+uv run catalog assets failures catalog-output/catalog.sqlite3
+uv run catalog assets verify catalog-output/catalog.sqlite3 \
+  --media-root /private/catalog-media --json
+```
+
+Rerunning adoption is safe: completed bytes, locations, occurrence links, and provenance are reused.
+Each item commits independently, so a stopped run can leave valid completed files and may leave a
+staging entry. Verification is strictly read-only and reports valid, missing, corrupt, orphaned,
+unsafe, and stale-staging entries; it never repairs or deletes them. Preserve reported staging and
+orphan files until you have inspected the interrupted run and restored or backed up the catalog.
+The current fail-closed cleanup policy can retain a verified staging hard-link even after success,
+because pathname unlink cannot atomically prove inode ownership under substitution. If this run
+created the CAS target, the residue shares its inode and costs only another directory entry. If the
+target already existed, or failure happened before publication, residue can retain a full staged
+copy, so reserve suitable disk headroom. Removal belongs to a future explicit repair workflow.
+Absolute roots are redacted from normal human and JSON output.
+Legacy asset-level paths from older catalogs are never printed by asset list/show; only their
+ambiguous/unassociated classification and bounded counts are exposed.
+
 ## Recovery and reconciliation
 
 - A malformed import rolls back normalized records, records a failed import run, and retains a
@@ -137,5 +193,5 @@ control, and run `catalog doctor` after restoring or migrating a catalog.
   with independently queryable `liked` and `bookmarked` provenance.
 
 The existing online `x-likes` workflow remains documented in [its guide](x-likes.md). Network
-adapters, content-addressed downloads, live Pixiv/booru lookup, and image matching remain later
-catalog changes, not hidden behavior of these commands.
+adapters and downloads, live Pixiv/booru lookup, perceptual similarity decisions, and image/work
+matching remain later catalog changes, not hidden behavior of these commands.

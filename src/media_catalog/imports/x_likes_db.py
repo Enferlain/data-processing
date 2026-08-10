@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -8,8 +9,11 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.imports.common import CountMap, ImportReport, now, run_import
 from media_catalog.records import (
     AccountRecord,
+    AssetFingerprintRecord,
     AssetRecord,
+    ManagedRootRecord,
     MediaOccurrenceRecord,
+    OccurrenceSourceRecord,
     PostRecord,
     RawRecord,
     normalize_timestamp,
@@ -77,6 +81,16 @@ def _import_rows(
     import_run_id: int,
     source_directory: Path,
 ) -> CountMap:
+    source_directory = source_directory.resolve()
+    source_identity = hashlib.sha256(str(source_directory).encode()).hexdigest()
+    source_root_id = writer.register_managed_root(
+        ManagedRootRecord(
+            "source",
+            source_identity,
+            source_directory.name or "source",
+            str(source_directory),
+        )
+    )
     account_rows = list(connection.execute("SELECT * FROM accounts ORDER BY author_id"))
     post_rows = list(connection.execute("SELECT * FROM posts ORDER BY post_id"))
     media_rows = list(connection.execute("SELECT * FROM media ORDER BY post_id, media_index"))
@@ -173,10 +187,36 @@ def _import_rows(
                 width=_value(row, "width"),
                 height=_value(row, "height"),
                 alt_text=_value(row, "alt_text"),
+                declared_md5=_value(row, "md5"),
+                declared_sha256=_value(row, "sha256"),
                 observed_at=post_times[native_id],
+                local_path=(str(_value(row, "local_path")) if _value(row, "local_path") else None),
             ),
         )
         counts["media_occurrences"][result.outcome] += 1
+        local_path = _value(row, "local_path")
+        if local_path:
+            writer.add_occurrence_source(
+                OccurrenceSourceRecord(
+                    result.id,
+                    "legacy_local",
+                    str(local_path),
+                    post_times[native_id],
+                    managed_root_id=source_root_id,
+                    source_identity=source_identity,
+                )
+            )
+            if not _legacy_path_exists(source_directory, str(local_path)):
+                writer.connection.execute(
+                    """INSERT INTO import_diagnostics (
+                           import_run_id, severity, record_key, code, message
+                       ) VALUES (?, 'warning', ?, 'missing_legacy_file', ?)""",
+                    (
+                        import_run_id,
+                        f"{native_id}:{media_index}",
+                        f"legacy media file is missing: {Path(str(local_path)).name}",
+                    ),
+                )
         sha256 = _value(row, "sha256")
         if not sha256:
             continue
@@ -189,8 +229,7 @@ def _import_rows(
             if catalog_existing is not None:
                 asset_outcome = "existing"
         seen_assets.add(normalized_sha)
-        local_path = _value(row, "local_path")
-        writer.link_asset(
+        asset_id = writer.link_asset(
             result.id,
             AssetRecord(
                 normalized_sha,
@@ -198,24 +237,59 @@ def _import_rows(
                 _value(row, "phash"),
                 _value(row, "file_size"),
                 "legacy_reference",
-                str(local_path) if local_path else None,
+                None,
                 post_times[native_id],
                 "legacy_x_likes",
             ),
             relationship="reference",
         )
-        counts["assets"][asset_outcome] += 1
-        if local_path and not _legacy_path_exists(source_directory, str(local_path)):
-            writer.connection.execute(
-                """INSERT INTO import_diagnostics (
-                       import_run_id, severity, record_key, code, message
-                   ) VALUES (?, 'warning', ?, 'missing_legacy_file', ?)""",
-                (
-                    import_run_id,
-                    f"{native_id}:{media_index}",
-                    f"legacy media file is missing: {Path(str(local_path)).name}",
-                ),
+        # Keep each legacy claim as provenance even when the asset row already
+        # contains stronger, byte-verified managed metadata.  The writer merge
+        # policy protects that metadata; these versioned observations retain the
+        # source assertion without pretending it verified managed bytes.
+        legacy_source = f"legacy_x_likes:{native_id}:{media_index}"
+        observed_at = post_times[native_id]
+        legacy_md5 = _value(row, "md5")
+        if legacy_md5:
+            writer.add_asset_fingerprint(
+                AssetFingerprintRecord(
+                    asset_id,
+                    "md5",
+                    str(legacy_md5).lower(),
+                    "md5",
+                    "legacy-v1",
+                    legacy_source,
+                    "legacy",
+                    observed_at,
+                )
             )
+        writer.add_asset_fingerprint(
+            AssetFingerprintRecord(
+                asset_id,
+                "sha256",
+                normalized_sha,
+                "sha256",
+                "legacy-v1",
+                legacy_source,
+                "legacy",
+                observed_at,
+            )
+        )
+        legacy_phash = _value(row, "phash")
+        if legacy_phash:
+            writer.add_asset_fingerprint(
+                AssetFingerprintRecord(
+                    asset_id,
+                    "phash",
+                    str(legacy_phash),
+                    "phash",
+                    "legacy-v1",
+                    legacy_source,
+                    "legacy",
+                    observed_at,
+                )
+            )
+        counts["assets"][asset_outcome] += 1
     return counts
 
 

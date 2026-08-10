@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from media_catalog.database import CatalogDatabase, SchemaVersionError
+from media_catalog.database import CatalogDatabase, SchemaVersionError, current_schema_version
 from media_catalog.discovery import DiscoveryService
 from media_catalog.discovery.support import digest
 
@@ -29,7 +29,7 @@ def test_foundation_catalog_upgrades_without_rewriting_existing_data(tmp_path: P
             (platform_id,),
         )
     with CatalogDatabase(path) as database:
-        assert database.schema_version == 3
+        assert database.schema_version == current_schema_version()
         assert (
             database.connection.execute("SELECT native_post_id FROM posts").fetchone()[0] == "kept"
         )
@@ -43,12 +43,16 @@ def test_migration_failure_rolls_back_and_keeps_prior_version(
 
     path = tmp_path / "broken.sqlite3"
     migrations = database_module.available_migrations()
-    broken = (*migrations[:-1], (3, "0003_broken.sql", "CREATE TABLE partial(x); INVALID"))
+    latest_version = migrations[-1][0]
+    broken = (
+        *migrations[:-1],
+        (latest_version, f"{latest_version:04d}_broken.sql", "CREATE TABLE partial(x); INVALID"),
+    )
     monkeypatch.setattr(database_module, "available_migrations", lambda: broken)
-    with pytest.raises(SchemaVersionError, match="0003_broken"):
+    with pytest.raises(SchemaVersionError, match=f"{latest_version:04d}_broken"):
         CatalogDatabase(path)
     with sqlite3.connect(path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == latest_version - 1
         assert (
             connection.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name = 'partial'"
@@ -268,7 +272,7 @@ def test_version_two_reference_upgrade_preserves_ids_and_backfills_association(
             """SELECT external_link_id, platform_reference_id
                FROM external_link_references"""
         ).fetchone()
-        assert database.schema_version == 3
+        assert database.schema_version == current_schema_version()
         assert tuple(reference) == (reference_id, "stable_id")
         assert tuple(association) == (link_id, reference_id)
         assert (
@@ -314,11 +318,12 @@ def test_migration_foreign_key_check_rolls_back_invalid_upgrade(
 
     path = tmp_path / "invalid-fk.sqlite3"
     migrations = database_module.available_migrations()
+    latest_version = migrations[-1][0]
     invalid = (
         *migrations[:-1],
         (
-            3,
-            "0003_invalid_fk.sql",
+            latest_version,
+            f"{latest_version:04d}_invalid_fk.sql",
             """CREATE TABLE invalid_child(
                    platform_id INTEGER REFERENCES platforms(platform_id));
                INSERT INTO invalid_child(platform_id) VALUES (999999);""",
@@ -328,7 +333,7 @@ def test_migration_foreign_key_check_rolls_back_invalid_upgrade(
     with pytest.raises(SchemaVersionError, match="foreign-key violation"):
         CatalogDatabase(path)
     with sqlite3.connect(path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == latest_version - 1
         assert (
             connection.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name = 'invalid_child'"

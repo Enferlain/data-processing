@@ -5,6 +5,17 @@ import json
 import sqlite3
 from pathlib import Path
 
+from media_catalog.asset_adoption import (
+    adopt_assets,
+    find_exact_duplicates,
+    get_asset_detail,
+    list_adoption_runs,
+    list_assets,
+    list_failed_adoption_items,
+    plan_adoption,
+)
+from media_catalog.asset_storage import AssetStorageError, InspectionLimits
+from media_catalog.asset_verification import verify_managed_storage
 from media_catalog.database import CatalogDatabase
 from media_catalog.discovery import DiscoveryService
 from media_catalog.imports.x_likes_db import import_x_likes_database
@@ -82,6 +93,53 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--expected-generation", type=int)
     review.add_argument("--expected-revision", type=int)
     _add_json(review)
+
+    assets = commands.add_parser("assets")
+    asset_commands = assets.add_subparsers(dest="asset_command", required=True)
+    for name in ("plan", "adopt"):
+        command = asset_commands.add_parser(name)
+        command.add_argument("catalog", type=Path)
+        command.add_argument("--source-root", type=Path, required=True)
+        command.add_argument("--media-root", type=Path, required=True)
+        command.add_argument("--max-files", type=int, dest="limit")
+        command.add_argument("--path-prefix")
+        command.add_argument("--max-bytes", type=int, default=128 * 1024 * 1024)
+        if name == "adopt":
+            command.add_argument("--max-pixels", type=int, default=100_000_000)
+            command.add_argument("--max-frames", type=int, default=100)
+        _add_json(command)
+
+    asset_list = asset_commands.add_parser("list")
+    asset_list.add_argument("catalog", type=Path)
+    asset_list.add_argument("--sha256")
+    _add_json(asset_list)
+
+    asset_show = asset_commands.add_parser("show")
+    asset_show.add_argument("catalog", type=Path)
+    asset_show.add_argument("asset_ref")
+    _add_json(asset_show)
+
+    verify = asset_commands.add_parser("verify")
+    verify.add_argument("catalog", type=Path)
+    verify.add_argument("--media-root", type=Path, required=True)
+    verify.add_argument("--managed-root-id", type=int)
+    verify.add_argument("--max-bytes", type=int, default=128 * 1024 * 1024)
+    verify.add_argument("--max-entries", type=int, default=100_000)
+    _add_json(verify)
+
+    duplicates = asset_commands.add_parser("duplicates")
+    duplicates.add_argument("catalog", type=Path)
+    _add_json(duplicates)
+
+    runs = asset_commands.add_parser("runs")
+    runs.add_argument("catalog", type=Path)
+    runs.add_argument("--status", choices=("running", "complete", "partial", "failed", "cancelled"))
+    _add_json(runs)
+
+    failures = asset_commands.add_parser("failures")
+    failures.add_argument("catalog", type=Path)
+    failures.add_argument("--run-id", type=int)
+    _add_json(failures)
     return parser
 
 
@@ -164,6 +222,68 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     expected_revision=arguments.expected_revision,
                 ),
             }
+    if arguments.command == "assets":
+        catalog_label = public_path(arguments.catalog)
+        if arguments.asset_command == "plan":
+            return {
+                "catalog": catalog_label,
+                "status": "planned",
+                **plan_adoption(
+                    arguments.catalog,
+                    arguments.source_root,
+                    arguments.media_root,
+                    path_prefix=arguments.path_prefix,
+                    limit=arguments.limit,
+                    max_bytes=arguments.max_bytes,
+                ).as_dict(),
+            }
+        if arguments.asset_command == "adopt":
+            limits = InspectionLimits(
+                arguments.max_bytes, arguments.max_pixels, arguments.max_frames
+            )
+            with CatalogDatabase(arguments.catalog) as database:
+                return {
+                    "catalog": catalog_label,
+                    "source_root": public_path(arguments.source_root),
+                    "managed_root": public_path(arguments.media_root),
+                    **adopt_assets(
+                        database,
+                        arguments.source_root,
+                        arguments.media_root,
+                        path_prefix=arguments.path_prefix,
+                        limit=arguments.limit,
+                        limits=limits,
+                    ).as_dict(),
+                }
+        if arguments.asset_command == "verify":
+            return {
+                "catalog": catalog_label,
+                "managed_root": public_path(arguments.media_root),
+                **verify_managed_storage(
+                    arguments.catalog,
+                    arguments.media_root,
+                    managed_root_id=arguments.managed_root_id,
+                    max_bytes=arguments.max_bytes,
+                    max_entries=arguments.max_entries,
+                ).as_dict(),
+            }
+        if arguments.asset_command == "list":
+            results = list_assets(arguments.catalog, sha256=arguments.sha256)
+        elif arguments.asset_command == "show":
+            identifier: int | str = (
+                int(arguments.asset_ref) if arguments.asset_ref.isdecimal() else arguments.asset_ref
+            )
+            result = get_asset_detail(arguments.catalog, identifier)
+            if result is None:
+                raise ValueError("asset not found")
+            return {"catalog": catalog_label, **result}
+        elif arguments.asset_command == "duplicates":
+            results = find_exact_duplicates(arguments.catalog)
+        elif arguments.asset_command == "runs":
+            results = list_adoption_runs(arguments.catalog, status=arguments.status)
+        else:
+            results = list_failed_adoption_items(arguments.catalog, run_id=arguments.run_id)
+        return {"catalog": catalog_label, "count": len(results), "results": results}
     raise NotImplementedError(f"{arguments.command} is planned but not implemented yet")
 
 
@@ -171,10 +291,10 @@ def main(argv: list[str] | None = None) -> None:
     arguments = build_parser().parse_args(argv)
     try:
         result = _run(arguments)
-    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+    except (AssetStorageError, OSError, RuntimeError, ValueError, sqlite3.Error) as error:
         private_paths = tuple(
             value
-            for name in ("source", "catalog")
+            for name in ("source", "catalog", "source_root", "media_root")
             if isinstance((value := getattr(arguments, name, None)), Path)
         )
         message = bounded_error(error, private_paths=private_paths)
@@ -182,3 +302,5 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(json.dumps({"error": message}, ensure_ascii=False)) from error
         raise SystemExit(f"error: {message}") from error
     print(render_result(result, as_json=arguments.json))
+    if arguments.command == "assets" and result.get("status") in {"partial", "failed", "issues"}:
+        raise SystemExit(2)
