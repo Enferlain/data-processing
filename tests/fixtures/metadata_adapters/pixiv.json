@@ -1,0 +1,94 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "pixiv",
+    "instance": "pixiv",
+    "captured_at": "2026-08-10T00:00:00Z",
+    "adapter_version": "pixiv-fixture-v1",
+    "schema_version": "pixiv-app-v1",
+    "redactions": ["names replaced", "profile text shortened", "tokens and headers removed"],
+    "source": "minimal redacted contract derived from the pinned gallery-dl 1.32.2 field mapping"
+  },
+  "cases": [
+    {
+      "name": "profile",
+      "operation": "fetch_account",
+      "target": "1001",
+      "request_identity": "pixiv:fetch_account:1001",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {
+          "user": {"id": 1001, "name": "Artist A", "account": "artist_a", "profile_image_urls": {"medium": "https://i.pximg.net/user-profile/example.jpg"}},
+          "profile": {"webpage": "https://artist.example", "twitter_url": "https://x.com/artist_a", "total_follow_users": 12, "total_illusts": 3},
+          "profile_publicity": {}
+        }
+      },
+      "expected": {"outcome": "success", "account_ids": ["1001"], "external_links": 2}
+    },
+    {
+      "name": "single_page_artwork",
+      "operation": "fetch_post",
+      "target": "2001",
+      "request_identity": "pixiv:fetch_post:2001",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"illust": {"id": 2001, "title": "Work A", "caption": "caption", "type": "illust", "user": {"id": 1001, "name": "Artist A", "account": "artist_a"}, "create_date": "2026-01-01T00:00:00+00:00", "page_count": 1, "width": 1200, "height": 1600, "tags": [{"name": "original", "translated_name": "Original"}], "meta_single_page": {"original_image_url": "https://i.pximg.net/img-original/example_p0.jpg"}, "image_urls": {"large": "https://i.pximg.net/img-master/example_p0.jpg"}, "visible": true}}
+      },
+      "expected": {"outcome": "success", "post_ids": ["2001"], "media_source_keys": ["2001:p0"], "tag_count": 1}
+    },
+    {
+      "name": "multi_page_artwork",
+      "operation": "fetch_post",
+      "target": "2002",
+      "request_identity": "pixiv:fetch_post:2002",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"illust": {"id": 2002, "title": "Work B", "caption": "", "type": "manga", "user": {"id": 1001, "name": "Artist A", "account": "artist_a"}, "create_date": "2026-01-02T00:00:00+00:00", "page_count": 2, "tags": [], "meta_pages": [{"image_urls": {"original": "https://i.pximg.net/img-original/example_p0.png", "large": "https://i.pximg.net/img-master/example_p0.jpg"}}, {"image_urls": {"original": "https://i.pximg.net/img-original/example_p1.png", "large": "https://i.pximg.net/img-master/example_p1.jpg"}}], "visible": true}}
+      },
+      "expected": {"outcome": "success", "post_ids": ["2002"], "media_source_keys": ["2002:p0", "2002:p1"]}
+    },
+    {
+      "name": "ugoira",
+      "operation": "fetch_post",
+      "target": "2003",
+      "request_identity": "pixiv:fetch_post:2003:ugoira",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"ugoira_metadata": {"zip_urls": {"medium": "https://i.pximg.net/img-zip-ugoira/example.zip"}, "frames": [{"file": "000000.jpg", "delay": 80}, {"file": "000001.jpg", "delay": 120}]}}
+      },
+      "expected": {"outcome": "success", "post_ids": ["2003"], "frame_delays_ms": [80, 120], "downloads": 0}
+    },
+    {
+      "name": "artwork_listing_page",
+      "operation": "list_account_posts",
+      "target": "1001",
+      "request_identity": "pixiv:list_account_posts:1001:first",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"illusts": [{"id": 2002}, {"id": 2001}], "next_url": "https://app-api.pixiv.net/v1/user/illusts?user_id=1001&offset=2"}
+      },
+      "expected": {"outcome": "success", "post_ids": ["2002", "2001"], "continuation": {"offset": 2}}
+    },
+    {
+      "name": "restricted_artwork",
+      "operation": "fetch_post",
+      "target": "2998",
+      "request_identity": "pixiv:fetch_post:2998",
+      "response": {"status_code": 404, "headers": {"content-type": "application/json"}, "body": {"error": {"message": "work unavailable"}}},
+      "expected": {"outcome": "unavailable", "post_ids": ["2998"], "media_source_keys": []}
+    },
+    {
+      "name": "authentication_required",
+      "operation": "fetch_account",
+      "target": "1001",
+      "request_identity": "pixiv:fetch_account:1001:unauthenticated",
+      "response": {"status_code": 401, "headers": {"content-type": "application/json"}, "body": {"error": {"message": "authentication required"}}},
+      "expected": {"outcome": "authentication_required", "normalized_records": 0}
+    }
+  ]
+}

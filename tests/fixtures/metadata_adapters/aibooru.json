@@ -1,0 +1,30 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "danbooru",
+    "instance": "aibooru",
+    "captured_at": "2026-08-10T00:00:00Z",
+    "adapter_version": "danbooru-fixture-v1",
+    "schema_version": "aibooru-json-v1",
+    "redactions": ["names replaced", "credentials removed", "media URLs reduced"],
+    "source": "minimal redacted AIBooru compatibility contract"
+  },
+  "cases": [
+    {
+      "name": "compatible_post",
+      "operation": "fetch_post",
+      "target": "3001",
+      "request_identity": "aibooru:fetch_post:3001",
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 3001, "rating": "s", "md5": "fedcba9876543210fedcba9876543210", "file_url": "https://aibooru.online/data/original.png", "tag_string_artist": "artist_b", "tag_string_character": "", "tag_string_copyright": "", "tag_string_general": "ai-generated", "tag_string_meta": ""}},
+      "expected": {"outcome": "success", "platform": "aibooru", "post_ids": ["3001"], "declared_md5": "fedcba9876543210fedcba9876543210"}
+    },
+    {
+      "name": "incompatible_shape",
+      "operation": "fetch_post",
+      "target": "3999",
+      "request_identity": "aibooru:fetch_post:3999",
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"unexpected": ["shape"]}},
+      "expected": {"outcome": "malformed_response", "normalized_records": 0}
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -31,7 +32,17 @@ OBJECT_KINDS = frozenset({"account", "post", "artist", "media_asset"})
 IDENTIFIER_KINDS = frozenset({"stable_id", "handle", "slug", "hash", "opaque"})
 ACCOUNT_RELATIONS = frozenset({"same_identity", "officially_linked"})
 POST_RELATIONS = frozenset(
-    {"sourced_from", "same_work", "repost_of", "variant_of", "derived_from", "unresolved"}
+    {
+        "sourced_from",
+        "same_work",
+        "repost_of",
+        "variant_of",
+        "derived_from",
+        "parent_of",
+        "quote",
+        "reply",
+        "unresolved",
+    }
 )
 EVIDENCE_STANCES = frozenset({"supports", "contradicts", "neutral"})
 EVIDENCE_STRENGTHS = frozenset({"weak", "moderate", "strong", "exact"})
@@ -58,6 +69,37 @@ ADOPTION_OUTCOMES = frozenset(
         "inspection_failed",
         "storage_integrity_failed",
     }
+)
+REMOTE_OPERATIONS = frozenset(
+    {"fetch_account", "fetch_post", "list_account_posts", "fetch_attribution"}
+)
+REMOTE_RUN_STATUSES = frozenset({"running", "complete", "paused", "failed"})
+REMOTE_OUTCOMES = frozenset(
+    {
+        "success",
+        "unavailable",
+        "deleted",
+        "authentication_required",
+        "authorization_denied",
+        "rate_limited",
+        "transient_provider",
+        "malformed_response",
+        "budget_exhausted",
+        "local_persistence",
+    }
+)
+BUDGET_BOUNDARIES = frozenset({"request", "page", "record", "time"})
+TAG_CATEGORIES = frozenset(
+    {"general", "artist", "copyright", "character", "meta", "unknown"}
+)
+ATTRIBUTION_NAME_KINDS = frozenset({"primary", "alias", "other", "group"})
+_SECRET_IDENTITY_MARKERS = (
+    "access_token=",
+    "refresh_token=",
+    "api_key=",
+    "apikey=",
+    "authorization=",
+    "cookie=",
 )
 
 
@@ -244,10 +286,19 @@ class RawRecord:
     observed_at: str
     source_schema: str | None = None
     status: str | None = None
+    platform: str | None = None
+    adapter_version: str | None = None
+    schema_version: str | None = None
 
     def __post_init__(self) -> None:
         if not self.payload:
             raise ValueError("raw payload must not be empty")
+        if self.platform is not None:
+            validate_platform(self.platform)
+        if self.adapter_version is not None:
+            _validate_nonempty(self.adapter_version, "raw adapter version", max_length=200)
+        if self.schema_version is not None:
+            _validate_nonempty(self.schema_version, "raw schema version", max_length=200)
         object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
 
 
@@ -292,6 +343,10 @@ class PostRecord:
     created_at: str | None = None
     availability: str = "available"
     status: str | None = None
+    title: str | None = None
+    updated_at: str | None = None
+    rating: str | None = None
+    provider_post_type: str | None = None
 
     def __post_init__(self) -> None:
         validate_platform(self.platform)
@@ -299,6 +354,12 @@ class PostRecord:
         object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
         if self.created_at is not None:
             object.__setattr__(self, "created_at", normalize_timestamp(self.created_at))
+        if self.updated_at is not None:
+            object.__setattr__(self, "updated_at", normalize_timestamp(self.updated_at))
+        if self.provider_post_type is not None:
+            _validate_nonempty(
+                self.provider_post_type, "provider post type", max_length=200
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -318,13 +379,16 @@ class MediaOccurrenceRecord:
     variants_json: str | None = None
     observed_at: str | None = None
     local_path: str | None = None
+    role: str | None = None
+    mime_type: str | None = None
+    declared_file_size: int | None = None
 
     def __post_init__(self) -> None:
         if not self.source_key:
             raise ValueError("media source key must not be empty")
         if self.index < 0:
             raise ValueError("media index must not be negative")
-        for name in ("width", "height", "duration_ms"):
+        for name in ("width", "height", "duration_ms", "declared_file_size"):
             value = getattr(self, name)
             if value is not None and value < 0:
                 raise ValueError(f"media {name} must not be negative")
@@ -334,6 +398,219 @@ class MediaOccurrenceRecord:
             object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
         if self.local_path is not None:
             _validate_nonempty(self.local_path, "media local path")
+        for name in ("role", "mime_type"):
+            value = getattr(self, name)
+            if value is not None:
+                _validate_nonempty(value, "media " + name, max_length=200)
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteRunRecord:
+    platform: str
+    operation: str
+    target: str
+    adapter_version: str
+    schema_version: str
+    request_budget: int
+    page_budget: int
+    record_budget: int
+    time_budget_seconds: int
+    started_at: str
+    instance_host: str = ""
+    resumed_from_run_id: int | None = None
+
+    def __post_init__(self) -> None:
+        validate_platform(self.platform)
+        validate_remote_operation(self.operation)
+        validate_native_id(self.target)
+        _validate_nonempty(self.adapter_version, "remote adapter version", max_length=200)
+        _validate_nonempty(self.schema_version, "remote schema version", max_length=200)
+        if self.instance_host:
+            object.__setattr__(self, "instance_host", validate_instance(self.instance_host))
+        for name in (
+            "request_budget",
+            "page_budget",
+            "record_budget",
+            "time_budget_seconds",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if self.resumed_from_run_id is not None:
+            _validate_positive_id(self.resumed_from_run_id, "resumed run id")
+        object.__setattr__(self, "started_at", normalize_timestamp(self.started_at))
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteRequestRecord:
+    remote_run_id: int
+    attempt_number: int
+    request_identity: str
+    operation: str
+    target: str
+    outcome: str
+    request_started_at: str
+    status_code: int | None = None
+    retry_after: str | None = None
+    rate_limit_state: str | None = None
+    response_adapter_version: str | None = None
+    response_schema_version: str | None = None
+    object_kind: str | None = None
+    native_id: str | None = None
+    media_type: str | None = None
+    response_size: int | None = None
+    response_observed_at: str | None = None
+    request_finished_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _validate_positive_id(self.remote_run_id, "remote run id")
+        _validate_positive_id(self.attempt_number, "remote request attempt")
+        validate_secret_free_identity(self.request_identity)
+        validate_remote_operation(self.operation)
+        validate_native_id(self.target)
+        validate_remote_outcome(self.outcome)
+        if self.status_code is not None and not 100 <= self.status_code <= 599:
+            raise ValueError("remote response status must be a valid HTTP status")
+        if self.response_size is not None and self.response_size < 0:
+            raise ValueError("remote response size must not be negative")
+        for name in (
+            "response_adapter_version",
+            "response_schema_version",
+            "object_kind",
+            "native_id",
+            "media_type",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                _validate_nonempty(value, name.replace("_", " "), max_length=500)
+        object.__setattr__(
+            self, "request_started_at", normalize_timestamp(self.request_started_at)
+        )
+        for name in ("retry_after", "response_observed_at", "request_finished_at"):
+            value = getattr(self, name)
+            if value is not None:
+                object.__setattr__(self, name, normalize_timestamp(value))
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteCheckpointRecord:
+    remote_run_id: int
+    operation: str
+    target: str
+    continuation_adapter: str
+    continuation_version: str
+    continuation_json: str
+    committed_at: str
+    last_page_identity: str | None = None
+    page_count: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_positive_id(self.remote_run_id, "remote run id")
+        validate_remote_operation(self.operation)
+        validate_native_id(self.target)
+        _validate_nonempty(
+            self.continuation_adapter, "continuation adapter", max_length=200
+        )
+        _validate_nonempty(
+            self.continuation_version, "continuation version", max_length=200
+        )
+        parsed = json.loads(self.continuation_json)
+        if not isinstance(parsed, dict):
+            raise ValueError("continuation JSON must contain an object")
+        if self.last_page_identity is not None:
+            validate_secret_free_identity(self.last_page_identity)
+        if self.page_count < 0:
+            raise ValueError("checkpoint page count must not be negative")
+        object.__setattr__(self, "committed_at", normalize_timestamp(self.committed_at))
+
+
+@dataclass(frozen=True, slots=True)
+class TagObservationRecord:
+    platform: str
+    category: str
+    normalized_name: str
+    provider_spelling: str
+    observed_at: str
+    normalization_version: str
+    translated_label: str | None = None
+    position: int | None = None
+
+    def __post_init__(self) -> None:
+        validate_platform(self.platform)
+        validate_tag_category(self.category)
+        _validate_nonempty(self.normalized_name, "normalized tag", max_length=500)
+        _validate_nonempty(self.provider_spelling, "provider tag spelling", max_length=500)
+        _validate_nonempty(
+            self.normalization_version, "tag normalization version", max_length=200
+        )
+        if self.translated_label is not None:
+            _validate_nonempty(self.translated_label, "translated tag label", max_length=500)
+        if self.position is not None and self.position < 0:
+            raise ValueError("tag position must not be negative")
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
+
+
+@dataclass(frozen=True, slots=True)
+class AttributionRecord:
+    platform: str
+    native_id: str
+    adapter_version: str
+    observed_at: str
+    availability: str = "available"
+    instance_host: str = ""
+    primary_name: str | None = None
+    other_names: tuple[str, ...] = ()
+    urls: tuple[str, ...] = ()
+    is_deleted: bool | None = None
+
+    def __post_init__(self) -> None:
+        validate_platform(self.platform)
+        validate_native_id(self.native_id)
+        _validate_nonempty(self.adapter_version, "attribution adapter version", max_length=200)
+        _validate_nonempty(self.availability, "attribution availability", max_length=200)
+        if self.instance_host:
+            object.__setattr__(self, "instance_host", validate_instance(self.instance_host))
+        if self.primary_name is not None:
+            _validate_nonempty(self.primary_name, "attribution name", max_length=500)
+        for name in self.other_names:
+            _validate_nonempty(name, "attribution alias", max_length=500)
+        for url in self.urls:
+            _validate_nonempty(url, "attribution URL", max_length=2000)
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
+
+
+@dataclass(frozen=True, slots=True)
+class PostExternalReferenceRecord:
+    reference_kind: str
+    observed_at: str
+    url: str | None = None
+    target_platform: str | None = None
+    target_object_kind: str | None = None
+    target_identifier_kind: str | None = None
+    target_native_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.reference_kind not in {"source_url", "provider_id"}:
+            raise ValueError("unsupported post external reference kind")
+        if self.url is None and self.target_native_id is None:
+            raise ValueError("post external reference needs a URL or typed target")
+        if self.url is not None:
+            _validate_nonempty(self.url, "external reference URL", max_length=2000)
+        typed = (
+            self.target_platform,
+            self.target_object_kind,
+            self.target_identifier_kind,
+            self.target_native_id,
+        )
+        if any(value is not None for value in typed) and not all(
+            value is not None for value in typed
+        ):
+            raise ValueError("typed external reference fields must be supplied together")
+        if self.target_platform is not None:
+            validate_platform(self.target_platform)
+            validate_object_kind(self.target_object_kind or "")
+            validate_identifier_kind(self.target_identifier_kind or "")
+            validate_native_id(self.target_native_id or "")
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
 
 
 @dataclass(frozen=True, slots=True)
@@ -615,6 +892,40 @@ def validate_adoption_state(value: str) -> str:
 
 def validate_adoption_outcome(value: str) -> str:
     return _validate_choice(value, ADOPTION_OUTCOMES, "adoption outcome")
+
+
+def validate_remote_operation(value: str) -> str:
+    return _validate_choice(value, REMOTE_OPERATIONS, "remote operation")
+
+
+def validate_remote_run_status(value: str) -> str:
+    return _validate_choice(value, REMOTE_RUN_STATUSES, "remote run status")
+
+
+def validate_remote_outcome(value: str) -> str:
+    return _validate_choice(value, REMOTE_OUTCOMES, "remote outcome")
+
+
+def validate_budget_boundary(value: str) -> str:
+    return _validate_choice(value, BUDGET_BOUNDARIES, "budget boundary")
+
+
+def validate_tag_category(value: str) -> str:
+    return _validate_choice(value, TAG_CATEGORIES, "tag category")
+
+
+def validate_attribution_name_kind(value: str) -> str:
+    return _validate_choice(value, ATTRIBUTION_NAME_KINDS, "attribution name kind")
+
+
+def validate_secret_free_identity(value: str) -> str:
+    """Accept a canonical provider request identity and reject secret parameters."""
+
+    normalized = _validate_nonempty(value, "request identity", max_length=1000)
+    lowered = normalized.lower()
+    if any(marker in lowered for marker in _SECRET_IDENTITY_MARKERS):
+        raise ValueError("request identity must not contain a secret-bearing parameter")
+    return normalized
 
 
 def _validate_positive_id(value: int, label: str) -> None:

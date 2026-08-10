@@ -127,6 +127,62 @@ Those are boundaries for future network adapters and image/work matching. Booru 
 URLs are evidence, not proof of authorship. Keep private exports and catalog backups out of version
 control, and run `catalog doctor` after restoring or migrating a catalog.
 
+## Synchronize Pixiv and booru metadata
+
+Metadata synchronization is explicit, finite, and separate from media acquisition. Each command
+records an auditable run, sanitized request attempts, retained JSON responses, normalized records,
+and (for listings) an opaque committed checkpoint. It never requests an image URL or creates an
+asset. Back up the catalog before its first migration to this feature.
+
+```bash
+uv run catalog metadata pixiv-profile catalog-output/catalog.sqlite3 1001 --json
+uv run catalog metadata pixiv-artwork catalog-output/catalog.sqlite3 2001 --json
+uv run catalog metadata pixiv-account-artworks catalog-output/catalog.sqlite3 1001 \
+  --max-requests 3 --max-pages 2 --max-records 500 --max-seconds 60
+
+uv run catalog metadata danbooru-post catalog-output/catalog.sqlite3 3001
+uv run catalog metadata danbooru-artist catalog-output/catalog.sqlite3 4001
+uv run catalog metadata danbooru-list catalog-output/catalog.sqlite3 artist_a \
+  --max-requests 3 --max-pages 2 --max-records 500
+```
+
+The corresponding `aibooru-post`, `aibooru-artist`, and `aibooru-list` commands use an independent
+platform identity. All defaults are finite and can be lowered. A listing stopped at a budget
+boundary reports `status: paused`; continue only from its committed checkpoint:
+
+```bash
+uv run catalog metadata pixiv-account-artworks catalog-output/catalog.sqlite3 1001 \
+  --resume-from 12 --max-requests 3 --max-pages 2 --max-records 500
+```
+
+Pixiv refresh authentication reads `PIXIV_REFRESH_TOKEN`, `PIXIV_CLIENT_ID`, and
+`PIXIV_CLIENT_SECRET`; client values are deliberately not embedded here. Booru credentials are
+optional for public records and use `DANBOORU_LOGIN` plus `DANBOORU_API_KEY`, or the corresponding
+`AIBOORU_LOGIN` and `AIBOORU_API_KEY`. Credentials are resolved at request time and excluded from
+request identities, database diagnostics, structured output, and retained provider payloads.
+Pixiv uses an unofficial app API and may need adapter updates when its contract changes. Provider
+permissions, deletions, and rate limits remain typed outcomes rather than guessed records.
+
+Inspect past runs without network access or credentials:
+
+```bash
+uv run catalog metadata runs catalog-output/catalog.sqlite3 --json
+uv run catalog metadata run-show catalog-output/catalog.sqlite3 12 --json
+```
+
+Pixiv accounts and artworks use stable numeric IDs; names remain temporal metadata. Artwork page
+order, original/translated tags, URL variants, and Ugoira archive/frame timing are metadata only.
+Danbooru-family uploader IDs create uploader accounts, while artist records remain neutral
+attribution entities with names and URLs. A booru `source` or `pixiv_id` is evidence, not an
+automatic creator, account, post-equivalence, or work match. Provider MD5 remains a declared
+occurrence assertion until the separate asset workflow verifies bytes.
+
+Adapter fixtures live under `tests/fixtures/metadata_adapters/`. Regenerate only minimal responses,
+replace personal names and URLs, remove credentials/cookies, retain no media bytes, and update the
+manifest capture date plus adapter/schema version. Expected mappings were reviewed against
+gallery-dl 1.32.2 commit `2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5` as a comparison oracle;
+gallery-dl is not imported or executed by normal tests.
+
 ## Adopt existing local media
 
 Asset adoption copies files already referenced by the catalog into immutable, SHA-256-addressed
@@ -192,6 +248,6 @@ ambiguous/unassociated classification and bounded counts are exposed.
 - Likes and bookmarks are separate observations. A post present in both sources remains one X post
   with independently queryable `liked` and `bookmarked` provenance.
 
-The existing online `x-likes` workflow remains documented in [its guide](x-likes.md). Network
-adapters and downloads, live Pixiv/booru lookup, perceptual similarity decisions, and image/work
-matching remain later catalog changes, not hidden behavior of these commands.
+The existing online `x-likes` workflow remains documented in [its guide](x-likes.md). Media
+downloads, perceptual similarity decisions, and image/work matching remain later catalog changes,
+not hidden behavior of metadata commands.

@@ -5,6 +5,16 @@ import json
 import sqlite3
 from pathlib import Path
 
+import httpx
+
+from media_catalog.adapters import AdapterOperation
+from media_catalog.adapters.danbooru import (
+    AIBOORU,
+    DANBOORU,
+    DanbooruAdapter,
+    DanbooruCredentials,
+)
+from media_catalog.adapters.pixiv import PixivAdapter
 from media_catalog.asset_adoption import (
     adopt_assets,
     find_exact_duplicates,
@@ -21,10 +31,21 @@ from media_catalog.discovery import DiscoveryService
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.imports.xarchive import import_xarchive
 from media_catalog.output import bounded_error, public_path, render_result
+from media_catalog.remote_queries import get_remote_run, list_remote_runs
+from media_catalog.remote_sync import MetadataSyncService, SyncLimits
 
 
 def _add_json(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="emit structured JSON")
+
+
+def _add_sync_limits(parser: argparse.ArgumentParser, *, listing: bool) -> None:
+    parser.add_argument("--max-requests", type=int, default=3 if listing else 1)
+    parser.add_argument("--max-pages", type=int, default=2 if listing else 1)
+    parser.add_argument("--max-records", type=int, default=500 if listing else 250)
+    parser.add_argument("--max-seconds", type=int, default=60)
+    parser.add_argument("--resume-from", type=int)
+    _add_json(parser)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -140,6 +161,33 @@ def build_parser() -> argparse.ArgumentParser:
     failures.add_argument("catalog", type=Path)
     failures.add_argument("--run-id", type=int)
     _add_json(failures)
+
+    metadata = commands.add_parser("metadata")
+    metadata_commands = metadata.add_subparsers(dest="metadata_command", required=True)
+    operations = {
+        "pixiv-profile": False,
+        "pixiv-artwork": False,
+        "pixiv-account-artworks": True,
+        "danbooru-post": False,
+        "danbooru-artist": False,
+        "danbooru-list": True,
+        "aibooru-post": False,
+        "aibooru-artist": False,
+        "aibooru-list": True,
+    }
+    for name, listing in operations.items():
+        command = metadata_commands.add_parser(name)
+        command.add_argument("catalog", type=Path)
+        command.add_argument("target")
+        _add_sync_limits(command, listing=listing)
+    remote_runs = metadata_commands.add_parser("runs")
+    remote_runs.add_argument("catalog", type=Path)
+    remote_runs.add_argument("--limit", type=int, default=100)
+    _add_json(remote_runs)
+    remote_show = metadata_commands.add_parser("run-show")
+    remote_show.add_argument("catalog", type=Path)
+    remote_show.add_argument("run_id", type=int)
+    _add_json(remote_show)
     return parser
 
 
@@ -284,6 +332,63 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
         else:
             results = list_failed_adoption_items(arguments.catalog, run_id=arguments.run_id)
         return {"catalog": catalog_label, "count": len(results), "results": results}
+    if arguments.command == "metadata":
+        catalog_label = public_path(arguments.catalog)
+        if arguments.metadata_command == "runs":
+            results = list_remote_runs(arguments.catalog, limit=arguments.limit)
+            return {"catalog": catalog_label, "count": len(results), "results": results}
+        if arguments.metadata_command == "run-show":
+            result = get_remote_run(arguments.catalog, arguments.run_id)
+            if result is None:
+                raise ValueError("remote run not found")
+            return {"catalog": catalog_label, **result}
+        limits = SyncLimits(
+            arguments.max_requests,
+            arguments.max_pages,
+            arguments.max_records,
+            arguments.max_seconds,
+        )
+        command = arguments.metadata_command
+        if command.startswith("pixiv-"):
+            operation = {
+                "pixiv-profile": AdapterOperation.FETCH_ACCOUNT,
+                "pixiv-artwork": AdapterOperation.FETCH_POST,
+                "pixiv-account-artworks": AdapterOperation.LIST_ACCOUNT_POSTS,
+            }[command]
+            with CatalogDatabase(arguments.catalog) as database, PixivAdapter(
+                require_auth=True
+            ) as adapter:
+                result = MetadataSyncService(database, adapter).synchronize(
+                    operation,
+                    arguments.target,
+                    limits=limits,
+                    resume_from_run_id=arguments.resume_from,
+                )
+        else:
+            instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
+            operation = (
+                AdapterOperation.FETCH_POST
+                if command.endswith("-post")
+                else (
+                    AdapterOperation.FETCH_ATTRIBUTION
+                    if command.endswith("-artist")
+                    else AdapterOperation.LIST_ACCOUNT_POSTS
+                )
+            )
+            credentials = DanbooruCredentials.from_environment(instance)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                result = MetadataSyncService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=instance.minimum_interval_seconds,
+                ).synchronize(
+                    operation,
+                    arguments.target,
+                    limits=limits,
+                    resume_from_run_id=arguments.resume_from,
+                )
+        return {"catalog": catalog_label, **result.as_dict()}
     raise NotImplementedError(f"{arguments.command} is planned but not implemented yet")
 
 
@@ -303,4 +408,10 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"error: {message}") from error
     print(render_result(result, as_json=arguments.json))
     if arguments.command == "assets" and result.get("status") in {"partial", "failed", "issues"}:
+        raise SystemExit(2)
+    if (
+        arguments.command == "metadata"
+        and arguments.metadata_command not in {"runs", "run-show"}
+        and result.get("status") in {"paused", "failed"}
+    ):
         raise SystemExit(2)

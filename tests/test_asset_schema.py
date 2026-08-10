@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from media_catalog.asset_adoption import get_asset_detail, legacy_assertion_summary, list_assets
-from media_catalog.database import CatalogDatabase, available_migrations
+from media_catalog.database import CatalogDatabase, available_migrations, current_schema_version
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.records import (
     AdoptionAttemptRecord,
@@ -82,7 +82,7 @@ def test_v3_upgrade_preserves_asset_ids_and_backfills_ambiguous_path(tmp_path: P
     backup = path.read_bytes()
 
     with CatalogDatabase(path) as database:
-        assert database.schema_version == 4
+        assert database.schema_version == current_schema_version()
         assert database.connection.execute("SELECT asset_id FROM assets").fetchone()[0] == 17
         assertion = database.connection.execute(
             "SELECT asset_id, legacy_path, assertion_kind, associated_occurrence_id "

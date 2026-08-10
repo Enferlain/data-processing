@@ -14,20 +14,38 @@ from media_catalog.records import (
     AssetFingerprintRecord,
     AssetLocationRecord,
     AssetRecord,
+    AttributionRecord,
     LinkOccurrence,
     ManagedRootRecord,
     MediaOccurrenceRecord,
     OccurrenceSourceRecord,
     PlatformReferenceRecord,
+    PostExternalReferenceRecord,
     PostRecord,
     RawRecord,
+    RemoteCheckpointRecord,
+    RemoteRequestRecord,
+    RemoteRunRecord,
+    TagObservationRecord,
+    normalize_timestamp,
+    validate_budget_boundary,
     validate_event_type,
+    validate_remote_outcome,
+    validate_remote_run_status,
     validate_role,
 )
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _reference_url(platform: str, object_kind: str, native_id: str) -> str:
+    if platform == "pixiv" and object_kind == "post":
+        return f"https://www.pixiv.net/artworks/{native_id}"
+    if platform == "pixiv" and object_kind == "account":
+        return f"https://www.pixiv.net/users/{native_id}"
+    return f"urn:{platform}:{object_kind}:{native_id}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +260,26 @@ class CatalogWriter:
             )
         return WriteResult(observation_id, "existing" if existing else "inserted"), reference_id
 
-    def store_raw(self, record: RawRecord, *, import_run_id: int | None = None) -> int:
+    def store_raw(
+        self,
+        record: RawRecord,
+        *,
+        import_run_id: int | None = None,
+        remote_run_id: int | None = None,
+        remote_request_id: int | None = None,
+    ) -> int:
+        if import_run_id is not None and remote_run_id is not None:
+            raise ValueError("raw observation cannot belong to import and remote runs")
+        if (remote_run_id is None) != (remote_request_id is None):
+            raise ValueError("remote raw observation requires both run and request ids")
+        platform_id = self.platform_id(record.platform) if record.platform is not None else None
+        if remote_request_id is not None:
+            request = self.connection.execute(
+                "SELECT remote_run_id FROM remote_requests WHERE remote_request_id = ?",
+                (remote_request_id,),
+            ).fetchone()
+            if request is None or int(request[0]) != remote_run_id:
+                raise ValueError("remote request does not belong to the supplied run")
         digest = hashlib.sha256(record.payload).hexdigest()
         self.connection.execute(
             """INSERT INTO raw_payloads (sha256, media_type, payload, byte_size)
@@ -252,33 +289,523 @@ class CatalogWriter:
         payload_id = self.connection.execute(
             "SELECT raw_payload_id FROM raw_payloads WHERE sha256 = ?", (digest,)
         ).fetchone()[0]
-        self.connection.execute(
-            """INSERT INTO raw_observations (
-                   raw_payload_id, import_run_id, object_kind, native_id, media_type,
-                   source_schema, status, observed_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(import_run_id, object_kind, native_id, raw_payload_id) DO NOTHING""",
+        values = (
+            payload_id,
+            import_run_id,
+            platform_id,
+            record.object_kind,
+            record.native_id,
+            record.media_type,
+            record.source_schema,
+            record.status,
+            record.observed_at,
+            remote_run_id,
+            remote_request_id,
+            record.adapter_version,
+            record.schema_version,
+        )
+        if remote_request_id is not None:
+            self.connection.execute(
+                """INSERT OR IGNORE INTO raw_observations (
+                       raw_payload_id, import_run_id, platform_id, object_kind, native_id,
+                       media_type, source_schema, status, observed_at, remote_run_id,
+                       remote_request_id, adapter_version, schema_version
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                values,
+            )
+            row = self.connection.execute(
+                """SELECT raw_observation_id FROM raw_observations
+                   WHERE remote_request_id = ?""",
+                (remote_request_id,),
+            ).fetchone()
+        else:
+            self.connection.execute(
+                """INSERT INTO raw_observations (
+                       raw_payload_id, import_run_id, platform_id, object_kind, native_id,
+                       media_type, source_schema, status, observed_at, remote_run_id,
+                       remote_request_id, adapter_version, schema_version
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(import_run_id, object_kind, native_id, raw_payload_id) DO NOTHING""",
+                values,
+            )
+            row = self.connection.execute(
+                """SELECT raw_observation_id FROM raw_observations
+                   WHERE import_run_id IS ? AND object_kind = ? AND native_id IS ?
+                         AND raw_payload_id = ?
+                   ORDER BY raw_observation_id LIMIT 1""",
+                (import_run_id, record.object_kind, record.native_id, payload_id),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("failed to store raw observation")
+        raw_observation_id = int(row[0])
+        if remote_request_id is not None:
+            self.connection.execute(
+                """UPDATE remote_requests SET raw_observation_id = ?
+                   WHERE remote_request_id = ?""",
+                (raw_observation_id, remote_request_id),
+            )
+        return raw_observation_id
+
+    def begin_remote_run(self, record: RemoteRunRecord) -> int:
+        platform_id = self.platform_id(record.platform)
+        cursor = self.connection.execute(
+            """INSERT INTO remote_runs (
+                   platform_id, instance_host, operation, target, adapter_version,
+                   schema_version, resumed_from_run_id, request_budget, page_budget,
+                   record_budget, time_budget_seconds, started_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                payload_id,
-                import_run_id,
+                platform_id,
+                record.instance_host,
+                record.operation,
+                record.target,
+                record.adapter_version,
+                record.schema_version,
+                record.resumed_from_run_id,
+                record.request_budget,
+                record.page_budget,
+                record.record_budget,
+                record.time_budget_seconds,
+                record.started_at,
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    def finish_remote_run(
+        self,
+        remote_run_id: int,
+        *,
+        status: str,
+        outcome: str,
+        request_count: int,
+        page_count: int,
+        record_count: int,
+        finished_at: str,
+        budget_boundary: str | None = None,
+        retry_after: str | None = None,
+        diagnostic: str | None = None,
+    ) -> None:
+        validate_remote_run_status(status)
+        validate_remote_outcome(outcome)
+        if budget_boundary is not None:
+            validate_budget_boundary(budget_boundary)
+        for name, value in (
+            ("request count", request_count),
+            ("page count", page_count),
+            ("record count", record_count),
+        ):
+            if value < 0:
+                raise ValueError(f"remote {name} must not be negative")
+        finished_at = normalize_timestamp(finished_at)
+        if retry_after is not None:
+            retry_after = normalize_timestamp(retry_after)
+        if diagnostic is not None:
+            diagnostic = diagnostic[:1000]
+        cursor = self.connection.execute(
+            """UPDATE remote_runs SET status = ?, termination_outcome = ?,
+                   request_count = ?, page_count = ?, record_count = ?, budget_boundary = ?,
+                   retry_after = ?, diagnostic_summary = ?, finished_at = ?
+               WHERE remote_run_id = ? AND status = 'running'""",
+            (
+                status,
+                outcome,
+                request_count,
+                page_count,
+                record_count,
+                budget_boundary,
+                retry_after,
+                diagnostic,
+                finished_at,
+                remote_run_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("remote run is missing or already finished")
+
+    def record_remote_request(self, record: RemoteRequestRecord) -> int:
+        existing = self.connection.execute(
+            """SELECT remote_request_id, request_identity FROM remote_requests
+               WHERE remote_run_id = ? AND attempt_number = ?""",
+            (record.remote_run_id, record.attempt_number),
+        ).fetchone()
+        if existing is not None:
+            if existing["request_identity"] != record.request_identity:
+                raise ValueError("remote attempt number belongs to another request identity")
+            return int(existing["remote_request_id"])
+        cursor = self.connection.execute(
+            """INSERT INTO remote_requests (
+                   remote_run_id, attempt_number, request_identity, operation, target,
+                   status_code, outcome, retry_after, rate_limit_state,
+                   response_adapter_version, response_schema_version, object_kind, native_id,
+                   media_type, response_size, request_started_at, response_observed_at,
+                   request_finished_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                record.remote_run_id,
+                record.attempt_number,
+                record.request_identity,
+                record.operation,
+                record.target,
+                record.status_code,
+                record.outcome,
+                record.retry_after,
+                record.rate_limit_state,
+                record.response_adapter_version,
+                record.response_schema_version,
                 record.object_kind,
                 record.native_id,
                 record.media_type,
-                record.source_schema,
-                record.status,
+                record.response_size,
+                record.request_started_at,
+                record.response_observed_at,
+                record.request_finished_at,
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    def save_remote_checkpoint(self, record: RemoteCheckpointRecord) -> int:
+        self.connection.execute(
+            """INSERT INTO remote_checkpoints (
+                   remote_run_id, operation, target, continuation_adapter,
+                   continuation_version, continuation_json, last_page_identity,
+                   page_count, committed_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(remote_run_id, operation, target) DO UPDATE SET
+                   continuation_adapter = excluded.continuation_adapter,
+                   continuation_version = excluded.continuation_version,
+                   continuation_json = excluded.continuation_json,
+                   last_page_identity = excluded.last_page_identity,
+                   page_count = excluded.page_count,
+                   committed_at = excluded.committed_at""",
+            (
+                record.remote_run_id,
+                record.operation,
+                record.target,
+                record.continuation_adapter,
+                record.continuation_version,
+                record.continuation_json,
+                record.last_page_identity,
+                record.page_count,
+                record.committed_at,
+            ),
+        )
+        return int(
+            self.connection.execute(
+                """SELECT remote_checkpoint_id FROM remote_checkpoints
+                   WHERE remote_run_id = ? AND operation = ? AND target = ?""",
+                (record.remote_run_id, record.operation, record.target),
+            ).fetchone()[0]
+        )
+
+    def upsert_tag(
+        self,
+        post_id: int,
+        record: TagObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        platform_id = self.platform_id(record.platform)
+        self.connection.execute(
+            """INSERT INTO tags (platform_id, category, name, normalization_version)
+               VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (
+                platform_id,
+                record.category,
+                record.normalized_name,
+                record.normalization_version,
+            ),
+        )
+        tag_id = int(
+            self.connection.execute(
+                """SELECT tag_id FROM tags
+                   WHERE platform_id = ? AND category = ? AND name = ?
+                     AND normalization_version = ?""",
+                (
+                    platform_id,
+                    record.category,
+                    record.normalized_name,
+                    record.normalization_version,
+                ),
+            ).fetchone()[0]
+        )
+        prior = self.connection.execute(
+            "SELECT post_tag_id FROM post_tags WHERE post_id = ? AND tag_id = ?",
+            (post_id, tag_id),
+        ).fetchone()
+        self.connection.execute(
+            """INSERT INTO post_tags (post_id, tag_id, first_seen_at, last_seen_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(post_id, tag_id) DO UPDATE SET
+                   first_seen_at = MIN(post_tags.first_seen_at, excluded.first_seen_at),
+                   last_seen_at = MAX(post_tags.last_seen_at, excluded.last_seen_at)""",
+            (post_id, tag_id, record.observed_at, record.observed_at),
+        )
+        post_tag_id = int(
+            self.connection.execute(
+                "SELECT post_tag_id FROM post_tags WHERE post_id = ? AND tag_id = ?",
+                (post_id, tag_id),
+            ).fetchone()[0]
+        )
+        digest_value = {
+            "provider_spelling": record.provider_spelling,
+            "translated_label": record.translated_label,
+            "position": record.position,
+            "observed_at": record.observed_at,
+        }
+        digest = hashlib.sha256(
+            json.dumps(
+                digest_value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        cursor = self.connection.execute(
+            """INSERT INTO post_tag_observations (
+                   post_tag_id, observed_at, provider_spelling, translated_label,
+                   position, raw_observation_id, observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (
+                post_tag_id,
+                record.observed_at,
+                record.provider_spelling,
+                record.translated_label,
+                record.position,
+                raw_observation_id,
+                digest,
+            ),
+        )
+        outcome = "inserted" if prior is None else ("updated" if cursor.rowcount else "existing")
+        return WriteResult(post_tag_id, outcome)
+
+    def upsert_attribution(
+        self,
+        record: AttributionRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        platform_id = self.platform_id(record.platform)
+        prior = self.connection.execute(
+            """SELECT attribution_entity_id FROM attribution_entities
+               WHERE platform_id = ? AND instance_host = ?
+                 AND provider_attribution_id = ?""",
+            (platform_id, record.instance_host, record.native_id),
+        ).fetchone()
+        self.connection.execute(
+            """INSERT INTO attribution_entities (
+                   platform_id, instance_host, provider_attribution_id, adapter_version,
+                   availability, first_seen_at, last_seen_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(platform_id, instance_host, provider_attribution_id) DO UPDATE SET
+                   adapter_version = CASE
+                       WHEN excluded.last_seen_at >= attribution_entities.last_seen_at
+                       THEN excluded.adapter_version ELSE attribution_entities.adapter_version END,
+                   availability = CASE
+                       WHEN excluded.last_seen_at >= attribution_entities.last_seen_at
+                       THEN excluded.availability ELSE attribution_entities.availability END,
+                   first_seen_at = MIN(attribution_entities.first_seen_at, excluded.first_seen_at),
+                   last_seen_at = MAX(attribution_entities.last_seen_at, excluded.last_seen_at)""",
+            (
+                platform_id,
+                record.instance_host,
+                record.native_id,
+                record.adapter_version,
+                record.availability,
+                record.observed_at,
                 record.observed_at,
             ),
         )
-        row = self.connection.execute(
-            """SELECT raw_observation_id FROM raw_observations
-               WHERE import_run_id IS ? AND object_kind = ? AND native_id IS ?
-                     AND raw_payload_id = ?
-               ORDER BY raw_observation_id LIMIT 1""",
-            (import_run_id, record.object_kind, record.native_id, payload_id),
-        ).fetchone()
-        if row is None:
-            raise RuntimeError("failed to store raw observation")
-        return int(row[0])
+        entity_id = int(
+            self.connection.execute(
+                """SELECT attribution_entity_id FROM attribution_entities
+                   WHERE platform_id = ? AND instance_host = ?
+                     AND provider_attribution_id = ?""",
+                (platform_id, record.instance_host, record.native_id),
+            ).fetchone()[0]
+        )
+        snapshot = {
+            "availability": record.availability,
+            "primary_name": record.primary_name,
+            "other_names": record.other_names,
+            "urls": record.urls,
+            "is_deleted": record.is_deleted,
+        }
+        snapshot_digest = hashlib.sha256(
+            json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        snapshot_cursor = self.connection.execute(
+            """INSERT INTO attribution_snapshots (
+                   attribution_entity_id, observed_at, availability, is_deleted,
+                   snapshot_digest, raw_observation_id
+               ) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (
+                entity_id,
+                record.observed_at,
+                record.availability,
+                record.is_deleted,
+                snapshot_digest,
+                raw_observation_id,
+            ),
+        )
+        if record.primary_name is not None:
+            self._store_attribution_name(
+                entity_id, record.primary_name, "primary", record.observed_at, raw_observation_id
+            )
+        for alias in record.other_names:
+            self._store_attribution_name(
+                entity_id, alias, "alias", record.observed_at, raw_observation_id
+            )
+        for url in record.urls:
+            self.connection.execute(
+                """INSERT INTO attribution_urls (
+                       attribution_entity_id, url, observed_at, raw_observation_id
+                   ) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+                (entity_id, url, record.observed_at, raw_observation_id),
+            )
+        outcome = (
+            "inserted"
+            if prior is None
+            else ("updated" if snapshot_cursor.rowcount else "existing")
+        )
+        return WriteResult(entity_id, outcome)
+
+    def _store_attribution_name(
+        self,
+        entity_id: int,
+        name: str,
+        kind: str,
+        observed_at: str,
+        raw_observation_id: int | None,
+    ) -> None:
+        self.connection.execute(
+            """INSERT INTO attribution_names (
+                   attribution_entity_id, name, name_kind, observed_at, raw_observation_id
+               ) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (entity_id, name, kind, observed_at, raw_observation_id),
+        )
+
+    def add_post_external_reference(
+        self,
+        post_id: int,
+        record: PostExternalReferenceRecord,
+        *,
+        raw_observation_id: int,
+    ) -> int:
+        link_id: int | None = None
+        reference_id: int | None = None
+        if record.url is not None:
+            self.connection.execute(
+                """INSERT INTO external_links (
+                       canonical_url, canonicalization_version, resolution_state
+                   ) VALUES (?, 'provider-metadata-v1', 'unresolved')
+                   ON CONFLICT(canonical_url, canonicalization_version) DO NOTHING""",
+                (record.url,),
+            )
+            link_id = int(
+                self.connection.execute(
+                    """SELECT external_link_id FROM external_links
+                       WHERE canonical_url = ?
+                         AND canonicalization_version = 'provider-metadata-v1'""",
+                    (record.url,),
+                ).fetchone()[0]
+            )
+        if record.target_platform is not None:
+            platform_id = self.platform_id(record.target_platform)
+            target_id = record.target_native_id or ""
+            target_kind = record.target_object_kind or ""
+            identifier_kind = record.target_identifier_kind or ""
+            canonical_url = record.url or _reference_url(
+                record.target_platform, target_kind, target_id
+            )
+            self.connection.execute(
+                """INSERT INTO platform_references (
+                       platform_id, instance_host, object_kind, identifier_kind,
+                       native_identifier, canonical_target_url, recognizer_name,
+                       recognizer_version
+                   ) VALUES (?, '', ?, ?, ?, ?, 'provider-metadata', 'provider-metadata-v1')
+                   ON CONFLICT DO NOTHING""",
+                (platform_id, target_kind, identifier_kind, target_id, canonical_url),
+            )
+            reference_id = int(
+                self.connection.execute(
+                    """SELECT platform_reference_id FROM platform_references
+                       WHERE platform_id = ? AND instance_host = '' AND object_kind = ?
+                         AND identifier_kind = ? AND native_identifier = ?
+                         AND recognizer_version = 'provider-metadata-v1'""",
+                    (platform_id, target_kind, identifier_kind, target_id),
+                ).fetchone()[0]
+            )
+            if link_id is not None:
+                self.connection.execute(
+                    """INSERT INTO external_link_references (
+                           external_link_id, platform_reference_id
+                       ) VALUES (?, ?) ON CONFLICT DO NOTHING""",
+                    (link_id, reference_id),
+                )
+        self.connection.execute(
+            """INSERT INTO post_external_references (
+                   post_id, external_link_id, platform_reference_id, reference_kind,
+                   raw_observation_id, observed_at
+               ) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (
+                post_id,
+                link_id,
+                reference_id,
+                record.reference_kind,
+                raw_observation_id,
+                record.observed_at,
+            ),
+        )
+        return int(
+            self.connection.execute(
+                """SELECT post_external_reference_id FROM post_external_references
+                   WHERE post_id = ? AND external_link_id IS ? AND platform_reference_id IS ?
+                     AND reference_kind = ? AND raw_observation_id = ?""",
+                (post_id, link_id, reference_id, record.reference_kind, raw_observation_id),
+            ).fetchone()[0]
+        )
+
+    def add_account_external_link(
+        self,
+        account_id: int,
+        url: str,
+        source_context: str,
+        observed_at: str,
+        *,
+        raw_observation_id: int,
+    ) -> int:
+        observed_at = normalize_timestamp(observed_at)
+        if not url or not source_context:
+            raise ValueError("account external URL and source context are required")
+        self.connection.execute(
+            """INSERT INTO external_links (
+                   canonical_url, canonicalization_version, resolution_state
+               ) VALUES (?, 'provider-metadata-v1', 'unresolved')
+               ON CONFLICT(canonical_url, canonicalization_version) DO NOTHING""",
+            (url,),
+        )
+        link_id = int(
+            self.connection.execute(
+                """SELECT external_link_id FROM external_links
+                   WHERE canonical_url = ?
+                     AND canonicalization_version = 'provider-metadata-v1'""",
+                (url,),
+            ).fetchone()[0]
+        )
+        self.connection.execute(
+            """INSERT INTO account_external_links (
+                   account_id, external_link_id, source_context, raw_observation_id, observed_at
+               ) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (account_id, link_id, source_context, raw_observation_id, observed_at),
+        )
+        return int(
+            self.connection.execute(
+                """SELECT account_external_link_id FROM account_external_links
+                   WHERE account_id = ? AND external_link_id = ? AND source_context = ?
+                     AND raw_observation_id = ?""",
+                (account_id, link_id, source_context, raw_observation_id),
+            ).fetchone()[0]
+        )
 
     def upsert_account(
         self, record: AccountRecord, *, raw_observation_id: int | None = None
@@ -382,8 +909,9 @@ class CatalogWriter:
         self.connection.execute(
             """INSERT INTO posts (
                    platform_id, native_post_id, canonical_url, text_content, language, created_at,
-                   availability, status, first_seen_at, last_seen_at, raw_observation_id
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   updated_at, rating, availability, status, title, provider_post_type,
+                   first_seen_at, last_seen_at, raw_observation_id
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(platform_id, native_post_id) DO UPDATE SET
                    canonical_url = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
                        THEN COALESCE(excluded.canonical_url, posts.canonical_url)
@@ -394,10 +922,20 @@ class CatalogWriter:
                    language = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
                        THEN COALESCE(excluded.language, posts.language) ELSE posts.language END,
                    created_at = COALESCE(posts.created_at, excluded.created_at),
+                   updated_at = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
+                       THEN COALESCE(excluded.updated_at, posts.updated_at)
+                       ELSE posts.updated_at END,
+                   rating = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
+                       THEN COALESCE(excluded.rating, posts.rating) ELSE posts.rating END,
                    availability = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
                        THEN excluded.availability ELSE posts.availability END,
                    status = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
                        THEN COALESCE(excluded.status, posts.status) ELSE posts.status END,
+                   title = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
+                       THEN COALESCE(excluded.title, posts.title) ELSE posts.title END,
+                   provider_post_type = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
+                       THEN COALESCE(excluded.provider_post_type, posts.provider_post_type)
+                       ELSE posts.provider_post_type END,
                    first_seen_at = MIN(posts.first_seen_at, excluded.first_seen_at),
                    last_seen_at = MAX(posts.last_seen_at, excluded.last_seen_at),
                    raw_observation_id = CASE WHEN excluded.last_seen_at >= posts.last_seen_at
@@ -410,8 +948,12 @@ class CatalogWriter:
                 record.text,
                 record.language,
                 record.created_at,
+                record.updated_at,
+                record.rating,
                 record.availability,
                 record.status,
+                record.title,
+                record.provider_post_type,
                 record.observed_at,
                 record.observed_at,
                 raw_observation_id,
@@ -429,8 +971,12 @@ class CatalogWriter:
             "canonical_url": record.canonical_url or prior["canonical_url"],
             "text_content": record.text or prior["text_content"],
             "language": record.language or prior["language"],
+            "updated_at": record.updated_at or prior["updated_at"],
+            "rating": record.rating or prior["rating"],
             "availability": record.availability,
             "status": record.status or prior["status"],
+            "title": record.title or prior["title"],
+            "provider_post_type": record.provider_post_type or prior["provider_post_type"],
         }
         changed = record.observed_at >= prior["last_seen_at"] and any(
             comparable[key] != prior[key] for key in comparable
@@ -554,21 +1100,28 @@ class CatalogWriter:
         ).fetchone()
         self.connection.execute(
             """INSERT INTO media_occurrences (
-                   post_id, source_key, media_index, media_type, remote_url, preview_url,
-                   width, height, duration_ms, variants_json, alt_text, availability,
-                   declared_md5, declared_sha256, raw_observation_id, observed_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   post_id, source_key, media_index, media_type, role, remote_url, preview_url,
+                   mime_type, width, height, duration_ms, variants_json, alt_text, availability,
+                   declared_md5, declared_sha256, declared_file_size, raw_observation_id,
+                   observed_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(post_id, source_key) DO UPDATE SET
                    media_index = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
                        THEN excluded.media_index ELSE media_occurrences.media_index END,
                    media_type = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
                        THEN excluded.media_type ELSE media_occurrences.media_type END,
+                   role = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
+                       THEN COALESCE(excluded.role, media_occurrences.role)
+                       ELSE media_occurrences.role END,
                    remote_url = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
                        THEN COALESCE(excluded.remote_url, media_occurrences.remote_url)
                        ELSE media_occurrences.remote_url END,
                    preview_url = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
                        THEN COALESCE(excluded.preview_url, media_occurrences.preview_url)
                        ELSE media_occurrences.preview_url END,
+                   mime_type = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
+                       THEN COALESCE(excluded.mime_type, media_occurrences.mime_type)
+                       ELSE media_occurrences.mime_type END,
                    width = CASE WHEN excluded.observed_at >= media_occurrences.observed_at
                        THEN COALESCE(excluded.width, media_occurrences.width)
                        ELSE media_occurrences.width END,
@@ -590,6 +1143,11 @@ class CatalogWriter:
                    declared_sha256 = COALESCE(
                        media_occurrences.declared_sha256, excluded.declared_sha256
                    ),
+                   declared_file_size = CASE
+                       WHEN excluded.observed_at >= media_occurrences.observed_at
+                       THEN COALESCE(excluded.declared_file_size,
+                                     media_occurrences.declared_file_size)
+                       ELSE media_occurrences.declared_file_size END,
                    raw_observation_id = CASE
                        WHEN excluded.observed_at >= media_occurrences.observed_at
                        THEN COALESCE(excluded.raw_observation_id,
@@ -601,8 +1159,10 @@ class CatalogWriter:
                 record.source_key,
                 record.index,
                 record.media_type,
+                record.role,
                 record.remote_url,
                 record.preview_url,
+                record.mime_type,
                 record.width,
                 record.height,
                 record.duration_ms,
@@ -611,6 +1171,7 @@ class CatalogWriter:
                 record.availability,
                 record.declared_md5,
                 record.declared_sha256,
+                record.declared_file_size,
                 raw_observation_id,
                 record.observed_at,
             ),
@@ -627,8 +1188,10 @@ class CatalogWriter:
         comparable = {
             "media_index": record.index,
             "media_type": record.media_type,
+            "role": record.role or prior["role"],
             "remote_url": record.remote_url or prior["remote_url"],
             "preview_url": record.preview_url or prior["preview_url"],
+            "mime_type": record.mime_type or prior["mime_type"],
             "width": record.width if record.width is not None else prior["width"],
             "height": record.height if record.height is not None else prior["height"],
             "duration_ms": (
@@ -637,6 +1200,11 @@ class CatalogWriter:
             "variants_json": record.variants_json or prior["variants_json"],
             "alt_text": record.alt_text or prior["alt_text"],
             "availability": record.availability,
+            "declared_file_size": (
+                record.declared_file_size
+                if record.declared_file_size is not None
+                else prior["declared_file_size"]
+            ),
         }
         changed = record.observed_at >= prior["observed_at"] and any(
             comparable[key] != prior[key] for key in comparable

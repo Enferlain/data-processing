@@ -1,0 +1,30 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "gallery-dl-oracle",
+    "instance": "local-reference",
+    "captured_at": "2026-08-10T00:00:00Z",
+    "adapter_version": "1.32.2+2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5",
+    "schema_version": "comparison-v1",
+    "redactions": ["representative IDs and URLs only", "no downloaded files", "no credentials"],
+    "source": "/mnt/d/Projects/image-downloaders/gallery-dl at commit 2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5"
+  },
+  "cases": [
+    {
+      "name": "pixiv_field_mapping",
+      "operation": "fetch_post",
+      "target": "2002",
+      "request_identity": "gallery-dl-oracle:pixiv:2002",
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 2002, "user": {"id": 1001}, "page_count": 2, "original_urls": ["example_p0.png", "example_p1.png"], "ugoira_frames": null}},
+      "expected": {"preserve": ["stable user ID", "stable artwork ID", "page order", "original URLs", "tags and translations"]}
+    },
+    {
+      "name": "danbooru_field_mapping",
+      "operation": "fetch_post",
+      "target": "3001",
+      "request_identity": "gallery-dl-oracle:danbooru:3001",
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 3001, "md5": "0123456789abcdef0123456789abcdef", "source": "https://www.pixiv.net/artworks/2001", "uploader_id": 17, "parent_id": 2999, "tag_categories": 5}},
+      "expected": {"preserve": ["declared MD5", "source URL", "uploader role", "parent relation", "categorized tags"]}
+    }
+  ]
+}

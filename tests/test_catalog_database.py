@@ -20,7 +20,7 @@ def test_fresh_catalog_applies_current_migration(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "catalog.sqlite3"
     with CatalogDatabase(path) as database:
         assert database.schema_version == current_schema_version()
-        assert database.summary()["platforms"] == 6
+        assert database.summary()["platforms"] == 7
         assert database.doctor()["ok"] is True
 
 
@@ -51,7 +51,7 @@ def test_read_only_catalog_accepts_current_schema_without_writes(tmp_path: Path)
         assert database.connection.row_factory is sqlite3.Row
         assert database.connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert database.connection.execute("PRAGMA query_only").fetchone()[0] == 1
-        assert database.summary()["platforms"] == 6
+        assert database.summary()["platforms"] == 7
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             database.connection.execute("CREATE TABLE should_not_exist(value TEXT)")
 

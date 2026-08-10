@@ -14,6 +14,7 @@ from media_catalog.records import (
     MediaOccurrenceRecord,
     OccurrenceSourceRecord,
     PostRecord,
+    RemoteRunRecord,
 )
 from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
@@ -48,6 +49,15 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ["assets", "list", str(catalog), "--json"],
         ["assets", "show", str(catalog), "1"],
         ["assets", "verify", str(catalog), "--media-root", str(tmp_path / "media")],
+        ["metadata", "pixiv-profile", str(catalog), "1001", "--max-requests", "1"],
+        ["metadata", "pixiv-artwork", str(catalog), "2001"],
+        ["metadata", "pixiv-account-artworks", str(catalog), "1001"],
+        ["metadata", "danbooru-post", str(catalog), "3001"],
+        ["metadata", "danbooru-artist", str(catalog), "4001"],
+        ["metadata", "danbooru-list", str(catalog), "artist_a"],
+        ["metadata", "aibooru-post", str(catalog), "3001"],
+        ["metadata", "runs", str(catalog), "--json"],
+        ["metadata", "run-show", str(catalog), "1"],
     )
     for argv in cases:
         assert parser.parse_args(argv).command == argv[0]
@@ -206,6 +216,61 @@ def test_corrupt_database_has_bounded_cli_error(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="error:") as raised:
         main(["schema", str(catalog)])
     assert "Traceback" not in str(raised.value)
+
+
+def test_remote_run_inspection_is_offline_and_structured(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+    main(["metadata", "runs", str(catalog), "--json"])
+    output = json.loads(capsys.readouterr().out)
+    assert output == {"catalog": "catalog.sqlite3", "count": 0, "results": []}
+
+
+def test_remote_run_show_of_failed_history_exits_successfully(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            run_id = writer.begin_remote_run(
+                RemoteRunRecord(
+                    "pixiv",
+                    "fetch_post",
+                    "10",
+                    "fixture-adapter-v1",
+                    "fixture-schema-v1",
+                    1,
+                    1,
+                    1,
+                    10,
+                    "2026-08-10T00:00:00Z",
+                )
+            )
+            writer.finish_remote_run(
+                run_id,
+                status="failed",
+                outcome="malformed_response",
+                request_count=1,
+                page_count=0,
+                record_count=0,
+                finished_at="2026-08-10T00:00:01Z",
+            )
+    main(["metadata", "run-show", str(catalog), str(run_id), "--json"])
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "failed"
+    assert output["termination_outcome"] == "malformed_response"
 
 
 def test_both_ingest_commands_run_with_human_and_json_output(
