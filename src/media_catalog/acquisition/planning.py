@@ -165,7 +165,15 @@ def _occurrence(connection: sqlite3.Connection, occurrence_id: int) -> sqlite3.R
     ).fetchone()
 
 
-def _variant_map(row: Mapping[str, Any]) -> tuple[dict[str, str], str | None]:
+def resolve_occurrence_variants(row: Mapping[str, Any]) -> tuple[dict[str, str], str | None]:
+    """Resolve the named acquisition variants for one occurrence.
+
+    The returned URLs are intentionally an internal planning representation.
+    Callers that expose this information must project only the variant names;
+    the URL is required by the downloader to build its request, but is never a
+    safe browsing value.
+    """
+
     variants: dict[str, str] = {}
     remote_url = row["remote_url"]
     preview_url = row["preview_url"]
@@ -204,6 +212,10 @@ def _variant_map(row: Mapping[str, Any]) -> tuple[dict[str, str], str | None]:
         variants.setdefault("archive", archive["url"])
         variants.setdefault("primary", archive["url"])
     return variants, None
+
+
+# Kept as a compatibility alias for internal callers and older integrations.
+_variant_map = resolve_occurrence_variants
 
 
 def _satisfied_asset(
@@ -342,6 +354,23 @@ def _plan_item(
     )
 
 
+def evaluate_occurrence_variant(
+    connection: sqlite3.Connection,
+    selection: AcquisitionSelection,
+    *,
+    policy_resolver: Callable[[str], PolicyIdentity | None] = policy_identity_for_platform,
+) -> PlannedAcquisitionItem:
+    """Evaluate one occurrence/variant using the acquisition planner rules.
+
+    This pure, read-only evaluator is shared by media browsing and explicit
+    acquisition planning.  It retains the planner's URL-bearing internal
+    result so the execution path remains unchanged; browsing must project the
+    result without serializing ``selected_url``.
+    """
+
+    return _plan_item(connection, selection, policy_resolver)
+
+
 def plan_acquisition(
     database: CatalogDatabase | Path | str,
     selections: Iterable[AcquisitionSelection],
@@ -377,7 +406,10 @@ def plan_acquisition(
         connection = catalog.connection
         close = catalog.close
     try:
-        items = tuple(_plan_item(connection, selection, policy_resolver) for selection in unique)
+        items = tuple(
+            evaluate_occurrence_variant(connection, selection, policy_resolver=policy_resolver)
+            for selection in unique
+        )
     finally:
         close()
     created_at = normalize_timestamp(clock())

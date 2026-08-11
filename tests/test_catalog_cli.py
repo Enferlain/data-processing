@@ -37,6 +37,8 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ["matches", str(catalog), "--kind", "post", "--state", "pending"],
         ["match-show", str(catalog), "post:1", "--json"],
         ["match-review", str(catalog), "post:1", "--decision", "reject"],
+        ["media", "list", str(catalog), "--author", "pixiv:1001", "--linked", "no"],
+        ["media", "show", str(catalog), "1", "--json"],
         [
             "assets",
             "plan",
@@ -423,3 +425,93 @@ def test_download_plan_and_run_queries_are_redacted_and_network_free(
     main(["assets", "download-run-show", str(catalog), "1", "--json"])
     shown = json.loads(capsys.readouterr().out)
     assert shown["status"] == "failed"
+
+
+def test_media_browser_is_offline_redacted_and_feeds_download_planning(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        platform_id = int(
+            database.connection.execute(
+                "SELECT platform_id FROM platforms WHERE platform_key = 'pixiv'"
+            ).fetchone()[0]
+        )
+        post_id = int(
+            database.connection.execute(
+                """INSERT INTO posts (
+                       platform_id, native_post_id, availability, first_seen_at, last_seen_at
+                   ) VALUES (?, 'browser-post', 'available',
+                             '2026-08-11T00:00:00Z', '2026-08-11T00:00:00Z')""",
+                (platform_id,),
+            ).lastrowid
+        )
+        database.connection.execute(
+            """INSERT INTO media_occurrences (
+                   media_occurrence_id, post_id, source_key, media_index, media_type,
+                   remote_url, variants_json, availability, observed_at
+               ) VALUES (42, ?, 'browser:p0', 0, 'image/png', ?, ?, 'available',
+                         '2026-08-11T00:00:00Z')""",
+            (
+                post_id,
+                "https://i.pximg.net/private.png?token=PRIVATE_MEDIA_TOKEN",
+                json.dumps(
+                    {
+                        "variants": [
+                            {
+                                "role": "original",
+                                "url": (
+                                    "https://i.pximg.net/private.png?token=PRIVATE_MEDIA_TOKEN"
+                                ),
+                            }
+                        ]
+                    }
+                ),
+            ),
+        )
+    before_bytes = catalog.read_bytes()
+    before_names = sorted(path.name for path in catalog.parent.iterdir())
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+
+    main(["media", "list", str(catalog), "--platform", "pixiv", "--json"])
+    listed = json.loads(capsys.readouterr().out)
+    selection = next(
+        variant["selection"]
+        for variant in listed["results"][0]["variants"]
+        if variant["key"] == "original"
+    )
+    assert selection == "42:original"
+
+    main(["media", "show", str(catalog), "42", "--json"])
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["occurrence"]["media_occurrence_id"] == 42
+
+    main(
+        [
+            "assets",
+            "download-plan",
+            str(catalog),
+            "--select",
+            selection,
+            "--json",
+        ]
+    )
+    planned = json.loads(capsys.readouterr().out)
+    assert planned["items"][0]["eligibility"] == "eligible"
+
+    rendered = json.dumps((listed, shown, planned))
+    assert "PRIVATE_MEDIA_TOKEN" not in rendered
+    assert "i.pximg.net" not in rendered
+    assert str(tmp_path) not in rendered
+    assert catalog.read_bytes() == before_bytes
+    assert sorted(path.name for path in catalog.parent.iterdir()) == before_names
+
+    with pytest.raises(SystemExit, match="media occurrence not found") as raised:
+        main(["media", "show", str(catalog), "999"])
+    assert str(tmp_path) not in str(raised.value)

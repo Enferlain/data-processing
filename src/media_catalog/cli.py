@@ -37,6 +37,7 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.discovery import DiscoveryService
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.imports.xarchive import import_xarchive
+from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.records import AcquisitionLimits
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
@@ -158,6 +159,23 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--expected-generation", type=int)
     review.add_argument("--expected-revision", type=int)
     _add_json(review)
+
+    media = commands.add_parser("media")
+    media_commands = media.add_subparsers(dest="media_command", required=True)
+    media_list = media_commands.add_parser("list")
+    media_list.add_argument("catalog", type=Path)
+    media_list.add_argument("--platform")
+    media_list.add_argument("--author", metavar="PLATFORM:NATIVE_ID")
+    media_list.add_argument("--post", metavar="POST_ID|PLATFORM:NATIVE_ID")
+    media_list.add_argument("--availability")
+    media_list.add_argument("--linked", choices=("yes", "no"))
+    media_list.add_argument("--limit", type=int, default=100)
+    media_list.add_argument("--after", type=int)
+    _add_json(media_list)
+    media_show = media_commands.add_parser("show")
+    media_show.add_argument("catalog", type=Path)
+    media_show.add_argument("media_occurrence_id", type=int)
+    _add_json(media_show)
 
     assets = commands.add_parser("assets")
     asset_commands = assets.add_subparsers(dest="asset_command", required=True)
@@ -359,6 +377,27 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     expected_revision=arguments.expected_revision,
                 ),
             }
+    if arguments.command == "media":
+        service = MediaQueryService(arguments.catalog)
+        catalog_label = public_path(arguments.catalog)
+        if arguments.media_command == "list":
+            linked = None if arguments.linked is None else arguments.linked == "yes"
+            return {
+                "catalog": catalog_label,
+                **service.list(
+                    platform=arguments.platform,
+                    author=arguments.author,
+                    post=arguments.post,
+                    availability=arguments.availability,
+                    linked=linked,
+                    limit=arguments.limit,
+                    after=arguments.after,
+                ),
+            }
+        result = service.show(arguments.media_occurrence_id)
+        if result is None:
+            raise ValueError("media occurrence not found")
+        return {"catalog": catalog_label, **result}
     if arguments.command == "assets":
         catalog_label = public_path(arguments.catalog)
         if arguments.asset_command == "download-plan":

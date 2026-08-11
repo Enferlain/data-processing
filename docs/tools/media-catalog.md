@@ -183,6 +183,43 @@ manifest capture date plus adapter/schema version. Expected mappings were review
 gallery-dl 1.32.2 commit `2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5` as a comparison oracle;
 gallery-dl is not imported or executed by normal tests.
 
+## Browse synchronized media
+
+Metadata sync creates posts and media occurrences, but does not download their files. Use the
+read-only media browser to find stable occurrence IDs and named variants without opening the SQLite
+database directly:
+
+```bash
+uv run catalog media list catalog-output/catalog.sqlite3 --platform pixiv --limit 50 --json
+uv run catalog media list catalog-output/catalog.sqlite3 --author pixiv:1001 --linked no --json
+uv run catalog media list catalog-output/catalog.sqlite3 --post pixiv:2001 --availability available
+uv run catalog media show catalog-output/catalog.sqlite3 42 --json
+```
+
+`--author` uses `PLATFORM:NATIVE_ACCOUNT_ID`; `--post` accepts either a positive catalog post ID or
+`PLATFORM:NATIVE_POST_ID`. These identifiers are stable—handles and display names remain temporal
+metadata. Listings are ordered by `media_occurrence_id`; when `has_more` is true, pass the returned
+`continuation` to `--after` for the next page. `--linked yes|no` filters on whether the occurrence
+has an asset association.
+
+List and detail output identify acquisition variants such as `primary`, `original`, `preview`, or
+`archive`, together with the same eligibility and exclusion reasons used by download planning. They
+deliberately omit remote and signed media URLs, URL hosts, request data, raw payloads, credentials,
+and every managed, legacy, or source path. Browsing requires an existing current-schema catalog and
+never migrates it, creates storage layout, contacts a provider, or downloads bytes.
+
+Provider values under `declared` remain source assertions. Values under linked assets are locally
+calculated or verified facts and do not overwrite declared values when they disagree. Author roles,
+raw-observation IDs, source classifications, asset relationships, and verification methods retain
+the evidence needed to interpret those facts without exposing private paths.
+
+An eligible variant can be passed unchanged into explicit acquisition:
+
+```bash
+uv run catalog assets download-plan catalog-output/catalog.sqlite3 \
+  --select 42:original --json
+```
+
 ## Download selected remote media into managed storage
 
 Media acquisition is a separate, explicit operation. Import, discovery, search, matching, and every
