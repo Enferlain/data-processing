@@ -49,6 +49,26 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ["assets", "list", str(catalog), "--json"],
         ["assets", "show", str(catalog), "1"],
         ["assets", "verify", str(catalog), "--media-root", str(tmp_path / "media")],
+        ["assets", "download-plan", str(catalog), "--select", "1:original"],
+        [
+            "assets",
+            "download",
+            str(catalog),
+            "--media-root",
+            str(tmp_path / "media"),
+            "--select",
+            "1:original",
+        ],
+        ["assets", "download-runs", str(catalog), "--json"],
+        ["assets", "download-run-show", str(catalog), "1"],
+        [
+            "assets",
+            "download-retry",
+            str(catalog),
+            "1",
+            "--media-root",
+            str(tmp_path / "media"),
+        ],
         ["metadata", "pixiv-profile", str(catalog), "1001", "--max-requests", "1"],
         ["metadata", "pixiv-artwork", str(catalog), "2001"],
         ["metadata", "pixiv-account-artworks", str(catalog), "1001"],
@@ -318,3 +338,88 @@ def test_discovery_cli_has_stable_json_and_bounded_candidate_errors(
     with pytest.raises(SystemExit, match="candidate not found") as raised:
         main(["match-show", str(catalog), "post:999"])
     assert str(tmp_path) not in str(raised.value)
+
+
+def test_download_plan_and_run_queries_are_redacted_and_network_free(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        platform_id = int(
+            database.connection.execute(
+                "SELECT platform_id FROM platforms WHERE platform_key = 'pixiv'"
+            ).fetchone()[0]
+        )
+        post_id = int(
+            database.connection.execute(
+                """INSERT INTO posts (
+                       platform_id, native_post_id, first_seen_at, last_seen_at
+                   ) VALUES (?, 'download-cli', '2026-08-10T00:00:00Z',
+                             '2026-08-10T00:00:00Z')""",
+                (platform_id,),
+            ).lastrowid
+        )
+        database.connection.execute(
+            """INSERT INTO media_occurrences (
+                   post_id, source_key, media_index, media_type, remote_url,
+                   availability, observed_at
+               ) VALUES (?, 'download:p0', 0, 'image/png', ?, 'available',
+                         '2026-08-10T00:00:00Z')""",
+            (post_id, "https://i.pximg.net/file.png?signature=private-value"),
+        )
+
+    main(
+        [
+            "assets",
+            "download-plan",
+            str(catalog),
+            "--select",
+            "1:primary",
+            "--json",
+        ]
+    )
+    planned = json.loads(capsys.readouterr().out)
+    rendered = json.dumps(planned)
+    assert planned["status"] == "planned"
+    assert planned["counts"]["eligible"] == 1
+    assert "private-value" not in rendered
+    assert "pximg.net" not in rendered
+    assert str(tmp_path) not in rendered
+
+    main(["assets", "download-runs", str(catalog), "--json"])
+    runs = json.loads(capsys.readouterr().out)
+    assert runs["results"] == []
+
+    with CatalogDatabase(catalog) as database, database.transaction():
+        managed_root_id = int(
+            database.connection.execute(
+                """INSERT INTO managed_roots (
+                       root_kind, root_identity, display_label, private_path, created_at
+                   ) VALUES ('managed', 'cli:failed', 'managed', '/private/media',
+                             '2026-08-10T00:00:00Z')"""
+            ).lastrowid
+        )
+        plan_id = int(
+            database.connection.execute(
+                """INSERT INTO media_acquisition_plans (
+                       plan_version, selection_digest, requested_count, eligible_count,
+                       satisfied_count, excluded_count, created_at
+                   ) VALUES ('plan-v1', ?, 1, 1, 0, 0, '2026-08-10T00:00:00Z')""",
+                ("a" * 64,),
+            ).lastrowid
+        )
+        database.connection.execute(
+            """INSERT INTO media_acquisition_runs (
+                   acquisition_plan_id, managed_root_id, status, termination_outcome,
+                   max_items, max_item_bytes, max_total_bytes, max_attempts_per_item,
+                   max_seconds, max_redirects, max_quarantine_bytes, concurrency,
+                   planned_count, failed_count, started_at, finished_at
+               ) VALUES (?, ?, 'failed', 'failed', 1, 1000, 1000, 1, 30, 1, 1000,
+                         1, 1, 1, '2026-08-10T00:00:00Z',
+                         '2026-08-10T00:00:01Z')""",
+            (plan_id, managed_root_id),
+        )
+
+    main(["assets", "download-run-show", str(catalog), "1", "--json"])
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["status"] == "failed"

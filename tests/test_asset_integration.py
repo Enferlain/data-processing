@@ -10,6 +10,8 @@ import pytest
 from media_catalog.asset_adoption import adopt_assets, find_exact_duplicates, plan_adoption
 from media_catalog.database import CatalogDatabase
 from media_catalog.imports.x_likes_db import import_x_likes_database
+from media_catalog.records import ManagedRootRecord, OccurrenceSourceRecord
+from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
 
 NOW = "2026-08-09T00:00:00Z"
@@ -195,3 +197,76 @@ def test_x_likes_import_after_adoption_preserves_managed_verification(
                   AND fingerprint_value = ?""",
             ("f" * 32,),
         ).fetchone()[0] == "f" * 32
+
+
+def test_gallery_dl_output_remains_untrusted_until_normal_adoption_succeeds(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "gallery-dl-staging"
+    source_root.mkdir()
+    relative_path = "gallery-dl-output.bin"
+    payload = b"externally produced bytes are not preverified"
+    (source_root / relative_path).write_bytes(payload)
+    managed_root = tmp_path / "managed"
+    managed_root.mkdir()
+    catalog_path = tmp_path / "catalog.sqlite3"
+    source_info = source_root.stat()
+
+    with CatalogDatabase(catalog_path) as catalog:
+        writer = CatalogWriter(catalog)
+        with catalog.transaction():
+            platform_id = int(
+                catalog.connection.execute(
+                    "SELECT platform_id FROM platforms WHERE platform_key = 'x'"
+                ).fetchone()[0]
+            )
+            post_id = int(
+                catalog.connection.execute(
+                    """INSERT INTO posts (
+                           platform_id, native_post_id, first_seen_at, last_seen_at
+                       ) VALUES (?, 'gallery-dl-fixture', ?, ?)""",
+                    (platform_id, NOW, NOW),
+                ).lastrowid
+            )
+            occurrence_id = int(
+                catalog.connection.execute(
+                    """INSERT INTO media_occurrences (
+                           post_id, source_key, media_index, media_type, observed_at
+                       ) VALUES (?, 'gallery-dl:0', 0, 'binary', ?)""",
+                    (post_id, NOW),
+                ).lastrowid
+            )
+            source_id = writer.register_managed_root(
+                ManagedRootRecord(
+                    "source",
+                    f"{source_info.st_dev}:{source_info.st_ino}",
+                    "gallery-dl-staging",
+                    str(source_root),
+                    NOW,
+                )
+            )
+            writer.add_occurrence_source(
+                OccurrenceSourceRecord(
+                    occurrence_id,
+                    "legacy_local",
+                    relative_path,
+                    NOW,
+                    source_id,
+                )
+            )
+        assert catalog.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
+
+    plan = plan_adoption(catalog_path, source_root, managed_root)
+    assert plan.planned_count == 1
+    assert not list((managed_root / "sha256").rglob("*"))
+    with CatalogDatabase(catalog_path) as catalog:
+        adopted = adopt_assets(catalog, source_root, managed_root, plan=plan)
+        assert adopted.status == "complete"
+        asset = catalog.connection.execute("SELECT * FROM assets").fetchone()
+        assert asset["verified_sha256"] == _sha256(payload)
+        assert asset["verified_md5"] == _md5(payload)
+        assert asset["verification_method"] == "adoption"
+        location = catalog.connection.execute(
+            "SELECT relative_path FROM asset_locations"
+        ).fetchone()[0]
+        assert (managed_root / location).read_bytes() == payload

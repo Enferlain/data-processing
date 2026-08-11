@@ -183,6 +183,104 @@ manifest capture date plus adapter/schema version. Expected mappings were review
 gallery-dl 1.32.2 commit `2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5` as a comparison oracle;
 gallery-dl is not imported or executed by normal tests.
 
+## Download selected remote media into managed storage
+
+Media acquisition is a separate, explicit operation. Import, discovery, search, matching, and every
+`catalog metadata` command remain metadata-only and never request media bytes. First inspect the
+occurrence IDs and named variants produced by metadata sync, then make a read-only plan:
+
+```bash
+uv run catalog assets download-plan catalog-output/catalog.sqlite3 \
+  --select 42:original --select 43:preview --max-items 10 --json
+```
+
+`--select` takes `OCCURRENCE_ID` or `OCCURRENCE_ID:VARIANT`; the default variant is `primary`.
+Planning opens the current catalog read-only, performs no HTTP request, creates no managed-root
+layout, and does not expose rendered/signed media URLs. It reports excluded, already-satisfied, and
+eligible items plus stable policy and target digests. If the selected URL, variant, provider policy,
+source observation, or compatible declared claim changes before execution, the item is recorded as
+stale without making a request.
+
+Create a dedicated existing directory for managed media, make a catalog backup, then execute with
+finite limits:
+
+```bash
+mkdir -p /private/catalog-media
+uv run catalog assets download catalog-output/catalog.sqlite3 \
+  --media-root /private/catalog-media \
+  --select 42:original --select 43:preview \
+  --max-items 10 --max-item-bytes 134217728 --max-total-bytes 268435456 \
+  --max-attempts 3 --max-seconds 300 --max-redirects 5 \
+  --max-quarantine-bytes 134217728 --concurrency 1
+```
+
+The initial executor is deliberately serial. All item, byte, attempt, elapsed, redirect, quarantine,
+and concurrency limits are immutable on the recorded run and must be positive (the quarantine byte
+budget may be zero). A `partial` or `failed` requested run exits nonzero. Inspect redacted history or
+retry only eligible failed/interrupted items with:
+
+```bash
+uv run catalog assets download-runs catalog-output/catalog.sqlite3 --json
+uv run catalog assets download-run-show catalog-output/catalog.sqlite3 12 --json
+uv run catalog assets download-retry catalog-output/catalog.sqlite3 12 \
+  --media-root /private/catalog-media
+```
+
+`download-retry` inherits the predecessor's limits, links the new run to it, preserves every prior
+attempt, skips completed/satisfied items, and excludes non-retryable failures by default. Use
+`--include-nonretryable` only for an intentional reattempt. A process-left `running` attempt is first
+closed as interrupted. A retained partial resumes only with a recorded strong ETag, `Range`,
+`If-Range`, a matching 206 response, the exact expected starting offset, and a coherent total size.
+Weak/missing/changed validators, invalid ranges, or a server that ignores the range never cause byte
+representations to be concatenated; acquisition safely restarts from byte zero or records a
+source-changed failure.
+
+Provider request policies are versioned and fail closed:
+
+- Pixiv media is restricted to `i.pximg.net` and uses the required
+  `Referer: https://app-api.pixiv.net/` behavior. API refresh credentials are not forwarded to the
+  media CDN.
+- Danbooru media is restricted to the configured instance plus `cdn.donmai.us`.
+- AIBooru media is restricted to its configured instance and explicit `safe.aibooru.online`,
+  `general.aibooru.online`, and `aibooru.download` hosts.
+
+Every redirect hop is manually checked. HTTP, downgrade, user-info, IP-literal, unexpected-port,
+and off-policy destinations are rejected before requesting them. Credential values, cookies,
+authorization headers, signed query values, and rendered request URLs are excluded from acquisition
+plans, attempts, diagnostics, and normal structured output. Metadata-adapter credentials remain
+configured as described above; the current public media-CDN recipes do not persist or forward them.
+
+Complete bytes are staged under catalog-owned opaque names, hashed locally with SHA-256 and MD5,
+and inspected under byte/pixel/frame limits for MIME type, dimensions, frame count, and versioned
+pHash where supported. Permitted unsupported media may be stored as `downloaded_exact_only`.
+Provider hashes, sizes, MIME types, and dimensions remain declared source assertions; verified local
+facts are stored separately with comparison records. Only compatible original/primary claims are
+treated as exact hash claims. An exact SHA-256/MD5 disagreement is never linked as success: bounded
+bytes are retained in opaque quarantine when budget permits, otherwise metadata-only mismatch
+evidence remains.
+
+CAS publication uses the same immutable SHA-256 layout, managed-root lock, no-follow checks, and
+durable directory synchronization as local adoption. Assets, locations, calculated fingerprints,
+request-digest provenance, and occurrence links are committed only after durable publication.
+Identical bytes share one CAS object. If publication succeeds just before a database interruption,
+the verified SHA-256 left on the run item lets a retry validate and reconcile the existing CAS object
+without downloading it again; a corrupt or colliding target fails closed.
+
+gallery-dl remains a behavioral reference for provider quirks, throttling, retries, and fixtures—not
+the catalog's downloader or storage implementation. Importing its Python downloader would couple
+the catalog to extractor/job/path state and would bypass per-attempt budgets and descriptor-bound
+staging. A future subprocess bridge may place completed files and metadata sidecars in an isolated
+source directory, but those files are untrusted input: they must pass the ordinary local adoption or
+acquisition inspection, hash comparison, quarantine, CAS publication, and provenance boundary.
+gallery-dl's download archive is not proof that bytes are valid or already represented in this
+catalog.
+
+The default test suite is fully offline. Maintainers can opt into one hard-bounded request per
+provider with `MEDIA_CATALOG_LIVE_ACQUISITION=1` plus externally supplied
+`MEDIA_CATALOG_LIVE_PIXIV_MEDIA_URL` and/or `MEDIA_CATALOG_LIVE_DANBOORU_MEDIA_URL`. These smoke
+tests allow at most 32 MiB, one attempt, two redirects, and 30 elapsed seconds; no URL or credential
+is stored in the repository.
+
 ## Adopt existing local media
 
 Asset adoption copies files already referenced by the catalog into immutable, SHA-256-addressed
@@ -248,6 +346,6 @@ ambiguous/unassociated classification and bounded counts are exposed.
 - Likes and bookmarks are separate observations. A post present in both sources remains one X post
   with independently queryable `liked` and `bookmarked` provenance.
 
-The existing online `x-likes` workflow remains documented in [its guide](x-likes.md). Media
-downloads, perceptual similarity decisions, and image/work matching remain later catalog changes,
-not hidden behavior of metadata commands.
+The existing online `x-likes` workflow remains documented in [its guide](x-likes.md). Explicit
+selected-media acquisition is documented above; perceptual similarity decisions and image/work
+matching remain later catalog changes, not hidden behavior of metadata commands.

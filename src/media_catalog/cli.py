@@ -7,6 +7,13 @@ from pathlib import Path
 
 import httpx
 
+from media_catalog.acquisition import (
+    AcquisitionQueryService,
+    AcquisitionSelection,
+    AcquisitionService,
+    HTTPTransferEngine,
+    plan_acquisition,
+)
 from media_catalog.adapters import AdapterOperation
 from media_catalog.adapters.danbooru import (
     AIBOORU,
@@ -31,6 +38,7 @@ from media_catalog.discovery import DiscoveryService
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.imports.xarchive import import_xarchive
 from media_catalog.output import bounded_error, public_path, render_result
+from media_catalog.records import AcquisitionLimits
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
 from media_catalog.remote_sync import MetadataSyncService, SyncLimits
 
@@ -46,6 +54,42 @@ def _add_sync_limits(parser: argparse.ArgumentParser, *, listing: bool) -> None:
     parser.add_argument("--max-seconds", type=int, default=60)
     parser.add_argument("--resume-from", type=int)
     _add_json(parser)
+
+
+def _add_acquisition_limits(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--max-items", type=int, default=100)
+    parser.add_argument("--max-item-bytes", type=int, default=128 * 1024 * 1024)
+    parser.add_argument("--max-total-bytes", type=int, default=512 * 1024 * 1024)
+    parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--max-seconds", type=int, default=300)
+    parser.add_argument("--max-redirects", type=int, default=5)
+    parser.add_argument("--max-quarantine-bytes", type=int, default=128 * 1024 * 1024)
+    parser.add_argument("--concurrency", type=int, choices=(1,), default=1)
+
+
+def _parse_acquisition_selections(values: list[str]) -> list[AcquisitionSelection]:
+    selections: list[AcquisitionSelection] = []
+    for value in values:
+        occurrence, separator, variant = value.partition(":")
+        if not occurrence.isdecimal() or int(occurrence) <= 0:
+            raise ValueError("selection must start with a positive occurrence id")
+        if separator and not variant:
+            raise ValueError("selection variant must not be empty")
+        selections.append(AcquisitionSelection(int(occurrence), variant or "primary"))
+    return selections
+
+
+def _acquisition_limits(arguments: argparse.Namespace) -> AcquisitionLimits:
+    return AcquisitionLimits(
+        arguments.max_items,
+        arguments.max_item_bytes,
+        arguments.max_total_bytes,
+        arguments.max_attempts,
+        arguments.max_seconds,
+        arguments.max_redirects,
+        arguments.max_quarantine_bytes,
+        arguments.concurrency,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -129,6 +173,51 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--max-pixels", type=int, default=100_000_000)
             command.add_argument("--max-frames", type=int, default=100)
         _add_json(command)
+
+    download_plan = asset_commands.add_parser("download-plan")
+    download_plan.add_argument("catalog", type=Path)
+    download_plan.add_argument(
+        "--select",
+        action="append",
+        required=True,
+        metavar="OCCURRENCE[:VARIANT]",
+    )
+    download_plan.add_argument("--max-items", type=int, default=100)
+    _add_json(download_plan)
+
+    download = asset_commands.add_parser("download")
+    download.add_argument("catalog", type=Path)
+    download.add_argument("--media-root", type=Path, required=True)
+    download.add_argument(
+        "--select",
+        action="append",
+        required=True,
+        metavar="OCCURRENCE[:VARIANT]",
+    )
+    _add_acquisition_limits(download)
+    download.add_argument("--max-pixels", type=int, default=100_000_000)
+    download.add_argument("--max-frames", type=int, default=100)
+    _add_json(download)
+
+    download_runs = asset_commands.add_parser("download-runs")
+    download_runs.add_argument("catalog", type=Path)
+    download_runs.add_argument(
+        "--status", choices=("running", "complete", "partial", "failed", "cancelled")
+    )
+    download_runs.add_argument("--limit", type=int, default=100)
+    _add_json(download_runs)
+
+    download_show = asset_commands.add_parser("download-run-show")
+    download_show.add_argument("catalog", type=Path)
+    download_show.add_argument("run_id", type=int)
+    _add_json(download_show)
+
+    download_retry = asset_commands.add_parser("download-retry")
+    download_retry.add_argument("catalog", type=Path)
+    download_retry.add_argument("run_id", type=int)
+    download_retry.add_argument("--media-root", type=Path, required=True)
+    download_retry.add_argument("--include-nonretryable", action="store_true")
+    _add_json(download_retry)
 
     asset_list = asset_commands.add_parser("list")
     asset_list.add_argument("catalog", type=Path)
@@ -272,6 +361,61 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             }
     if arguments.command == "assets":
         catalog_label = public_path(arguments.catalog)
+        if arguments.asset_command == "download-plan":
+            preview = plan_acquisition(
+                arguments.catalog,
+                _parse_acquisition_selections(arguments.select),
+                max_items=arguments.max_items,
+            )
+            return {"catalog": catalog_label, "status": "planned", **preview.as_dict()}
+        if arguments.asset_command in {"download-runs", "download-run-show"}:
+            queries = AcquisitionQueryService(arguments.catalog)
+            if arguments.asset_command == "download-runs":
+                results = queries.runs(status=arguments.status, limit=arguments.limit)
+                return {"catalog": catalog_label, "count": len(results), "results": results}
+            result = queries.run(arguments.run_id)
+            if result is None:
+                raise ValueError("acquisition run not found")
+            return {"catalog": catalog_label, **result}
+        if arguments.asset_command == "download":
+            if not arguments.media_root.is_dir():
+                raise ValueError("managed media root must be an existing directory")
+            limits = _acquisition_limits(arguments)
+            preview = plan_acquisition(
+                arguments.catalog,
+                _parse_acquisition_selections(arguments.select),
+                max_items=limits.max_items,
+            )
+            inspection = InspectionLimits(
+                limits.max_item_bytes, arguments.max_pixels, arguments.max_frames
+            )
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                result = AcquisitionService(
+                    database,
+                    HTTPTransferEngine(client),
+                    arguments.media_root,
+                    inspection_limits=inspection,
+                ).execute(preview, limits)
+            return {
+                "catalog": catalog_label,
+                "managed_root": public_path(arguments.media_root),
+                **result.as_dict(),
+            }
+        if arguments.asset_command == "download-retry":
+            if not arguments.media_root.is_dir():
+                raise ValueError("managed media root must be an existing directory")
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                result = AcquisitionService(
+                    database, HTTPTransferEngine(client), arguments.media_root
+                ).retry(
+                    arguments.run_id,
+                    include_nonretryable=arguments.include_nonretryable,
+                )
+            return {
+                "catalog": catalog_label,
+                "managed_root": public_path(arguments.media_root),
+                **result.as_dict(),
+            }
         if arguments.asset_command == "plan":
             return {
                 "catalog": catalog_label,
@@ -407,7 +551,11 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(json.dumps({"error": message}, ensure_ascii=False)) from error
         raise SystemExit(f"error: {message}") from error
     print(render_result(result, as_json=arguments.json))
-    if arguments.command == "assets" and result.get("status") in {"partial", "failed", "issues"}:
+    if (
+        arguments.command == "assets"
+        and arguments.asset_command not in {"download-plan", "download-runs", "download-run-show"}
+        and result.get("status") in {"partial", "failed", "issues"}
+    ):
         raise SystemExit(2)
     if (
         arguments.command == "metadata"

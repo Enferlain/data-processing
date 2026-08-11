@@ -27,7 +27,7 @@ from ctypes import CDLL, c_char_p, c_int
 from ctypes import get_errno as ctypes_get_errno
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Protocol
 
 from PIL import Image, UnidentifiedImageError
 
@@ -35,6 +35,12 @@ try:
     import imagehash
 except ImportError:  # pragma: no cover - declared runtime dependency
     imagehash = None  # type: ignore[assignment]
+
+
+class AnyHash(Protocol):
+    def update(self, data: bytes) -> None: ...
+
+    def hexdigest(self) -> str: ...
 
 
 class AssetStorageError(Exception):
@@ -372,6 +378,150 @@ class StagedAsset:
 
 
 @dataclass(frozen=True, slots=True)
+class RemotePartialState:
+    """Path-free durable identity for reopening one owned remote partial."""
+
+    staging_name: str
+    request_identity: str
+    managed_root_identity: tuple[int, int]
+    staging_identity: tuple[int, int]
+    byte_count: int
+    prefix_sha256: str
+    prefix_md5: str
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantinedAsset:
+    quarantine_name: str
+    reason: str
+    size: int
+    sha256: str
+    md5: str
+
+
+class RemoteStagingSession:
+    """An append-only, descriptor-bound staging writer for remote bytes."""
+
+    def __init__(
+        self,
+        storage: AssetStorage,
+        staging_name: str,
+        request_identity: str,
+        fd: int,
+        max_bytes: int,
+        size: int,
+        sha256: AnyHash,
+        md5: AnyHash,
+        staging_identity: tuple[int, int],
+    ) -> None:
+        self.storage = storage
+        self.staging_name = staging_name
+        self.request_identity = request_identity
+        self.fd = fd
+        self.max_bytes = max_bytes
+        self.size = size
+        self._sha256 = sha256
+        self._md5 = md5
+        self.staging_identity = staging_identity
+        self._finished = False
+
+    def _require_open(self) -> int:
+        if self.fd < 0 or self._finished:
+            raise StorageIntegrityError("remote staging session is closed")
+        if self.storage._staged_fds.get(self.staging_name) != self.fd:
+            raise StorageIntegrityError("remote staging descriptor is no longer owned")
+        info = os.fstat(self.fd)
+        if not _regular(info) or _identity(info) != self.staging_identity:
+            raise StorageIntegrityError("remote staging inode changed")
+        return self.fd
+
+    def write(self, data: bytes | bytearray | memoryview) -> int:
+        fd = self._require_open()
+        view = memoryview(data)
+        if self.size + len(view) > self.max_bytes:
+            raise LimitExceededError("remote response exceeds the configured byte limit")
+        payload = bytes(view)
+        written_total = 0
+        while written_total < len(payload):
+            written = os.write(fd, payload[written_total:])
+            if written <= 0:
+                raise OSError(errno.EIO, "short write while staging remote response")
+            written_total += written
+        self._sha256.update(payload)
+        self._md5.update(payload)
+        self.size += written_total
+        return written_total
+
+    def checkpoint(self) -> RemotePartialState:
+        fd = self._require_open()
+        os.fsync(fd)
+        info = os.fstat(fd)
+        if info.st_size != self.size or _identity(info) != self.staging_identity:
+            raise StorageIntegrityError("remote staging file changed before checkpoint")
+        staging_fd = self.storage._staging_fd()
+        try:
+            staged = StagedAsset(
+                self.staging_name,
+                "remote.partial",
+                self.size,
+                self._sha256.hexdigest(),
+                self._md5.hexdigest(),
+                fd,
+            )
+            self.storage._verify_staging_name(staged, staging_fd)
+            os.fsync(staging_fd)
+        finally:
+            os.close(staging_fd)
+        return RemotePartialState(
+            self.staging_name,
+            self.request_identity,
+            self.storage.media.identity,
+            self.staging_identity,
+            self.size,
+            self._sha256.hexdigest(),
+            self._md5.hexdigest(),
+        )
+
+    def detach(self) -> RemotePartialState:
+        state = self.checkpoint()
+        fd = self.fd
+        self.fd = -1
+        self._finished = True
+        self.storage._staged_fds.pop(self.staging_name, None)
+        os.close(fd)
+        return state
+
+    def finalize(self, *, source_label: str = "remote") -> StagedAsset:
+        state = self.checkpoint()
+        staged = StagedAsset(
+            state.staging_name,
+            source_label,
+            state.byte_count,
+            state.prefix_sha256,
+            state.prefix_md5,
+            self.fd,
+        )
+        self.fd = -1
+        self._finished = True
+        return staged
+
+    def close(self) -> None:
+        if self.fd >= 0:
+            fd = self.fd
+            self.fd = -1
+            self._finished = True
+            self.storage._staged_fds.pop(self.staging_name, None)
+            with suppress(OSError):
+                os.close(fd)
+
+    def __enter__(self) -> RemoteStagingSession:
+        return self
+
+    def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
+        self.close()
+
+
+@dataclass(frozen=True, slots=True)
 class ExactEvidence:
     """Bounded exact-byte evidence retained when a staged item fails later."""
 
@@ -531,7 +681,7 @@ class AssetStorage:
 
     def __init__(
         self,
-        source_root: str | os.PathLike[str] | RootHandle,
+        source_root: str | os.PathLike[str] | RootHandle | None,
         media_root: str | os.PathLike[str] | RootHandle,
         *,
         limits: InspectionLimits | None = None,
@@ -543,14 +693,12 @@ class AssetStorage:
             raise ValueError("chunk_size must be positive")
         self.limits = limits or InspectionLimits()
         self.chunk_size = chunk_size
-        self._owns_source = not isinstance(source_root, RootHandle)
+        self._owns_source = source_root is not None and not isinstance(source_root, RootHandle)
         self._owns_media = not isinstance(media_root, RootHandle)
         self._owned_staging: set[str] = set()
         self._staged_fds: dict[str, int] = {}
         self.source = (
-            RootHandle.open(source_root, label="source")
-            if self._owns_source
-            else source_root
+            RootHandle.open(source_root, label="source") if self._owns_source else source_root
         )
         try:
             self.media = (
@@ -558,13 +706,14 @@ class AssetStorage:
                 if self._owns_media
                 else media_root
             )
-            _ensure_disjoint(self.source, self.media)
+            if self.source is not None:
+                _ensure_disjoint(self.source, self.media)
             if initialize_layout:
                 self._ensure_layout()
         except BaseException:
             if self._owns_media and hasattr(self, "media"):
                 self.media.close()
-            if self._owns_source:
+            if self._owns_source and self.source is not None:
                 self.source.close()
             raise
 
@@ -573,7 +722,7 @@ class AssetStorage:
             with suppress(OSError):
                 os.close(fd)
         self._staged_fds.clear()
-        if self._owns_source:
+        if self._owns_source and self.source is not None:
             self.source.close()
             self._owns_source = False
         if self._owns_media:
@@ -591,10 +740,29 @@ class AssetStorage:
             fd = _open_child_directory(self.media.fd, name, create=True)
             os.close(fd)
 
+    @classmethod
+    def for_remote(
+        cls,
+        media_root: str | os.PathLike[str] | RootHandle,
+        *,
+        limits: InspectionLimits | None = None,
+        chunk_size: int = 1024 * 1024,
+        initialize_layout: bool = True,
+    ) -> AssetStorage:
+        return cls(
+            None,
+            media_root,
+            limits=limits,
+            chunk_size=chunk_size,
+            initialize_layout=initialize_layout,
+        )
+
     def lock(self) -> ManagedRootLock:
         return ManagedRootLock(self.media)
 
     def open_source(self, relative_path: str | os.PathLike[str]) -> OpenedSource:
+        if self.source is None:
+            raise CapabilityError("remote-only storage has no local source root")
         components = _safe_components(relative_path)
         parent_fd = os.dup(self.source.fd)
         try:
@@ -641,6 +809,138 @@ class AssetStorage:
 
     def _staging_fd(self) -> int:
         return _open_relative_directory(self.media.fd, ["staging"])
+
+    def begin_remote_staging(
+        self,
+        request_identity: str,
+        *,
+        max_bytes: int | None = None,
+    ) -> RemoteStagingSession:
+        """Allocate one private append-only staging file for remote bytes."""
+
+        normalized = _normal_hash(request_identity, 64, "request identity")
+        assert normalized is not None
+        effective_limit = self.limits.max_bytes if max_bytes is None else max_bytes
+        if effective_limit <= 0:
+            raise ValueError("remote staging byte limit must be positive")
+        effective_limit = min(effective_limit, self.limits.max_bytes)
+        staging_fd = self._staging_fd()
+        fd = -1
+        name = ""
+        try:
+            for _ in range(16):
+                candidate = f"remote-{secrets.token_hex(16)}"
+                try:
+                    fd = os.open(
+                        candidate,
+                        _flags("O_RDWR", "O_CREAT", "O_EXCL", "O_CLOEXEC", "O_NOFOLLOW"),
+                        0o600,
+                        dir_fd=staging_fd,
+                    )
+                    name = candidate
+                    break
+                except FileExistsError:
+                    continue
+            if fd < 0:
+                raise AssetStorageError("could not allocate a unique remote staging file")
+            info = os.fstat(fd)
+            if not _regular(info) or info.st_size != 0:
+                raise StorageIntegrityError("new remote staging entry is not an empty file")
+            self._owned_staging.add(name)
+            self._staged_fds[name] = fd
+            os.fsync(staging_fd)
+            return RemoteStagingSession(
+                self,
+                name,
+                normalized,
+                fd,
+                effective_limit,
+                0,
+                hashlib.sha256(),
+                hashlib.md5(usedforsecurity=False),
+                _identity(info),
+            )
+        except BaseException:
+            if name:
+                self._cleanup_staging_name(
+                    name,
+                    staging_fd=staging_fd,
+                    expected_fd=fd if fd >= 0 else None,
+                )
+            if fd >= 0:
+                self._staged_fds.pop(name, None)
+                os.close(fd)
+            raise
+        finally:
+            os.close(staging_fd)
+
+    def reopen_remote_staging(
+        self,
+        state: RemotePartialState,
+        *,
+        expected_request_identity: str,
+        max_bytes: int | None = None,
+    ) -> RemoteStagingSession:
+        """Reopen a durable partial only after identity and prefix verification."""
+
+        expected = _normal_hash(expected_request_identity, 64, "request identity")
+        assert expected is not None
+        if state.request_identity != expected:
+            raise SourceChangedError("remote partial belongs to a different request")
+        if state.managed_root_identity != self.media.identity:
+            raise StorageIntegrityError("remote partial belongs to a different managed root")
+        effective_limit = self.limits.max_bytes if max_bytes is None else max_bytes
+        if effective_limit <= 0:
+            raise ValueError("remote staging byte limit must be positive")
+        effective_limit = min(effective_limit, self.limits.max_bytes)
+        if state.byte_count > effective_limit:
+            raise LimitExceededError("remote partial exceeds the configured byte limit")
+        fd = self._open_staging(state.staging_name, writable=True)
+        try:
+            before = os.fstat(fd)
+            if _identity(before) != state.staging_identity:
+                raise StorageIntegrityError("remote partial staging inode changed")
+            if before.st_size != state.byte_count:
+                raise StorageIntegrityError("remote partial size changed")
+            sha256 = hashlib.sha256()
+            md5 = hashlib.md5(usedforsecurity=False)
+            size = 0
+            os.lseek(fd, 0, os.SEEK_SET)
+            while True:
+                chunk = os.read(fd, self.chunk_size)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > effective_limit:
+                    raise LimitExceededError("remote partial exceeds the configured byte limit")
+                sha256.update(chunk)
+                md5.update(chunk)
+            after = os.fstat(fd)
+            if not _same_source(before, after, size):
+                raise StorageIntegrityError("remote partial changed while it was verified")
+            if (size, sha256.hexdigest(), md5.hexdigest()) != (
+                state.byte_count,
+                state.prefix_sha256,
+                state.prefix_md5,
+            ):
+                raise StorageIntegrityError("remote partial does not match its recorded hashes")
+            os.lseek(fd, 0, os.SEEK_END)
+            self._owned_staging.add(state.staging_name)
+            self._staged_fds[state.staging_name] = fd
+            return RemoteStagingSession(
+                self,
+                state.staging_name,
+                state.request_identity,
+                fd,
+                effective_limit,
+                size,
+                sha256,
+                md5,
+                state.staging_identity,
+            )
+        except BaseException:
+            os.close(fd)
+            raise
 
     def stage_source(self, relative_path: str | os.PathLike[str]) -> StagedAsset:
         """Copy one source into a unique private staging file and hash it."""
@@ -791,6 +1091,77 @@ class AssetStorage:
 
         self._cleanup_staging_name(staged.staging_name, expected_fd=staged.fd)
         self._close_staged_fd(staged)
+
+    def quarantine_staged(
+        self,
+        staged: StagedAsset,
+        *,
+        reason: str,
+        max_bytes: int,
+    ) -> QuarantinedAsset:
+        """Durably link verified staged bytes under an opaque quarantine name."""
+
+        if not reason or not reason.strip() or len(reason) > 200:
+            raise ValueError("quarantine reason must be between 1 and 200 characters")
+        if max_bytes < 0:
+            raise ValueError("quarantine byte limit must not be negative")
+        if staged.size > max_bytes:
+            raise LimitExceededError("staged bytes exceed the quarantine budget")
+        quarantine_fd = -1
+        staging_fd = -1
+        target_fd = -1
+        name = ""
+        try:
+            self._verify_staging(staged)
+            staged_fd = self._staged_fd(staged)
+            staging_fd = self._staging_fd()
+            self._verify_staging_name(staged, staging_fd)
+            quarantine_fd = _open_relative_directory(self.media.fd, ["quarantine"])
+            visible = _open_relative_directory(self.media.fd, ["quarantine"])
+            try:
+                if _identity(os.fstat(visible)) != _identity(os.fstat(quarantine_fd)):
+                    raise StorageIntegrityError("managed quarantine directory path changed")
+            finally:
+                os.close(visible)
+            for _ in range(16):
+                candidate = f"quarantine-{secrets.token_hex(16)}"
+                try:
+                    self._link_staged_fd(staged_fd, quarantine_fd, candidate)
+                    name = candidate
+                    break
+                except FileExistsError:
+                    continue
+            if not name:
+                raise AssetStorageError("could not allocate a unique quarantine entry")
+            self._verify_staging_name(staged, staging_fd)
+            visible = _open_relative_directory(self.media.fd, ["quarantine"])
+            try:
+                if _identity(os.fstat(visible)) != _identity(os.fstat(quarantine_fd)):
+                    raise StorageIntegrityError("managed quarantine directory path changed")
+            finally:
+                os.close(visible)
+            target_fd = os.open(
+                name,
+                _flags("O_RDONLY", "O_CLOEXEC", "O_NOFOLLOW"),
+                dir_fd=quarantine_fd,
+            )
+            self._verify_target(
+                target_fd,
+                staged,
+                expected_identity=_identity(os.fstat(staged_fd)),
+            )
+            os.fsync(quarantine_fd)
+            return QuarantinedAsset(name, reason, staged.size, staged.sha256, staged.md5)
+        except BaseException as error:
+            _attach_staged_evidence(error, staged)
+            raise
+        finally:
+            if target_fd >= 0:
+                os.close(target_fd)
+            if staging_fd >= 0:
+                os.close(staging_fd)
+            if quarantine_fd >= 0:
+                os.close(quarantine_fd)
 
     def _close_staged_fd(self, staged: StagedAsset) -> None:
         fd = self._staged_fds.pop(staged.staging_name, None)
@@ -949,6 +1320,102 @@ class AssetStorage:
         return f"sha256/{normalized[:2]}/{normalized[2:4]}/{normalized}"
 
     cas_path = cas_relative_path
+
+    def stage_existing_cas(
+        self,
+        sha256: str,
+        *,
+        expected_size: int | None = None,
+        expected_md5: str | None = None,
+    ) -> StagedAsset | None:
+        """Safely reopen verified CAS bytes as staging for reconciliation."""
+
+        normalized = _normal_hash(sha256, 64, "SHA-256")
+        normalized_md5 = _normal_hash(expected_md5, 32, "MD5")
+        assert normalized is not None
+        target_dir_fd = staging_fd = target_fd = -1
+        name = ""
+        try:
+            try:
+                target_dir_fd = _open_relative_directory(
+                    self.media.fd,
+                    ["sha256", normalized[:2], normalized[2:4]],
+                    create=False,
+                )
+            except FileNotFoundError:
+                return None
+            self._verify_cas_directory_binding(target_dir_fd, normalized)
+            try:
+                target_fd = os.open(
+                    normalized,
+                    _flags("O_RDONLY", "O_CLOEXEC", "O_NOFOLLOW"),
+                    dir_fd=target_dir_fd,
+                )
+            except FileNotFoundError:
+                return None
+            except OSError as error:
+                if error.errno == errno.ELOOP:
+                    raise StorageIntegrityError("CAS target is a symbolic link") from error
+                raise
+            before = os.fstat(target_fd)
+            if not _regular(before):
+                raise StorageIntegrityError("CAS target is not a regular file")
+            try:
+                size, calculated_sha256, calculated_md5 = _stream_hash(
+                    target_fd, max_bytes=self.limits.max_bytes
+                )
+            except LimitExceededError as error:
+                raise StorageIntegrityError(
+                    "existing CAS target exceeds the configured byte limit"
+                ) from error
+            after = os.fstat(target_fd)
+            if (
+                not _same_source(before, after, size)
+                or calculated_sha256 != normalized
+                or (expected_size is not None and size != expected_size)
+                or (normalized_md5 is not None and calculated_md5 != normalized_md5)
+            ):
+                raise StorageIntegrityError("existing CAS target has corrupt bytes")
+            staging_fd = self._staging_fd()
+            for _ in range(16):
+                candidate = f"reconcile-{secrets.token_hex(16)}"
+                try:
+                    self._link_staged_fd(target_fd, staging_fd, candidate)
+                    name = candidate
+                    break
+                except FileExistsError:
+                    continue
+            if not name:
+                raise AssetStorageError("could not allocate reconciliation staging")
+            self._owned_staging.add(name)
+            self._staged_fds[name] = target_fd
+            staged = StagedAsset(
+                name,
+                "remote:reconciled.cas",
+                size,
+                calculated_sha256,
+                calculated_md5,
+                target_fd,
+            )
+            self._verify_staging_name(staged, staging_fd)
+            os.fsync(staging_fd)
+            target_fd = -1
+            return staged
+        except BaseException:
+            if name and target_fd >= 0:
+                self._cleanup_staging_name(
+                    name, staging_fd=staging_fd if staging_fd >= 0 else None,
+                    expected_fd=target_fd,
+                )
+                self._staged_fds.pop(name, None)
+            raise
+        finally:
+            if target_fd >= 0:
+                os.close(target_fd)
+            if staging_fd >= 0:
+                os.close(staging_fd)
+            if target_dir_fd >= 0:
+                os.close(target_dir_fd)
 
     def _open_cas_directory(self, sha256: str) -> tuple[int, str]:
         normalized = _normal_hash(sha256, 64, "SHA-256")

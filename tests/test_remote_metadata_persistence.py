@@ -44,7 +44,7 @@ def test_remote_schema_fresh_and_v4_upgrade_preserve_existing_ids(tmp_path: Path
         )
         connection.commit()
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 5
+        assert database.schema_version == current_schema_version()
         assert database.connection.execute("SELECT post_id FROM posts").fetchone()[0] == 41
         tables = {
             row[0]
