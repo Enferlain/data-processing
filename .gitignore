@@ -222,3 +222,9 @@ __marimo__/
 x-likes-output/
 catalog-output/
 private-exports/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
