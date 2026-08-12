@@ -27,12 +27,6 @@ from media_catalog.acquisition.transfer import (
     TransferBudget,
     TransferLimits,
 )
-from media_catalog.asset_storage import (
-    AssetStorage,
-    AssetStorageError,
-    InspectionLimits,
-    RemotePartialState,
-)
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
     AcquisitionAttemptRecord,
@@ -41,6 +35,12 @@ from media_catalog.records import (
     AcquisitionRunItemRecord,
     AcquisitionRunRecord,
     ManagedRootRecord,
+)
+from media_catalog.storage.cas import (
+    AssetStorage,
+    AssetStorageError,
+    InspectionLimits,
+    RemotePartialState,
 )
 from media_catalog.writer import CatalogWriter
 

@@ -14,9 +14,9 @@ import media_catalog.acquisition.publication as publication_module
 from media_catalog.acquisition import AcquisitionSelection, plan_acquisition
 from media_catalog.acquisition.service import AcquisitionService
 from media_catalog.acquisition.transfer import AttemptTransition, HTTPTransferEngine
-from media_catalog.asset_storage import InspectionLimits
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import AcquisitionLimits
+from media_catalog.storage.cas import InspectionLimits
 
 NOW = "2026-08-10T16:00:00Z"
 

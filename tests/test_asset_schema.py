@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from media_catalog.asset_adoption import get_asset_detail, legacy_assertion_summary, list_assets
 from media_catalog.database import CatalogDatabase, available_migrations, current_schema_version
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.records import (
@@ -21,6 +20,7 @@ from media_catalog.records import (
     OccurrenceSourceRecord,
     PostRecord,
 )
+from media_catalog.storage.queries import get_asset_detail, legacy_assertion_summary, list_assets
 from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
 

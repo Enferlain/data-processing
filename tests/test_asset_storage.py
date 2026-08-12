@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-import media_catalog.asset_storage as storage_module
-from media_catalog.asset_storage import (
+import media_catalog.storage.cas as storage_module
+from media_catalog.storage.cas import (
     AssetStorage,
     ExactEvidence,
     HashMismatchError,

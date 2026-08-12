@@ -22,17 +22,12 @@ from media_catalog.adapters.danbooru import (
     DanbooruCredentials,
 )
 from media_catalog.adapters.pixiv import PixivAdapter
-from media_catalog.asset_adoption import (
-    adopt_assets,
-    find_exact_duplicates,
-    get_asset_detail,
-    list_adoption_runs,
-    list_assets,
-    list_failed_adoption_items,
-    plan_adoption,
+from media_catalog.candidate_lookup import (
+    CandidateLookupQueryService,
+    CandidateLookupService,
+    LookupLimits,
+    plan_candidate_lookup,
 )
-from media_catalog.asset_storage import AssetStorageError, InspectionLimits
-from media_catalog.asset_verification import verify_managed_storage
 from media_catalog.database import CatalogDatabase
 from media_catalog.discovery import DiscoveryService
 from media_catalog.imports.x_likes_db import import_x_likes_database
@@ -42,6 +37,26 @@ from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.records import AcquisitionLimits
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
 from media_catalog.remote_sync import MetadataSyncService, SyncLimits
+from media_catalog.storage.adoption import adopt_assets, plan_adoption
+from media_catalog.storage.cas import AssetStorageError, InspectionLimits
+from media_catalog.storage.queries import (
+    find_exact_duplicates,
+    get_asset_detail,
+    list_adoption_runs,
+    list_assets,
+    list_failed_adoption_items,
+)
+from media_catalog.storage.verification import verify_managed_storage
+
+LOOKUP_STRATEGIES = (
+    "source_post_url",
+    "external_post_id",
+    "declared_md5",
+    "verified_md5",
+    "artist_exact_name",
+    "artist_alias",
+    "artist_text",
+)
 
 
 def _add_json(parser: argparse.ArgumentParser) -> None:
@@ -66,6 +81,13 @@ def _add_acquisition_limits(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-redirects", type=int, default=5)
     parser.add_argument("--max-quarantine-bytes", type=int, default=128 * 1024 * 1024)
     parser.add_argument("--concurrency", type=int, choices=(1,), default=1)
+
+
+def _add_lookup_limits(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--max-requests", type=int, default=3)
+    parser.add_argument("--max-pages", type=int, default=3)
+    parser.add_argument("--max-results", type=int, default=200)
+    parser.add_argument("--max-seconds", type=int, default=60)
 
 
 def _parse_acquisition_selections(values: list[str]) -> list[AcquisitionSelection]:
@@ -295,6 +317,40 @@ def build_parser() -> argparse.ArgumentParser:
     remote_show.add_argument("catalog", type=Path)
     remote_show.add_argument("run_id", type=int)
     _add_json(remote_show)
+
+    lookup = commands.add_parser("lookup")
+    lookup_commands = lookup.add_subparsers(dest="lookup_command", required=True)
+    for name in ("plan", "run"):
+        command = lookup_commands.add_parser(name)
+        command.add_argument("catalog", type=Path)
+        command.add_argument("seed", metavar="ACCOUNT:ID|POST:ID")
+        command.add_argument("--provider", choices=("danbooru", "aibooru"), required=True)
+        command.add_argument(
+            "--strategy", choices=LOOKUP_STRATEGIES, action="append", required=True
+        )
+        command.add_argument("--search-term")
+        _add_lookup_limits(command)
+        _add_json(command)
+    lookup_resume = lookup_commands.add_parser("resume")
+    lookup_resume.add_argument("catalog", type=Path)
+    lookup_resume.add_argument("run_id", type=int)
+    lookup_resume.add_argument(
+        "--provider", choices=("danbooru", "aibooru"), required=True
+    )
+    _add_lookup_limits(lookup_resume)
+    _add_json(lookup_resume)
+    lookup_runs = lookup_commands.add_parser("runs")
+    lookup_runs.add_argument("catalog", type=Path)
+    lookup_runs.add_argument("--status", choices=("running", "complete", "paused", "failed"))
+    lookup_runs.add_argument("--limit", type=int, default=50)
+    lookup_runs.add_argument("--after", type=int)
+    _add_json(lookup_runs)
+    lookup_show = lookup_commands.add_parser("show")
+    lookup_show.add_argument("catalog", type=Path)
+    lookup_show.add_argument("run_id", type=int)
+    lookup_show.add_argument("--result-limit", type=int, default=100)
+    lookup_show.add_argument("--result-after", type=int)
+    _add_json(lookup_show)
     return parser
 
 
@@ -572,6 +628,67 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     resume_from_run_id=arguments.resume_from,
                 )
         return {"catalog": catalog_label, **result.as_dict()}
+    if arguments.command == "lookup":
+        catalog_label = public_path(arguments.catalog)
+        if arguments.lookup_command in {"runs", "show"}:
+            queries = CandidateLookupQueryService(arguments.catalog)
+            if arguments.lookup_command == "runs":
+                return {
+                    "catalog": catalog_label,
+                    **queries.runs(
+                        status=arguments.status,
+                        limit=arguments.limit,
+                        after=arguments.after,
+                    ),
+                }
+            result = queries.show(
+                arguments.run_id,
+                result_limit=arguments.result_limit,
+                result_after=arguments.result_after,
+            )
+            if result is None:
+                raise ValueError("candidate lookup run not found")
+            return {"catalog": catalog_label, **result}
+        limits = LookupLimits(
+            arguments.max_requests,
+            arguments.max_pages,
+            arguments.max_results,
+            arguments.max_seconds,
+        )
+        instance = DANBOORU if arguments.provider == "danbooru" else AIBOORU
+        if arguments.lookup_command == "plan":
+            plan = plan_candidate_lookup(
+                arguments.catalog,
+                arguments.seed,
+                instance,
+                tuple(arguments.strategy),
+                limits=limits,
+                search_term=arguments.search_term,
+            )
+            return {"catalog": catalog_label, "status": "planned", **plan.as_dict()}
+        credentials = DanbooruCredentials.from_environment(instance)
+        with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+            adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+            service = CandidateLookupService(
+                database,
+                adapter,
+                minimum_interval_seconds=instance.minimum_interval_seconds,
+            )
+            if arguments.lookup_command == "run":
+                plan = service.plan(
+                    arguments.seed,
+                    tuple(arguments.strategy),
+                    limits=limits,
+                    search_term=arguments.search_term,
+                )
+                results = service.execute(plan)
+                return {
+                    "catalog": catalog_label,
+                    "count": len(results),
+                    "results": [result.as_dict() for result in results],
+                }
+            result = service.resume(arguments.run_id, limits=limits)
+            return {"catalog": catalog_label, **result.as_dict()}
     raise NotImplementedError(f"{arguments.command} is planned but not implemented yet")
 
 
@@ -600,5 +717,14 @@ def main(argv: list[str] | None = None) -> None:
         arguments.command == "metadata"
         and arguments.metadata_command not in {"runs", "run-show"}
         and result.get("status") in {"paused", "failed"}
+    ):
+        raise SystemExit(2)
+    if arguments.command == "lookup" and arguments.lookup_command in {"run", "resume"} and (
+        result.get("status") in {"paused", "failed"}
+        or any(
+            item.get("status") in {"paused", "failed"}
+            for item in result.get("results", ())
+            if isinstance(item, dict)
+        )
     ):
         raise SystemExit(2)

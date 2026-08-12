@@ -183,6 +183,54 @@ manifest capture date plus adapter/schema version. Expected mappings were review
 gallery-dl 1.32.2 commit `2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5` as a comparison oracle;
 gallery-dl is not imported or executed by normal tests.
 
+## Look up cross-platform candidates
+
+Candidate lookup is an explicit bridge between retained catalog facts and supported provider
+searches. Start with a network-free plan. A seed is a stable catalog `post:ID` or `account:ID`, not
+a handle:
+
+```bash
+uv run catalog lookup plan catalog-output/catalog.sqlite3 post:42 \
+  --provider danbooru --strategy source_post_url --strategy verified_md5 --json
+```
+
+The plan lists supported strategies, exclusions, immutable limits, and private-material digests. It
+does not print source URLs, hashes, search text, rendered request URLs, or credentials. Weak artist
+searches require one explicitly selected term and remain non-authoritative leads:
+
+```bash
+uv run catalog lookup plan catalog-output/catalog.sqlite3 account:7 \
+  --provider aibooru --strategy artist_exact_name --search-term selected_artist_name
+```
+
+Execute only after reviewing the finite plan inputs:
+
+```bash
+uv run catalog lookup run catalog-output/catalog.sqlite3 post:42 \
+  --provider danbooru --strategy source_post_url --strategy verified_md5 \
+  --max-requests 3 --max-pages 3 --max-results 200 --max-seconds 60 --json
+```
+
+Danbooru-family credentials use the same environment variables as metadata synchronization. Each
+strategy receives its own durable run, retained response observations, result associations, and
+committed continuation. A stopped run can be inspected and resumed under newly authorized limits:
+
+```bash
+uv run catalog lookup runs catalog-output/catalog.sqlite3 --status paused --json
+uv run catalog lookup show catalog-output/catalog.sqlite3 15 --json
+uv run catalog lookup resume catalog-output/catalog.sqlite3 15 \
+  --provider danbooru --max-requests 2 --max-pages 2 --max-results 100 --max-seconds 60
+```
+
+A provider source URL may support a directed `sourced_from` candidate. An MD5 calculated from
+verified bytes may support `same_work` plus `exact_bytes`; provider-declared MD5 remains weaker
+declared evidence. Names, aliases, tags, and uploaders never establish identity or authorship.
+Results stay pending in the existing match-review ledger and are never auto-confirmed.
+
+Lookup does not follow result links, enumerate an account, contact X, fetch media, calculate visual
+similarity, or start metadata sync. After manually confirming a stable Pixiv account candidate, run
+the existing `catalog metadata pixiv-account-artworks` command as a separate explicit operation.
+
 ## Browse synchronized media
 
 Metadata sync creates posts and media occurrences, but does not download their files. Use the

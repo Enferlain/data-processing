@@ -1,0 +1,40 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "danbooru",
+    "instance": "aibooru",
+    "captured_at": "2026-08-10T00:00:00Z",
+    "adapter_version": "danbooru-native-v1",
+    "schema_version": "aibooru-json-v1",
+    "redactions": ["media URLs", "credentials", "private headers"],
+    "source": "synthetic redacted provider contract fixture"
+  },
+  "cases": [
+    {
+      "name": "source_miss",
+      "operation": "fetch_post",
+      "target": "https://x.com/acme/status/1",
+      "request_identity": "lookup:1111111111111111111111111111111111111111111111111111111111111111",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": []
+      },
+      "expected": {"result_count": 0}
+    },
+    {
+      "name": "artist_alias_hit",
+      "operation": "fetch_attribution",
+      "target": "artist-a",
+      "request_identity": "lookup:2222222222222222222222222222222222222222222222222222222222222222",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [
+          {"id": 501, "name": "artist-a", "other_names": ["artist_alias"], "urls": []}
+        ]
+      },
+      "expected": {"result_kind": "attribution", "native_id": "501", "order": 0}
+    }
+  ]
+}

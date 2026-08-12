@@ -174,7 +174,7 @@ def test_v5_upgrade_preserves_catalog_ids_and_adds_acquisition_schema(tmp_path: 
         connection.commit()
 
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 6
+        assert database.schema_version == current_schema_version() == 7
         assert database.connection.execute("SELECT post_id FROM posts").fetchone()[0] == 41
         assert (
             database.connection.execute(
@@ -264,7 +264,7 @@ def test_failed_acquisition_migration_rolls_back_to_v5(
     path = tmp_path / "broken.sqlite3"
     migrations = available_migrations()
     broken = (
-        *migrations[:-1],
+        *migrations[:5],
         (
             6,
             "0006_broken_remote_media_acquisition.sql",

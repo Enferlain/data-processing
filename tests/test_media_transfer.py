@@ -14,7 +14,7 @@ from media_catalog.acquisition.transfer import (
     TransferBudget,
     TransferLimits,
 )
-from media_catalog.asset_storage import AssetStorage, InspectionLimits
+from media_catalog.storage.cas import AssetStorage, InspectionLimits
 
 
 def _recipe(url: str = "https://i.pximg.net/file.jpg?signature=secret"):

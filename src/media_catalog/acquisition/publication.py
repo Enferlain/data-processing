@@ -6,12 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from media_catalog.acquisition.planning import PlannedAcquisitionItem
-from media_catalog.asset_storage import (
-    AssetStorage,
-    InspectionResult,
-    LimitExceededError,
-    StagedAsset,
-)
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
     AcquisitionQuarantineRecord,
@@ -21,6 +15,12 @@ from media_catalog.records import (
     AssetLocationRecord,
     AssetRecord,
     OccurrenceSourceRecord,
+)
+from media_catalog.storage.cas import (
+    AssetStorage,
+    InspectionResult,
+    LimitExceededError,
+    StagedAsset,
 )
 from media_catalog.writer import CatalogWriter
 

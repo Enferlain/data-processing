@@ -10,6 +10,7 @@ import pytest
 from media_catalog.cli import build_parser, main
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
+    CandidateLookupRunRecord,
     ManagedRootRecord,
     MediaOccurrenceRecord,
     OccurrenceSourceRecord,
@@ -80,6 +81,18 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ["metadata", "aibooru-post", str(catalog), "3001"],
         ["metadata", "runs", str(catalog), "--json"],
         ["metadata", "run-show", str(catalog), "1"],
+        [
+            "lookup",
+            "plan",
+            str(catalog),
+            "post:1",
+            "--provider",
+            "danbooru",
+            "--strategy",
+            "source_post_url",
+        ],
+        ["lookup", "runs", str(catalog), "--json"],
+        ["lookup", "show", str(catalog), "1"],
     )
     for argv in cases:
         assert parser.parse_args(argv).command == argv[0]
@@ -256,6 +269,94 @@ def test_remote_run_inspection_is_offline_and_structured(
     main(["metadata", "runs", str(catalog), "--json"])
     output = json.loads(capsys.readouterr().out)
     assert output == {"catalog": "catalog.sqlite3", "count": 0, "results": []}
+
+
+def test_lookup_plan_and_queries_are_offline_and_redacted(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        post_id = CatalogWriter(database).upsert_post(
+            PostRecord(
+                "x",
+                "12345",
+                "2026-08-11T00:00:00Z",
+                canonical_url="https://x.com/private_handle/status/12345",
+            )
+        ).id
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+    main(
+        [
+            "lookup",
+            "plan",
+            str(catalog),
+            f"post:{post_id}",
+            "--provider",
+            "danbooru",
+            "--strategy",
+            "source_post_url",
+            "--json",
+        ]
+    )
+    planned = json.loads(capsys.readouterr().out)
+    assert planned["status"] == "planned"
+    assert planned["count"] == 1
+    assert "private_handle" not in json.dumps(planned)
+    main(["lookup", "runs", str(catalog), "--json"])
+    assert json.loads(capsys.readouterr().out)["results"] == []
+
+
+def test_lookup_run_listing_succeeds_when_history_contains_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        writer = CatalogWriter(database)
+        post_id = writer.upsert_post(
+            PostRecord("x", "failure-seed", "2026-08-11T00:00:00Z")
+        ).id
+        run_id = writer.begin_candidate_lookup(
+            CandidateLookupRunRecord(
+                "danbooru",
+                "",
+                "source_post_url",
+                "lookup-v1",
+                "danbooru-native-v1",
+                "danbooru-json-v1",
+                "revision",
+                "a" * 64,
+                "source_post_url",
+                "b" * 64,
+                "{}",
+                1,
+                1,
+                1,
+                30,
+                "2026-08-11T00:00:00Z",
+                seed_post_id=post_id,
+            )
+        )
+        writer.finish_candidate_lookup(
+            run_id,
+            status="failed",
+            outcome="malformed_response",
+            request_count=1,
+            page_count=0,
+            result_count=0,
+            finished_at="2026-08-11T00:00:01Z",
+        )
+    main(["lookup", "runs", str(catalog), "--json"])
+    output = json.loads(capsys.readouterr().out)
+    assert output["results"][0]["status"] == "failed"
+    main(["lookup", "show", str(catalog), str(run_id), "--json"])
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["run"]["status"] == "failed"
 
 
 def test_remote_run_show_of_failed_history_exits_successfully(

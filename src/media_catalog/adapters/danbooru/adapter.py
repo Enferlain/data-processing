@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
@@ -17,7 +18,12 @@ from ..contracts import (
     AdapterOutcome,
     AdapterRequest,
     Continuation,
+    LookupContinuation,
+    LookupRequest,
+    LookupStrategy,
     NormalizedItem,
+    NormalizedLookupPage,
+    NormalizedLookupResult,
     NormalizedPage,
     ResponseEnvelope,
 )
@@ -92,7 +98,21 @@ class DanbooruAdapter:
         self._credentials = credentials
         self._clock = clock
 
-    def fetch(self, request: AdapterRequest) -> ResponseEnvelope:
+    @property
+    def lookup_capabilities(self):
+        """Immutable capabilities for this configured instance."""
+
+        return self.instance.lookup_capabilities
+
+    @property
+    def capabilities(self):
+        """Compatibility shorthand exposing the supported strategy set."""
+
+        return self.lookup_capabilities.strategies
+
+    def fetch(self, request: AdapterRequest | LookupRequest) -> ResponseEnvelope:
+        if isinstance(request, LookupRequest):
+            return self.fetch_lookup(request)
         endpoint, params, identity = self._request_parts(request)
         headers = {"User-Agent": self.instance.user_agent, "Accept": "application/json"}
         if self._credentials is not None:
@@ -115,6 +135,94 @@ class DanbooruAdapter:
             adapter_version=self.adapter_version,
             schema_version=self.schema_version,
         )
+
+    def fetch_lookup(self, request: LookupRequest) -> ResponseEnvelope:
+        """Fetch one fixed-endpoint lookup page using injected HTTP transport only."""
+
+        if not self.lookup_capabilities.supports(request.strategy):
+            raise ValueError(
+                f"{self.instance_key} does not support lookup strategy {request.strategy.value}"
+            )
+        endpoint, params, identity, cursor = self._lookup_request_parts(request)
+        headers = {"User-Agent": self.instance.user_agent, "Accept": "application/json"}
+        if self._credentials is not None:
+            raw = f"{self._credentials.login}:{self._credentials.api_key}".encode()
+            headers["Authorization"] = "Basic " + base64.b64encode(raw).decode("ascii")
+        response = self._client.get(
+            self.instance.base_url + endpoint,
+            params=params,
+            headers=headers,
+        )
+        return ResponseEnvelope(
+            provider=self.provider_key,
+            instance=self.instance_key,
+            operation=request.operation,
+            request_identity=identity,
+            status_code=response.status_code,
+            headers=_public_headers(response.headers),
+            payload=response.content or b"{}",
+            observed_at=self._clock(),
+            adapter_version=self.adapter_version,
+            schema_version=self.schema_version,
+            lookup_strategy=request.strategy,
+            lookup_query_digest=request.material.digest,
+            lookup_continuation=cursor,
+            lookup_material=request.material,
+        )
+
+    def _lookup_request_parts(
+        self, request: LookupRequest
+    ) -> tuple[str, dict[str, str | int], str, LookupContinuation | None]:
+        material = request.material
+        cursor = request.continuation
+        if cursor is not None:
+            if (
+                cursor.adapter != self.provider_key
+                or cursor.version != self.schema_version
+                or cursor.strategy is not request.strategy
+                or cursor.query_digest != material.digest
+            ):
+                raise ValueError("incompatible Danbooru lookup continuation")
+            alias_index = cursor.alias_index
+            page = cursor.page
+        else:
+            alias_index = 0
+            page = None
+        if alias_index >= len(material.values):
+            raise ValueError("lookup continuation alias index is out of range")
+        value = material.values[alias_index]
+        limit = min(request.limit, self.instance.page_size)
+        params: dict[str, str | int]
+        if request.strategy is LookupStrategy.SOURCE_POST_URL:
+            params = {"tags": f"source:{value}", "limit": limit}
+            endpoint = "/posts.json"
+        elif request.strategy is LookupStrategy.EXTERNAL_POST_ID:
+            if material.platform != "pixiv":
+                raise ValueError("unsupported external post ID platform")
+            params = {"tags": f"pixiv_id:{value}", "limit": limit}
+            endpoint = "/posts.json"
+        elif request.strategy in {LookupStrategy.DECLARED_MD5, LookupStrategy.VERIFIED_MD5}:
+            params = {"tags": f"md5:{value}", "limit": limit}
+            endpoint = "/posts.json"
+        else:
+            search_key = {
+                LookupStrategy.ARTIST_EXACT_NAME: "search[name]",
+                LookupStrategy.ARTIST_ALIAS: "search[any_name_matches]",
+                LookupStrategy.ARTIST_TEXT: "search[any_name_matches]",
+            }[request.strategy]
+            if request.strategy is LookupStrategy.ARTIST_TEXT:
+                value = f"*{value}*"
+            params = {search_key: value, "limit": limit}
+            endpoint = "/artists.json"
+        if page is not None:
+            params["page"] = page
+        # Identity is intentionally digest-only: rendered URLs and query material never enter it.
+        identity_payload = (
+            f"{self.provider_key}|{self.instance_key}|{request.strategy.value}|"
+            f"{material.digest}|{alias_index}|{page or 'first'}|{limit}"
+        )
+        identity = "lookup:" + hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()
+        return endpoint, params, identity, cursor
 
     def _request_parts(
         self, request: AdapterRequest
@@ -166,6 +274,140 @@ class DanbooruAdapter:
         if response.operation is AdapterOperation.LIST_ACCOUNT_POSTS:
             return self._listing_page(body)
         raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "unsupported response operation")
+
+    def normalize_lookup(
+        self, response: ResponseEnvelope, request: LookupRequest | None = None
+    ) -> NormalizedLookupPage:
+        """Normalize a lookup page while retaining ordered, provider-attributed results."""
+
+        self._validate_envelope(response)
+        self._raise_for_outcome(response)
+        if response.lookup_strategy is None:
+            raise ValueError("response is not a lookup envelope")
+        if request is None:
+            if response.lookup_material is None:
+                raise ValueError("lookup material is required to normalize a lookup response")
+            request = LookupRequest(
+                response.lookup_strategy,
+                response.lookup_material,
+                continuation=response.lookup_continuation,
+            )
+        elif request.strategy is not response.lookup_strategy:
+            raise ValueError("lookup request strategy does not match response")
+        if response.lookup_query_digest != request.material.digest:
+            raise ValueError("lookup request material does not match response")
+        try:
+            body = json.loads(response.payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "provider returned invalid JSON"
+            ) from error
+        if isinstance(body, dict):
+            body = [body]
+        if not isinstance(body, list):
+            raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "lookup response is not a list")
+        results: list[NormalizedLookupResult] = []
+        for rank, entry in enumerate(body):
+            if request.strategy in {
+                LookupStrategy.ARTIST_EXACT_NAME,
+                LookupStrategy.ARTIST_ALIAS,
+                LookupStrategy.ARTIST_TEXT,
+            }:
+                results.append(self._lookup_artist_result(entry, request, rank))
+            else:
+                results.append(self._lookup_post_result(entry, request, rank))
+        continuation = self._lookup_continuation(request, body)
+        return NormalizedLookupPage(tuple(results), continuation, len(results))
+
+    def _lookup_post_result(
+        self, entry: object, request: LookupRequest, rank: int
+    ) -> NormalizedLookupResult:
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), int):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "lookup post has no stable numeric ID"
+            )
+        # Search responses can be intentionally sparse; existing metadata normalization remains
+        # strict, so fill absent tag buckets only for this lookup path.
+        normalized_entry = dict(entry)
+        for category in TAG_CATEGORIES:
+            normalized_entry.setdefault(f"tag_string_{category}", "")
+        post_id = str(entry["id"])
+        items = tuple(self._post_items(normalized_entry))
+        source = entry.get("source")
+        declared_md5 = entry.get("md5")
+        artist_tags = {
+            category: entry.get(f"tag_string_{category}", "")
+            for category in TAG_CATEGORIES
+        }
+        data = {
+            "platform": self.instance_key,
+            "post_id": post_id,
+            "canonical_url": f"{self.instance.base_url}/posts/{post_id}",
+            "query_kind": request.strategy.value,
+            "query": request.material.value if len(request.material.values) == 1 else None,
+            "source": source,
+            "external_ids": {
+                key: entry.get(key)
+                for key in ("pixiv_id", "twitter_id", "twitter_status_id")
+                if entry.get(key) is not None
+            },
+            "declared_md5": declared_md5,
+            "uploader_id": entry.get("uploader_id"),
+            "artist_tags": artist_tags,
+            "availability": "deleted" if bool(entry.get("is_deleted")) else "available",
+        }
+        return NormalizedLookupResult("post", post_id, data, rank, items)
+
+    def _lookup_artist_result(
+        self, entry: object, request: LookupRequest, rank: int
+    ) -> NormalizedLookupResult:
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), int):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "lookup artist has no stable numeric ID"
+            )
+        normalized = dict(entry)
+        normalized.setdefault("urls", [])
+        normalized.setdefault("other_names", [])
+        item = self._attribution_item(normalized)
+        data = dict(item.data)
+        data.update(
+            {
+                "query_kind": request.strategy.value,
+                "query": request.material.value,
+                "rank": rank,
+                "replacement_id": entry.get("replacement_id"),
+                "is_deprecated": bool(entry.get("is_deprecated", False)),
+            }
+        )
+        return NormalizedLookupResult("attribution", str(entry["id"]), data, rank, (item,))
+
+    def _lookup_continuation(
+        self, request: LookupRequest, body: list[object]
+    ) -> LookupContinuation | None:
+        cursor = request.continuation
+        alias_index = cursor.alias_index if cursor is not None else 0
+        last_id = body[-1].get("id") if body and isinstance(body[-1], dict) else None
+        if isinstance(last_id, int) and len(body) >= min(request.limit, self.instance.page_size):
+            return LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                f"b{last_id}",
+                alias_index,
+            )
+        if request.strategy is LookupStrategy.SOURCE_POST_URL and alias_index + 1 < len(
+            request.material.values
+        ):
+            return LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                None,
+                alias_index + 1,
+            )
+        return None
 
     def _validate_envelope(self, response: ResponseEnvelope) -> None:
         if response.provider != self.provider_key or response.instance != self.instance_key:
@@ -424,6 +666,8 @@ class DanbooruAdapter:
                 "urls": public_urls,
                 "active": body.get("is_active"),
                 "deleted": bool(body.get("is_deleted")),
+                "is_deprecated": bool(body.get("is_deprecated", False)),
+                "replacement_id": body.get("replacement_id"),
                 "account": False,
             },
         )

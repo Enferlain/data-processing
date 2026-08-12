@@ -16,7 +16,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from media_catalog.asset_storage import (
+from media_catalog.database import CatalogDatabase
+from media_catalog.storage.cas import (
     AssetStorage,
     AssetStorageError,
     RootHandle,
@@ -30,7 +31,6 @@ from media_catalog.asset_storage import (
     _same_source,
     _stream_hash,
 )
-from media_catalog.database import CatalogDatabase
 
 
 class VerificationError(AssetStorageError):

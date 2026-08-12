@@ -7,13 +7,6 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from media_catalog.asset_adoption import (
-    adopt_assets,
-    find_exact_duplicates,
-    list_failed_adoption_items,
-    plan_adoption,
-)
-from media_catalog.asset_storage import AssetStorage, SourceChangedError, UnsafePathError
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
     ManagedRootRecord,
@@ -21,6 +14,9 @@ from media_catalog.records import (
     OccurrenceSourceRecord,
     PostRecord,
 )
+from media_catalog.storage.adoption import adopt_assets, plan_adoption
+from media_catalog.storage.cas import AssetStorage, SourceChangedError, UnsafePathError
+from media_catalog.storage.queries import find_exact_duplicates, list_failed_adoption_items
 from media_catalog.writer import CatalogWriter
 
 NOW = "2026-08-09T00:00:00Z"

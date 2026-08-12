@@ -9,7 +9,6 @@ from PIL import Image
 from media_catalog.acquisition.planning import PlannedAcquisitionItem
 from media_catalog.acquisition.policies import PIXIV_MEDIA_POLICY
 from media_catalog.acquisition.publication import verify_publish_and_persist
-from media_catalog.asset_storage import AssetStorage, InspectionLimits, StagedAsset
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
     AcquisitionLimits,
@@ -18,6 +17,7 @@ from media_catalog.records import (
     AcquisitionRunRecord,
     ManagedRootRecord,
 )
+from media_catalog.storage.cas import AssetStorage, InspectionLimits, StagedAsset
 from media_catalog.writer import CatalogWriter
 
 NOW = "2026-08-10T12:00:00Z"

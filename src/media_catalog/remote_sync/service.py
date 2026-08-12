@@ -10,7 +10,6 @@ from media_catalog.adapters import (
     AdapterFailure,
     AdapterOperation,
     AdapterOutcome,
-    AdapterRequest,
     Continuation,
     ResponseEnvelope,
 )
@@ -24,8 +23,8 @@ from media_catalog.records import (
 from media_catalog.writer import CatalogWriter
 
 from .budget import BudgetExhausted, BudgetTracker, SyncLimits
+from .executor import BoundedRemoteExecutor, RetainedPage
 from .persistence import NormalizedPageWriter
-from .request_gate import RequestGate
 
 
 def _now() -> str:
@@ -118,73 +117,40 @@ class MetadataSyncService:
                     resumed_from_run_id=resume_from_run_id,
                 )
             )
-        budget = BudgetTracker(limits, monotonic=self.monotonic)
-        gate = RequestGate(
-            budget,
+        executor = BoundedRemoteExecutor(
+            self.adapter,
+            operation,
+            target,
+            limits=limits,
+            continuation=continuation,
+            retain_response=lambda response, attempt: self._retain_response(
+                run_id, attempt, response, target
+            ),
+            commit_page=lambda retained_page, budget: self._commit_page(
+                run_id, operation, target, retained_page, budget
+            ),
             minimum_interval_seconds=self.minimum_interval_seconds,
             maximum_retries=self.maximum_retries,
             monotonic=self.monotonic,
             sleep=self.sleep,
         )
         try:
-            while True:
-                request = AdapterRequest(operation, target, continuation)
-                captured: list[tuple[ResponseEnvelope, int]] = []
-
-                def retain(
-                    response: ResponseEnvelope,
-                    captured_responses: list[tuple[ResponseEnvelope, int]] = captured,
-                ) -> None:
-                    raw_id = self._retain_response(run_id, budget.requests, response, target)
-                    captured_responses.append((response, raw_id))
-
-                response = gate.execute(
-                    lambda current_request=request: self.adapter.fetch(current_request), retain
-                )
-                raw_id = next(
-                    raw_id for retained, raw_id in reversed(captured) if retained is response
-                )
-                page = self.adapter.normalize(response)
-                budget.admit_page(page.record_count)
-                with self.database.transaction():
-                    self.page_writer.write(
-                        page,
-                        observed_at=response.observed_at,
-                        raw_observation_id=raw_id,
-                        adapter_version=response.adapter_version,
-                    )
-                    budget.commit_page(page.record_count)
-                    if page.continuation is not None:
-                        self.writer.save_remote_checkpoint(
-                            RemoteCheckpointRecord(
-                                remote_run_id=run_id,
-                                operation=operation.value,
-                                target=target,
-                                continuation_adapter=page.continuation.adapter,
-                                continuation_version=page.continuation.version,
-                                continuation_json=page.continuation.to_json(),
-                                last_page_identity=response.request_identity,
-                                page_count=budget.pages,
-                                committed_at=self.clock(),
-                            )
-                        )
-                continuation = page.continuation
-                if continuation is None or operation is not AdapterOperation.LIST_ACCOUNT_POSTS:
-                    return self._finish(
-                        run_id,
-                        operation,
-                        target,
-                        budget,
-                        status="complete",
-                        outcome=AdapterOutcome.SUCCESS,
-                        resumed_from_run_id=resume_from_run_id,
-                    )
+            execution = executor.execute()
+            return self._finish(
+                run_id,
+                operation,
+                target,
+                execution.budget,
+                status="complete",
+                outcome=AdapterOutcome.SUCCESS,
+                resumed_from_run_id=resume_from_run_id,
+            )
         except BudgetExhausted as error:
             return self._finish(
                 run_id,
                 operation,
                 target,
-                budget,
+                executor.budget,
                 status="paused",
                 outcome=error.outcome,
                 resumed_from_run_id=resume_from_run_id,
@@ -196,7 +162,7 @@ class MetadataSyncService:
                 run_id,
                 operation,
                 target,
-                budget,
+                executor.budget,
                 status="failed",
                 outcome=error.outcome,
                 resumed_from_run_id=resume_from_run_id,
@@ -208,13 +174,46 @@ class MetadataSyncService:
                 run_id,
                 operation,
                 target,
-                budget,
+                executor.budget,
                 status="failed",
                 outcome=AdapterOutcome.LOCAL_PERSISTENCE,
                 resumed_from_run_id=resume_from_run_id,
                 diagnostic=f"local metadata persistence failed ({type(error).__name__})",
             )
             raise RuntimeError(result.diagnostic) from error
+
+    def _commit_page(
+        self,
+        run_id: int,
+        operation: AdapterOperation,
+        target: str,
+        retained_page: RetainedPage,
+        budget: BudgetTracker,
+    ) -> None:
+        page = retained_page.page
+        response = retained_page.response
+        with self.database.transaction():
+            self.page_writer.write(
+                page,
+                observed_at=response.observed_at,
+                raw_observation_id=retained_page.raw_observation_id,
+                adapter_version=response.adapter_version,
+            )
+            budget.commit_page(page.record_count)
+            if page.continuation is not None:
+                self.writer.save_remote_checkpoint(
+                    RemoteCheckpointRecord(
+                        remote_run_id=run_id,
+                        operation=operation.value,
+                        target=target,
+                        continuation_adapter=page.continuation.adapter,
+                        continuation_version=page.continuation.version,
+                        continuation_json=page.continuation.to_json(),
+                        last_page_identity=response.request_identity,
+                        page_count=budget.pages,
+                        committed_at=self.clock(),
+                    )
+                )
 
     def _retain_response(
         self,

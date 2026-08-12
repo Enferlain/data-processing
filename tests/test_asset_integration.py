@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from media_catalog.asset_adoption import adopt_assets, find_exact_duplicates, plan_adoption
 from media_catalog.database import CatalogDatabase
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.records import ManagedRootRecord, OccurrenceSourceRecord
+from media_catalog.storage.adoption import adopt_assets, plan_adoption
+from media_catalog.storage.queries import find_exact_duplicates
 from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
 

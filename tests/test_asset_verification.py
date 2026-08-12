@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from media_catalog.asset_verification import (
+from media_catalog.database import CatalogDatabase, SchemaVersionError
+from media_catalog.storage.verification import (
     VerificationError,
     verify_managed_storage,
 )
-from media_catalog.database import CatalogDatabase, SchemaVersionError
 
 
 def _identity(path: Path) -> str:

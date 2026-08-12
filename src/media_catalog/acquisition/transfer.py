@@ -18,7 +18,7 @@ from media_catalog.acquisition.policies import (
     safe_failure_diagnostic,
     validate_redirect,
 )
-from media_catalog.asset_storage import (
+from media_catalog.storage.cas import (
     AssetStorage,
     AssetStorageError,
     RemotePartialState,

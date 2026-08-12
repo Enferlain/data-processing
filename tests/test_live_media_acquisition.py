@@ -16,7 +16,7 @@ from media_catalog.acquisition.transfer import (
     TransferBudget,
     TransferLimits,
 )
-from media_catalog.asset_storage import AssetStorage, InspectionLimits
+from media_catalog.storage.cas import AssetStorage, InspectionLimits
 
 LIVE = os.getenv("MEDIA_CATALOG_LIVE_ACQUISITION") == "1"
 MAX_BYTES = 32 * 1024 * 1024

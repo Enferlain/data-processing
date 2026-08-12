@@ -1,0 +1,99 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "danbooru",
+    "instance": "danbooru",
+    "captured_at": "2026-08-10T00:00:00Z",
+    "adapter_version": "danbooru-native-v1",
+    "schema_version": "danbooru-json-v1",
+    "redactions": ["media URLs", "credentials", "private headers"],
+    "source": "synthetic redacted provider contract fixture"
+  },
+  "cases": [
+    {
+      "name": "source_alias_hit",
+      "operation": "fetch_post",
+      "target": "https://twitter.com/acme/status/1",
+      "request_identity": "lookup:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [{
+          "id": 8186581,
+          "source": "https://twitter.com/acme/status/1",
+          "md5": "072b69605a05873a2443626b7600ed69",
+          "uploader_id": 17,
+          "tag_string_artist": "artist_a",
+          "tag_string_character": "",
+          "tag_string_copyright": "",
+          "tag_string_general": "",
+          "tag_string_meta": ""
+        }]
+      },
+      "expected": {"result_kind": "post", "native_id": "8186581", "order": 0}
+    },
+    {
+      "name": "md5_miss",
+      "operation": "fetch_post",
+      "target": "00000000000000000000000000000000",
+      "request_identity": "lookup:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": []
+      },
+      "expected": {"result_count": 0}
+    },
+    {
+      "name": "artist_results_ordered",
+      "operation": "fetch_attribution",
+      "target": "artist",
+      "request_identity": "lookup:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [
+          {"id": 4001, "name": "artist_a", "other_names": ["a"], "urls": [{"url": "https://pixiv.net/users/1"}]},
+          {"id": 4002, "name": "artist_ab", "other_names": [], "urls": []}
+        ]
+      },
+      "expected": {"result_kind": "attribution", "result_count": 2, "order": [0, 1]}
+    },
+    {
+      "name": "unavailable_record",
+      "operation": "fetch_post",
+      "target": "99999999",
+      "request_identity": "lookup:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "response": {
+        "status_code": 404,
+        "headers": {"content-type": "application/json"},
+        "body": {"message": "not found"}
+      },
+      "expected": {"outcome": "unavailable"}
+    },
+    {
+      "name": "malformed_payload",
+      "operation": "fetch_post",
+      "target": "malformed",
+      "request_identity": "lookup:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"unexpected": true}
+      },
+      "expected": {"outcome": "malformed_response"}
+    },
+    {
+      "name": "rate_limited",
+      "operation": "fetch_post",
+      "target": "rate-limited",
+      "request_identity": "lookup:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "response": {
+        "status_code": 429,
+        "headers": {"content-type": "application/json", "retry-after": "10"},
+        "body": {"message": "slow down"}
+      },
+      "expected": {"outcome": "rate_limited"}
+    }
+  ]
+}
