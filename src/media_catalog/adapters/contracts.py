@@ -452,6 +452,47 @@ class LookupCapabilities:
         return f"LookupCapabilities(strategies={sorted(item.value for item in self.strategies)!r})"
 
 
+@dataclass(frozen=True, slots=True)
+class EnumerationCapability:
+    """A provider's closed declaration for enumerating one stable target kind."""
+
+    target_kind: str
+    operation: AdapterOperation
+    version: str
+    count_probe_key: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.target_kind not in {"account", "attribution"}:
+            raise ValueError("enumeration target kind must be account or attribution")
+        if self.operation is not AdapterOperation.LIST_ACCOUNT_POSTS:
+            raise ValueError("enumeration capability must use the bounded listing operation")
+        object.__setattr__(self, "version", _nonempty(self.version, "capability version"))
+        if self.count_probe_key is not None:
+            object.__setattr__(
+                self,
+                "count_probe_key",
+                _nonempty(self.count_probe_key, "count probe key"),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class EnumerationCapabilities:
+    declarations: tuple[EnumerationCapability, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len({item.target_kind for item in self.declarations}) != len(self.declarations):
+            raise ValueError("enumeration target kinds must be unique")
+
+    def for_target(self, target_kind: str) -> EnumerationCapability | None:
+        return next(
+            (item for item in self.declarations if item.target_kind == target_kind),
+            None,
+        )
+
+    def supports(self, target_kind: str) -> bool:
+        return self.for_target(target_kind) is not None
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class LookupPlanItem:
     """Redacted, stable plan item; private material is deliberately excluded from repr/JSON."""

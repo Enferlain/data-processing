@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from media_catalog.adapters import NormalizedPage
@@ -14,6 +15,12 @@ from media_catalog.records import (
     TagObservationRecord,
 )
 from media_catalog.writer import CatalogWriter
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedWriteResult:
+    record_count: int
+    post_ids: tuple[int, ...]
 
 
 class NormalizedPageWriter:
@@ -30,6 +37,21 @@ class NormalizedPageWriter:
         raw_observation_id: int,
         adapter_version: str,
     ) -> int:
+        return self.write_with_result(
+            page,
+            observed_at=observed_at,
+            raw_observation_id=raw_observation_id,
+            adapter_version=adapter_version,
+        ).record_count
+
+    def write_with_result(
+        self,
+        page: NormalizedPage,
+        *,
+        observed_at: str,
+        raw_observation_id: int,
+        adapter_version: str,
+    ) -> NormalizedWriteResult:
         accounts: dict[tuple[str, str], int] = {}
         posts: dict[tuple[str, str], int] = {}
         for item in page.items:
@@ -83,9 +105,7 @@ class NormalizedPageWriter:
                         status=_text(data.get("status")),
                         title=_text(data.get("title")),
                         rating=_text(data.get("rating")),
-                        provider_post_type=_text(
-                            data.get("provider_type") or data.get("type")
-                        ),
+                        provider_post_type=_text(data.get("provider_type") or data.get("type")),
                     ),
                     raw_observation_id=raw_observation_id,
                 )
@@ -97,9 +117,7 @@ class NormalizedPageWriter:
                         native_id=native_id,
                         adapter_version=adapter_version,
                         observed_at=observed_at,
-                        availability=(
-                            "deleted" if data.get("deleted") is True else "available"
-                        ),
+                        availability=("deleted" if data.get("deleted") is True else "available"),
                         primary_name=_text(data.get("name")),
                         other_names=tuple(_string_list(data.get("other_names"))),
                         urls=tuple(_string_list(data.get("urls"))),
@@ -112,9 +130,7 @@ class NormalizedPageWriter:
             data = item.data
             platform = _required_text(data, "platform")
             if item.object_kind == "post_participant":
-                post_id = self._post_id(
-                    posts, platform, data.get("post_id"), observed_at
-                )
+                post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 account_native = _required_text(data, "account_id")
                 account_id = accounts.get((platform, account_native))
                 if account_id is None:
@@ -129,9 +145,7 @@ class NormalizedPageWriter:
                     raw_observation_id=raw_observation_id,
                 )
             elif item.object_kind == "post_tag":
-                post_id = self._post_id(
-                    posts, platform, data.get("post_id"), observed_at
-                )
+                post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 self.writer.upsert_tag(
                     post_id,
                     TagObservationRecord(
@@ -147,20 +161,15 @@ class NormalizedPageWriter:
                     raw_observation_id=raw_observation_id,
                 )
             elif item.object_kind == "media_occurrence":
-                post_id = self._post_id(
-                    posts, platform, data.get("post_id"), observed_at
-                )
+                post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 self._write_media(post_id, data, observed_at, raw_observation_id)
             elif item.object_kind == "external_reference":
-                post_id = self._post_id(
-                    posts, platform, data.get("post_id"), observed_at
-                )
+                post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 target_platform = _text(data.get("target_platform"))
                 self.writer.add_post_external_reference(
                     post_id,
                     PostExternalReferenceRecord(
-                        reference_kind=_text(data.get("reference_kind"))
-                        or "provider_id",
+                        reference_kind=_text(data.get("reference_kind")) or "provider_id",
                         observed_at=observed_at,
                         url=_text(data.get("value")),
                         target_platform=target_platform,
@@ -177,19 +186,15 @@ class NormalizedPageWriter:
                     raw_observation_id=raw_observation_id,
                 )
             elif item.object_kind == "post_relation":
-                source_id = self._post_id(
-                    posts, platform, data.get("source_post_id"), observed_at
-                )
-                target_id = self._post_id(
-                    posts, platform, data.get("target_post_id"), observed_at
-                )
+                source_id = self._post_id(posts, platform, data.get("source_post_id"), observed_at)
+                target_id = self._post_id(posts, platform, data.get("target_post_id"), observed_at)
                 self.writer.add_relation(
                     source_id,
                     target_id,
                     _required_text(data, "relation_type"),
                     raw_observation_id=raw_observation_id,
                 )
-        return len(page.items)
+        return NormalizedWriteResult(len(page.items), tuple(sorted(set(posts.values()))))
 
     def _write_media(
         self,
@@ -241,9 +246,7 @@ class NormalizedPageWriter:
         existing = posts.get((platform, native_id))
         if existing is not None:
             return existing
-        return self.writer.upsert_post(
-            PostRecord(platform, native_id, observed_at)
-        ).id
+        return self.writer.upsert_post(PostRecord(platform, native_id, observed_at)).id
 
 
 def _text(value: object) -> str | None:

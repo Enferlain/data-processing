@@ -106,6 +106,10 @@ class DanbooruAdapter:
 
         return self.lookup_capabilities.strategies
 
+    @property
+    def enumeration_capabilities(self):
+        return self.instance.enumeration_capabilities
+
     def fetch(self, request: AdapterRequest | LookupRequest) -> ResponseEnvelope:
         if isinstance(request, LookupRequest):
             return self.fetch_lookup(request)

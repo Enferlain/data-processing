@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Protocol
 
 from media_catalog.adapters import (
     Adapter,
@@ -24,7 +25,7 @@ from media_catalog.writer import CatalogWriter
 
 from .budget import BudgetExhausted, BudgetTracker, SyncLimits
 from .executor import BoundedRemoteExecutor, RetainedPage
-from .persistence import NormalizedPageWriter
+from .persistence import NormalizedPageWriter, NormalizedWriteResult
 
 
 def _now() -> str:
@@ -65,6 +66,30 @@ class SyncResult:
         }
 
 
+class OriginRunBinder(Protocol):
+    def __call__(self, writer: CatalogWriter, remote_run_id: int, created_at: str) -> object: ...
+
+
+class OriginPageRecorder(Protocol):
+    def __call__(
+        self,
+        writer: CatalogWriter,
+        binding: object,
+        retained_page: RetainedPage,
+        write_result: NormalizedWriteResult,
+    ) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteSyncOrigin:
+    """Internal origin hooks executed inside remote-run/page transactions."""
+
+    kind: str
+    reference: str
+    bind_run: OriginRunBinder = field(repr=False)
+    record_page: OriginPageRecorder = field(repr=False)
+
+
 class MetadataSyncService:
     """Bounded metadata-only synchronization facade."""
 
@@ -96,11 +121,13 @@ class MetadataSyncService:
         *,
         limits: SyncLimits,
         resume_from_run_id: int | None = None,
+        origin: RemoteSyncOrigin | None = None,
     ) -> SyncResult:
         continuation = self._resume_continuation(
             resume_from_run_id, operation=operation, target=target
         )
         started_at = self.clock()
+        origin_binding: object | None = None
         with self.database.transaction():
             run_id = self.writer.begin_remote_run(
                 RemoteRunRecord(
@@ -115,8 +142,12 @@ class MetadataSyncService:
                     time_budget_seconds=max(1, int(limits.elapsed_seconds)),
                     started_at=started_at,
                     resumed_from_run_id=resume_from_run_id,
+                    origin_kind=origin.kind if origin is not None else None,
+                    origin_reference=origin.reference if origin is not None else None,
                 )
             )
+            if origin is not None:
+                origin_binding = origin.bind_run(self.writer, run_id, started_at)
         executor = BoundedRemoteExecutor(
             self.adapter,
             operation,
@@ -127,7 +158,13 @@ class MetadataSyncService:
                 run_id, attempt, response, target
             ),
             commit_page=lambda page, budget: self._commit_page(
-                run_id, operation, target, page, budget
+                run_id,
+                operation,
+                target,
+                page,
+                budget,
+                origin=origin,
+                origin_binding=origin_binding,
             ),
             minimum_interval_seconds=self.minimum_interval_seconds,
             maximum_retries=self.maximum_retries,
@@ -189,16 +226,28 @@ class MetadataSyncService:
         target: str,
         retained_page: RetainedPage,
         budget: BudgetTracker,
+        *,
+        origin: RemoteSyncOrigin | None = None,
+        origin_binding: object | None = None,
     ) -> None:
         page = retained_page.page
         response = retained_page.response
         with self.database.transaction():
-            self.page_writer.write(
+            write_result = self.page_writer.write_with_result(
                 page,
                 observed_at=response.observed_at,
                 raw_observation_id=retained_page.raw_observation_id,
                 adapter_version=response.adapter_version,
             )
+            if origin is not None:
+                if origin_binding is None:
+                    raise RuntimeError("remote sync origin has no run binding")
+                origin.record_page(
+                    self.writer,
+                    origin_binding,
+                    retained_page,
+                    write_result,
+                )
             budget.commit_page(page.record_count)
             if page.continuation is not None:
                 self.writer.save_remote_checkpoint(

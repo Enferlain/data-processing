@@ -38,11 +38,12 @@ def test_v6_upgrade_preserves_ids_and_adds_lookup_tables(tmp_path: Path) -> None
         )
         connection.commit()
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 7
+        assert database.schema_version == current_schema_version()
         assert database.connection.execute("SELECT post_id FROM posts").fetchone()[0] == 42
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM candidate_lookup_runs"
-        ).fetchone()[0] == 0
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM candidate_lookup_runs").fetchone()[0]
+            == 0
+        )
         assert database.doctor()["ok"] is True
 
 
@@ -64,9 +65,12 @@ def test_failed_lookup_migration_rolls_back_to_v6(
         CatalogDatabase(path)
     with sqlite3.connect(path) as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
-        assert connection.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE name = 'partial_lookup'"
-        ).fetchone()[0] == 0
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'partial_lookup'"
+            ).fetchone()[0]
+            == 0
+        )
         assert list(connection.execute("PRAGMA foreign_key_check")) == []
 
 

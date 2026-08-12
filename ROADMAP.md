@@ -42,9 +42,11 @@ deliberately deferred.
 
 ## Current state
 
-There is no active product implementation change at the time of this update. The catalog has the
-foundations needed to begin connecting its existing capabilities into a practical artist-library
-workflow.
+The `add-artist-library-expansion` OpenSpec change is active under Bead `data-processing-3rs`.
+Its persistence, offline target resolution, provider capability/count probing, bounded execution,
+resume lineage, target-scoped browsing, and CLI workflow are implemented and verified. The change
+is ready to archive. This milestone connects the existing review, metadata synchronization, media
+browsing, and acquisition capabilities into a practical artist-library workflow.
 
 Live task state can be checked with:
 
@@ -167,7 +169,7 @@ The main gap is not another storage or provider primitive. It is a cohesive work
 reviewed target through the lower half of this pipeline without requiring the user to manually
 translate identifiers between several commands.
 
-## Next milestone: artist-library expansion
+## Completed milestone: artist-library expansion
 
 Turn the existing parts into an explicit workflow for growing a local library from a reviewed
 artist or post lead.
@@ -187,7 +189,7 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Planned after the next milestone
+## Planned after the active milestone
 
 ### Broader provider coverage
 

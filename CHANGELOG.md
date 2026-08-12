@@ -14,6 +14,14 @@ Rules:
 
 ### Added
 
+- **Reviewed or explicitly selected artists can seed bounded library expansion** — added offline
+  target resolution, ambiguity handling, Pixiv count probing, Pixiv and Danbooru-family metadata
+  enumeration, durable resume lineage, and explicit expansion-to-post provenance without inferring
+  identity from handles, names, tags, aliases, or uploaders.
+- **Expansion results feed the existing media and acquisition workflow** — added redacted
+  list/show inspection, incomplete-detail reporting, target-scoped occurrence browsing, and stable
+  variant selectors while keeping metadata enumeration separate from detail hydration and media
+  download.
 - **The repository now has an evolving project roadmap** — documented the overall goal, working
   pipeline, completed capabilities, current state, next artist-library milestone, future provider
   and operations work, and later supervised similarity research without duplicating Beads tasks or

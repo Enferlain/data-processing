@@ -231,6 +231,71 @@ Lookup does not follow result links, enumerate an account, contact X, fetch medi
 similarity, or start metadata sync. After manually confirming a stable Pixiv account candidate, run
 the existing `catalog metadata pixiv-account-artworks` command as a separate explicit operation.
 
+## Expand a reviewed artist library
+
+Library expansion connects a stable catalog account or provider attribution to bounded metadata
+enumeration. Planning is offline and read-only:
+
+```bash
+uv run catalog library plan catalog-output/catalog.sqlite3 account:12 --json
+uv run catalog library plan catalog-output/catalog.sqlite3 post:42 \
+  --target account:12 --selection-note "selected the credited creator" --json
+```
+
+The plan reports the supported provider operation, target revision, confirmed-review or explicit
+authority, ambiguity, exclusions, limits, and any retained count estimate. It never searches by
+handle, display name, artist tag, alias, or free text, and it never treats a booru uploader as the
+artist. Multiple eligible targets require `--target`; an explicit override also requires a bounded
+selection note. A changed account snapshot, attribution record, review relationship, authorship
+record, or capability makes the old plan stale before a remote run is created. A later count probe
+is an observation, not a target change, so it does not invalidate an existing plan.
+
+Count probing and enumeration are separate explicit commands:
+
+```bash
+uv run catalog library probe catalog-output/catalog.sqlite3 account:12 --json
+uv run catalog library run catalog-output/catalog.sqlite3 account:12 \
+  --max-requests 3 --max-pages 3 --max-records 200 --max-seconds 60 --json
+```
+
+Pixiv count probing makes one profile request and retains `profile.total_illusts` with its raw
+observation. Danbooru and AIBooru currently report an unknown/unsupported count without making a
+request because no committed fixture-backed count contract is available. Neither probe nor run
+requests media bytes. Provider credentials use the same environment configuration as
+`catalog metadata`.
+
+Each run stores an immutable plan, a remote-run origin, resume lineage, and a per-post association.
+Discovered posts receive no liked/bookmarked event and are never recursively expanded. Pixiv
+account listings contain post summaries but no page/media occurrences; those posts are reported as
+`details_required` and need a separate explicit `catalog metadata pixiv-artwork POST_ID` request
+before media can be selected.
+
+Inspect or resume durable state with:
+
+```bash
+uv run catalog library runs catalog-output/catalog.sqlite3 --json
+uv run catalog library show catalog-output/catalog.sqlite3 EXECUTION_ID --json
+uv run catalog library resume catalog-output/catalog.sqlite3 EXECUTION_ID --json
+```
+
+`show` reports the stable target, authority provenance, plan/probe/remote outcome, limits,
+exclusions, incomplete-detail count, and an `expansion_plan_id` media filter. Once details exist,
+browse only occurrences associated with that expansion and pass the returned selector unchanged
+to acquisition. The immutable plan keeps the estimate known when it was created, so an older plan
+may show an unknown estimate alongside a newer retained probe count; probe history is authoritative
+for that later observation.
+
+```bash
+uv run catalog media list catalog-output/catalog.sqlite3 \
+  --expansion-plan-id PLAN_ID --json
+uv run catalog assets download-plan catalog-output/catalog.sqlite3 \
+  --select OCCURRENCE_ID:VARIANT --json
+```
+
+Normal output omits rendered artist queries, provider URLs, raw response bodies, credentials,
+signed media parameters, and private paths. Expansion does not choose quality, download files, or
+write managed storage.
+
 ## Browse synchronized media
 
 Metadata sync creates posts and media occurrences, but does not download their files. Use the

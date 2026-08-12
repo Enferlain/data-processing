@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from media_catalog.adapters.contracts import LookupCapabilities, LookupCapability, LookupStrategy
+from media_catalog.adapters.contracts import (
+    AdapterOperation,
+    EnumerationCapabilities,
+    EnumerationCapability,
+    LookupCapabilities,
+    LookupCapability,
+    LookupStrategy,
+)
+
+ENUMERATION_VERSION = "library-expansion-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +25,9 @@ class DanbooruInstance:
     minimum_interval_seconds: float = 1.0
     page_size: int = 200
     lookup_capabilities: LookupCapabilities = field(default_factory=lambda: LookupCapabilities(()))
+    enumeration_capabilities: EnumerationCapabilities = field(
+        default_factory=lambda: EnumerationCapabilities(())
+    )
 
     def __post_init__(self) -> None:
         if not self.platform_key or not self.base_url.startswith("https://"):
@@ -46,6 +58,13 @@ DANBOORU = DanbooruInstance(
             for strategy in LookupStrategy
         )
     ),
+    enumeration_capabilities=EnumerationCapabilities(
+        (
+            EnumerationCapability(
+                "attribution", AdapterOperation.LIST_ACCOUNT_POSTS, ENUMERATION_VERSION
+            ),
+        )
+    ),
 )
 
 AIBOORU = DanbooruInstance(
@@ -69,6 +88,13 @@ AIBOORU = DanbooruInstance(
                 LookupStrategy.ARTIST_EXACT_NAME,
                 LookupStrategy.ARTIST_ALIAS,
             )
+        )
+    ),
+    enumeration_capabilities=EnumerationCapabilities(
+        (
+            EnumerationCapability(
+                "attribution", AdapterOperation.LIST_ACCOUNT_POSTS, ENUMERATION_VERSION
+            ),
         )
     ),
 )

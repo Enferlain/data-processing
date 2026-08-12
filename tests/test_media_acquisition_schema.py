@@ -174,7 +174,7 @@ def test_v5_upgrade_preserves_catalog_ids_and_adds_acquisition_schema(tmp_path: 
         connection.commit()
 
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 7
+        assert database.schema_version == current_schema_version()
         assert database.connection.execute("SELECT post_id FROM posts").fetchone()[0] == 41
         assert (
             database.connection.execute(
@@ -280,8 +280,7 @@ def test_failed_acquisition_migration_rolls_back_to_v5(
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
         assert (
             connection.execute(
-                "SELECT COUNT(*) FROM sqlite_master "
-                "WHERE name = 'media_acquisition_partial_schema'"
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'media_acquisition_partial_schema'"
             ).fetchone()[0]
             == 0
         )
@@ -444,12 +443,18 @@ def test_acquisition_writer_advances_state_and_keeps_terminal_evidence_idempoten
                 finished_at=NOW,
             )
 
-        assert database.connection.execute(
-            "SELECT state FROM media_acquisition_run_items"
-        ).fetchone()[0] == "complete"
-        assert database.connection.execute(
-            "SELECT state FROM media_acquisition_attempts"
-        ).fetchone()[0] == "complete"
+        assert (
+            database.connection.execute("SELECT state FROM media_acquisition_run_items").fetchone()[
+                0
+            ]
+            == "complete"
+        )
+        assert (
+            database.connection.execute("SELECT state FROM media_acquisition_attempts").fetchone()[
+                0
+            ]
+            == "complete"
+        )
         assert database.doctor()["ok"] is True
 
 

@@ -136,6 +136,7 @@ def list_media_occurrences(
     post: int | str | None = None,
     availability: str | None = None,
     linked: bool | None = None,
+    expansion_plan_id: int | None = None,
     limit: int = 100,
     after: int | None = None,
 ) -> dict[str, Any]:
@@ -145,6 +146,8 @@ def list_media_occurrences(
         raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
     if after is not None and after < 0:
         raise ValueError("after must not be negative")
+    if expansion_plan_id is not None and expansion_plan_id <= 0:
+        raise ValueError("expansion plan id must be positive")
     platform = _bounded_text(platform, "platform", maximum=200)
     availability = _bounded_text(availability, "availability", maximum=100)
     author_parts = _stable_reference(author, "author") if author is not None else None
@@ -195,6 +198,17 @@ def list_media_occurrences(
                 WHERE linked_asset.media_occurrence_id = mo.media_occurrence_id
             )"""
         )
+    if expansion_plan_id is not None:
+        clauses.append(
+            """EXISTS (
+                SELECT 1 FROM library_expansion_posts expansion_post
+                JOIN library_expansion_executions expansion_execution
+                  USING(library_expansion_execution_id)
+                WHERE expansion_post.post_id = p.post_id
+                  AND expansion_execution.library_expansion_plan_id = ?
+            )"""
+        )
+        values.append(expansion_plan_id)
     values.append(limit + 1)
 
     connection = _connection(database)
@@ -219,6 +233,7 @@ def list_media_occurrences(
                 "post": post,
                 "availability": availability,
                 "linked": linked,
+                "expansion_plan_id": expansion_plan_id,
             },
             "limit": limit,
             "after": after,
@@ -400,6 +415,7 @@ class MediaQueryService:
         post: int | str | None = None,
         availability: str | None = None,
         linked: bool | None = None,
+        expansion_plan_id: int | None = None,
         limit: int = 100,
         after: int | None = None,
     ) -> dict[str, Any]:
@@ -410,6 +426,7 @@ class MediaQueryService:
             post=post,
             availability=availability,
             linked=linked,
+            expansion_plan_id=expansion_plan_id,
             limit=limit,
             after=after,
         )

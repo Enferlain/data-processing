@@ -27,6 +27,8 @@ from media_catalog.adapters.contracts import (
     AdapterOutcome,
     AdapterRequest,
     Continuation,
+    EnumerationCapabilities,
+    EnumerationCapability,
     NormalizedItem,
     NormalizedPage,
     ResponseEnvelope,
@@ -294,6 +296,16 @@ class PixivAdapter:
     instance_key = PIXIV_INSTANCE
     adapter_version = PIXIV_ADAPTER_VERSION
     schema_version = PIXIV_SCHEMA_VERSION
+    enumeration_capabilities = EnumerationCapabilities(
+        (
+            EnumerationCapability(
+                "account",
+                AdapterOperation.LIST_ACCOUNT_POSTS,
+                "library-expansion-v1",
+                "pixiv-account-count",
+            ),
+        )
+    )
 
     def __init__(
         self,

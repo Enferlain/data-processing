@@ -24,14 +24,18 @@ from media_catalog.writer import CatalogWriter
 
 def _seed_post(database: CatalogDatabase) -> int:
     with database.transaction():
-        return CatalogWriter(database).upsert_post(
-            PostRecord(
-                "x",
-                "1837662117949800671",
-                "2026-08-11T00:00:00Z",
-                canonical_url="https://x.com/thiccwithaq/status/1837662117949800671",
+        return (
+            CatalogWriter(database)
+            .upsert_post(
+                PostRecord(
+                    "x",
+                    "1837662117949800671",
+                    "2026-08-11T00:00:00Z",
+                    canonical_url="https://x.com/thiccwithaq/status/1837662117949800671",
+                )
             )
-        ).id
+            .id
+        )
 
 
 def _lookup_payload() -> bytes:
@@ -72,9 +76,7 @@ def test_plan_is_read_only_redacted_and_bounded(tmp_path: Path) -> None:
     )
     public = json.dumps(plan.as_dict())
     assert "thiccwithaq" not in public
-    assert plan.exclusions == (
-        {"strategy": "verified_md5", "reason": "missing_seed_material"},
-    )
+    assert plan.exclusions == ({"strategy": "verified_md5", "reason": "missing_seed_material"},)
 
 
 def test_lookup_executes_persists_and_never_decides(tmp_path: Path) -> None:
@@ -90,9 +92,10 @@ def test_lookup_executes_persists_and_never_decides(tmp_path: Path) -> None:
             headers={"content-type": "application/json"},
         )
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         post_id = _seed_post(database)
         adapter = DanbooruAdapter(DANBOORU, client=client)
         service = CandidateLookupService(
@@ -111,16 +114,22 @@ def test_lookup_executes_persists_and_never_decides(tmp_path: Path) -> None:
         result = service.execute(plan)[0]
         assert result.status == "complete"
         assert result.result_count == 1
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM candidate_lookup_results"
-        ).fetchone()[0] == 1
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM candidate_lookup_results").fetchone()[
+                0
+            ]
+            == 1
+        )
         candidate = database.connection.execute(
             "SELECT relation_kind, current_state FROM post_match_candidates"
         ).fetchone()
         assert tuple(candidate) == ("sourced_from", "pending")
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM post_candidate_decisions"
-        ).fetchone()[0] == 0
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM post_candidate_decisions").fetchone()[
+                0
+            ]
+            == 0
+        )
         run_id = result.candidate_lookup_run_id
 
     assert len(requests) == 2
@@ -136,7 +145,7 @@ def test_lookup_executes_persists_and_never_decides(tmp_path: Path) -> None:
 def test_schema_seven_constraints_and_upgrade(tmp_path: Path) -> None:
     path = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 7
+        assert database.schema_version == current_schema_version()
         with pytest.raises(sqlite3.IntegrityError):
             database.connection.execute(
                 """INSERT INTO candidate_lookup_runs (
@@ -176,13 +185,16 @@ def test_artist_lookup_keeps_names_weak_but_recognizes_stable_urls(
     def transport(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=payload, headers={"content-type": "application/json"})
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         with database.transaction():
-            account_id = CatalogWriter(database).upsert_account(
-                AccountRecord("x", "900", "2026-08-11T00:00:00Z")
-            ).id
+            account_id = (
+                CatalogWriter(database)
+                .upsert_account(AccountRecord("x", "900", "2026-08-11T00:00:00Z"))
+                .id
+            )
         service = CandidateLookupService(
             database,
             DanbooruAdapter(DANBOORU, client=client),
@@ -199,16 +211,22 @@ def test_artist_lookup_keeps_names_weak_but_recognizes_stable_urls(
         )
         result = service.execute(plan)[0]
         assert result.status == "complete"
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM account_match_candidates"
-        ).fetchone()[0] == expected_candidates
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM account_match_candidates").fetchone()[
+                0
+            ]
+            == expected_candidates
+        )
         kind = database.connection.execute(
             "SELECT result_kind FROM candidate_lookup_results"
         ).fetchone()[0]
         assert kind == ("account_match" if expected_candidates else "weak_lead")
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM account_candidate_decisions"
-        ).fetchone()[0] == 0
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM account_candidate_decisions"
+            ).fetchone()[0]
+            == 0
+        )
 
 
 def test_lookup_resume_starts_from_last_committed_alias_page(tmp_path: Path) -> None:
@@ -220,9 +238,10 @@ def test_lookup_resume_starts_from_last_committed_alias_page(tmp_path: Path) -> 
         payload = _lookup_payload() if "twitter.com" in str(request.url) else b"[]"
         return httpx.Response(200, content=payload, headers={"content-type": "application/json"})
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         post_id = _seed_post(database)
         service = CandidateLookupService(
             database,
@@ -246,9 +265,10 @@ def test_lookup_resume_starts_from_last_committed_alias_page(tmp_path: Path) -> 
         assert len(requested) == 2
         assert "x.com" in requested[0]
         assert "twitter.com" in requested[1]
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM post_match_candidates"
-        ).fetchone()[0] == 1
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM post_match_candidates").fetchone()[0]
+            == 1
+        )
 
 
 def test_source_and_verified_hash_strengthen_one_pending_candidate(tmp_path: Path) -> None:
@@ -261,9 +281,10 @@ def test_source_and_verified_hash_strengthen_one_pending_candidate(tmp_path: Pat
             headers={"content-type": "application/json"},
         )
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         post_id = _seed_post(database)
         with database.transaction():
             writer = CatalogWriter(database)
@@ -311,13 +332,19 @@ def test_source_and_verified_hash_strengthen_one_pending_candidate(tmp_path: Pat
         assert candidate["relation_kind"] == "sourced_from"
         assert candidate["current_state"] == "pending"
         assert candidate["evidence_generation"] == 2
-        assert database.connection.execute(
-            """SELECT COUNT(*) FROM post_candidate_characteristics
+        assert (
+            database.connection.execute(
+                """SELECT COUNT(*) FROM post_candidate_characteristics
                WHERE characteristic = 'exact_bytes'"""
-        ).fetchone()[0] == 1
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM post_candidate_decisions"
-        ).fetchone()[0] == 0
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM post_candidate_decisions").fetchone()[
+                0
+            ]
+            == 0
+        )
 
 
 def test_stale_plan_is_rejected_before_network_or_run_creation(tmp_path: Path) -> None:
@@ -329,9 +356,10 @@ def test_stale_plan_is_rejected_before_network_or_run_creation(tmp_path: Path) -
         requests += 1
         return httpx.Response(200, content=b"[]")
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         post_id = _seed_post(database)
         service = CandidateLookupService(
             database,
@@ -351,9 +379,10 @@ def test_stale_plan_is_rejected_before_network_or_run_creation(tmp_path: Path) -
         with pytest.raises(ValueError, match="stale"):
             service.execute(plan)
         assert requests == 0
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM candidate_lookup_runs"
-        ).fetchone()[0] == 0
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM candidate_lookup_runs").fetchone()[0]
+            == 0
+        )
 
 
 def test_new_lookup_evidence_preserves_rejected_review(tmp_path: Path) -> None:
@@ -371,9 +400,10 @@ def test_new_lookup_evidence_preserves_rejected_review(tmp_path: Path) -> None:
             headers={"content-type": "application/json"},
         )
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         post_id = _seed_post(database)
         service = CandidateLookupService(
             database,
@@ -402,10 +432,13 @@ def test_new_lookup_evidence_preserves_rejected_review(tmp_path: Path) -> None:
         ).fetchone()
         assert candidate["current_state"] == "rejected"
         assert candidate["evidence_generation"] == 4
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM post_candidate_decisions WHERE post_candidate_id = ?",
-            (candidate_id,),
-        ).fetchone()[0] == 1
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM post_candidate_decisions WHERE post_candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()[0]
+            == 1
+        )
 
 
 def test_complete_lookup_run_cannot_be_resumed(tmp_path: Path) -> None:
@@ -414,9 +447,10 @@ def test_complete_lookup_run_cannot_be_resumed(tmp_path: Path) -> None:
     def transport(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"[]", request=request)
 
-    with CatalogDatabase(path) as database, httpx.Client(
-        transport=httpx.MockTransport(transport)
-    ) as client:
+    with (
+        CatalogDatabase(path) as database,
+        httpx.Client(transport=httpx.MockTransport(transport)) as client,
+    ):
         post_id = _seed_post(database)
         service = CandidateLookupService(
             database,

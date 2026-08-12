@@ -10,6 +10,8 @@ import pytest
 from media_catalog.cli import build_parser, main
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
+    AccountRecord,
+    AttributionRecord,
     CandidateLookupRunRecord,
     ManagedRootRecord,
     MediaOccurrenceRecord,
@@ -19,6 +21,8 @@ from media_catalog.records import (
 )
 from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
+
+NOW = "2026-08-12T20:00:00Z"
 
 
 def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
@@ -93,6 +97,12 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ],
         ["lookup", "runs", str(catalog), "--json"],
         ["lookup", "show", str(catalog), "1"],
+        ["library", "plan", str(catalog), "account:1", "--json"],
+        ["library", "probe", str(catalog), "account:1", "--json"],
+        ["library", "run", str(catalog), "account:1"],
+        ["library", "resume", str(catalog), "1"],
+        ["library", "runs", str(catalog), "--json"],
+        ["library", "show", str(catalog), "1"],
     )
     for argv in cases:
         assert parser.parse_args(argv).command == argv[0]
@@ -121,16 +131,12 @@ def _asset_catalog(catalog: Path, source_root: Path, relative_path: str) -> None
         writer = CatalogWriter(database)
         with database.transaction():
             source_id = writer.register_managed_root(
-                ManagedRootRecord(
-                    "source", "fixture-source", "source", str(source_root.resolve())
-                )
+                ManagedRootRecord("source", "fixture-source", "source", str(source_root.resolve()))
             )
             post_id = writer.upsert_post(PostRecord("x", "1", "2026-08-09T00:00:00Z")).id
             occurrence_id = writer.upsert_media(
                 post_id,
-                MediaOccurrenceRecord(
-                    "media:0", 0, "image", observed_at="2026-08-09T00:00:00Z"
-                ),
+                MediaOccurrenceRecord("media:0", 0, "image", observed_at="2026-08-09T00:00:00Z"),
             ).id
             writer.add_occurrence_source(
                 OccurrenceSourceRecord(
@@ -278,14 +284,18 @@ def test_lookup_plan_and_queries_are_offline_and_redacted(
 ) -> None:
     catalog = tmp_path / "private" / "catalog.sqlite3"
     with CatalogDatabase(catalog) as database, database.transaction():
-        post_id = CatalogWriter(database).upsert_post(
-            PostRecord(
-                "x",
-                "12345",
-                "2026-08-11T00:00:00Z",
-                canonical_url="https://x.com/private_handle/status/12345",
+        post_id = (
+            CatalogWriter(database)
+            .upsert_post(
+                PostRecord(
+                    "x",
+                    "12345",
+                    "2026-08-11T00:00:00Z",
+                    canonical_url="https://x.com/private_handle/status/12345",
+                )
             )
-        ).id
+            .id
+        )
     monkeypatch.setattr(
         socket,
         "socket",
@@ -318,9 +328,7 @@ def test_lookup_run_listing_succeeds_when_history_contains_failure(
     catalog = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(catalog) as database, database.transaction():
         writer = CatalogWriter(database)
-        post_id = writer.upsert_post(
-            PostRecord("x", "failure-seed", "2026-08-11T00:00:00Z")
-        ).id
+        post_id = writer.upsert_post(PostRecord("x", "failure-seed", "2026-08-11T00:00:00Z")).id
         run_id = writer.begin_candidate_lookup(
             CandidateLookupRunRecord(
                 "danbooru",
@@ -616,3 +624,56 @@ def test_media_browser_is_offline_redacted_and_feeds_download_planning(
     with pytest.raises(SystemExit, match="media occurrence not found") as raised:
         main(["media", "show", str(catalog), "999"])
     assert str(tmp_path) not in str(raised.value)
+
+
+def test_library_plan_cli_is_read_only_and_unsupported_probe_makes_no_request(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        writer = CatalogWriter(database)
+        pixiv_id = writer.upsert_account(AccountRecord("pixiv", "1001", NOW)).id
+        x_id = writer.upsert_account(AccountRecord("x", "9001", NOW)).id
+        attribution_id = writer.upsert_attribution(
+            AttributionRecord(
+                "danbooru",
+                "44",
+                "danbooru-adapter-v1",
+                NOW,
+                primary_name="artist_a",
+            )
+        ).id
+    before_bytes = catalog.read_bytes()
+    before_names = sorted(path.name for path in catalog.parent.iterdir())
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+
+    main(["library", "plan", str(catalog), f"account:{pixiv_id}", "--json"])
+    planned = json.loads(capsys.readouterr().out)
+    assert planned["status"] == "planned"
+    assert planned["executable"] is True
+    assert planned["network_requested"] is False
+    assert catalog.read_bytes() == before_bytes
+    assert sorted(path.name for path in catalog.parent.iterdir()) == before_names
+
+    main(
+        [
+            "library",
+            "probe",
+            str(catalog),
+            f"account:{x_id}",
+            "--target",
+            f"attribution:{attribution_id}",
+            "--selection-note",
+            "selected provider attribution",
+            "--json",
+        ]
+    )
+    probed = json.loads(capsys.readouterr().out)
+    assert probed["outcome"] == "unsupported"
+    assert probed["request_count"] == 0

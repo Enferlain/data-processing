@@ -32,6 +32,14 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.discovery import DiscoveryService
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.imports.xarchive import import_xarchive
+from media_catalog.library import (
+    ArtistLibraryExpansionService,
+    ExpansionLimits,
+    LibraryCountProbeService,
+    LibraryExpansionQueryService,
+    plan_library_expansion,
+    replan_library_execution,
+)
 from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.records import AcquisitionLimits
@@ -88,6 +96,27 @@ def _add_lookup_limits(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-pages", type=int, default=3)
     parser.add_argument("--max-results", type=int, default=200)
     parser.add_argument("--max-seconds", type=int, default=60)
+
+
+def _add_library_plan_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("catalog", type=Path)
+    parser.add_argument("seed", metavar="ACCOUNT:ID|POST:ID")
+    parser.add_argument("--target", metavar="ACCOUNT:ID|ATTRIBUTION:ID")
+    parser.add_argument("--selection-note")
+    parser.add_argument("--max-requests", type=int, default=3)
+    parser.add_argument("--max-pages", type=int, default=3)
+    parser.add_argument("--max-records", type=int, default=200)
+    parser.add_argument("--max-seconds", type=int, default=60)
+    _add_json(parser)
+
+
+def _library_limits(arguments: argparse.Namespace) -> ExpansionLimits:
+    return ExpansionLimits(
+        arguments.max_requests,
+        arguments.max_pages,
+        arguments.max_records,
+        arguments.max_seconds,
+    )
 
 
 def _parse_acquisition_selections(values: list[str]) -> list[AcquisitionSelection]:
@@ -193,6 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     media_list.add_argument("--linked", choices=("yes", "no"))
     media_list.add_argument("--limit", type=int, default=100)
     media_list.add_argument("--after", type=int)
+    media_list.add_argument("--expansion-plan-id", type=int)
     _add_json(media_list)
     media_show = media_commands.add_parser("show")
     media_show.add_argument("catalog", type=Path)
@@ -349,6 +379,24 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_show.add_argument("--result-limit", type=int, default=100)
     lookup_show.add_argument("--result-after", type=int)
     _add_json(lookup_show)
+
+    library = commands.add_parser("library")
+    library_commands = library.add_subparsers(dest="library_command", required=True)
+    for name in ("plan", "probe", "run"):
+        _add_library_plan_arguments(library_commands.add_parser(name))
+    library_resume = library_commands.add_parser("resume")
+    library_resume.add_argument("catalog", type=Path)
+    library_resume.add_argument("execution_id", type=int)
+    _add_json(library_resume)
+    library_runs = library_commands.add_parser("runs")
+    library_runs.add_argument("catalog", type=Path)
+    library_runs.add_argument("--limit", type=int, default=100)
+    library_runs.add_argument("--after", type=int)
+    _add_json(library_runs)
+    library_show = library_commands.add_parser("show")
+    library_show.add_argument("catalog", type=Path)
+    library_show.add_argument("execution_id", type=int)
+    _add_json(library_show)
     return parser
 
 
@@ -446,6 +494,7 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     linked=linked,
                     limit=arguments.limit,
                     after=arguments.after,
+                    expansion_plan_id=arguments.expansion_plan_id,
                 ),
             }
         result = service.show(arguments.media_occurrence_id)
@@ -688,6 +737,77 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 }
             result = service.resume(arguments.run_id, limits=limits)
             return {"catalog": catalog_label, **result.as_dict()}
+    if arguments.command == "library":
+        catalog_label = public_path(arguments.catalog)
+        if arguments.library_command in {"runs", "show"}:
+            queries = LibraryExpansionQueryService(arguments.catalog)
+            if arguments.library_command == "runs":
+                return {
+                    "catalog": catalog_label,
+                    **queries.runs(limit=arguments.limit, after=arguments.after),
+                }
+            shown = queries.show(arguments.execution_id)
+            if shown is None:
+                raise ValueError("library expansion execution not found")
+            return {"catalog": catalog_label, **shown}
+        if arguments.library_command == "plan":
+            plan = plan_library_expansion(
+                arguments.catalog,
+                arguments.seed,
+                target=arguments.target,
+                selection_note=arguments.selection_note,
+                limits=_library_limits(arguments),
+            )
+            return {"catalog": catalog_label, "status": "planned", **plan.as_dict()}
+        with CatalogDatabase(arguments.catalog) as database:
+            if arguments.library_command == "resume":
+                plan = replan_library_execution(database, arguments.execution_id)
+            else:
+                plan = plan_library_expansion(
+                    database,
+                    arguments.seed,
+                    target=arguments.target,
+                    selection_note=arguments.selection_note,
+                    limits=_library_limits(arguments),
+                )
+            if plan.selected is None:
+                raise ValueError("library expansion target selection is ambiguous or unavailable")
+            provider = plan.selected.target.provider
+            if arguments.library_command == "probe":
+                if provider == "pixiv":
+                    with PixivAdapter(require_auth=True) as adapter:
+                        result = LibraryCountProbeService(database, pixiv_adapter=adapter).probe(
+                            plan
+                        )
+                else:
+                    result = LibraryCountProbeService(database).probe(plan)
+                return {"catalog": catalog_label, **result.as_dict()}
+            if provider == "pixiv":
+                with PixivAdapter(require_auth=True) as adapter:
+                    service = ArtistLibraryExpansionService(database, adapter)
+                    result = (
+                        service.resume(plan, arguments.execution_id)
+                        if arguments.library_command == "resume"
+                        else service.run(plan)
+                    )
+            elif provider in {"danbooru", "aibooru"}:
+                instance = DANBOORU if provider == "danbooru" else AIBOORU
+                credentials = DanbooruCredentials.from_environment(instance)
+                with httpx.Client() as client:
+                    adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                    service = ArtistLibraryExpansionService(
+                        database,
+                        adapter,
+                        minimum_interval_seconds=instance.minimum_interval_seconds,
+                    )
+                    result = (
+                        service.resume(plan, arguments.execution_id)
+                        if arguments.library_command == "resume"
+                        else service.run(plan)
+                    )
+            else:
+                raise ValueError(f"unsupported library expansion provider: {provider}")
+            return {"catalog": catalog_label, **result.as_dict()}
     raise NotImplementedError(f"{arguments.command} is planned but not implemented yet")
 
 
@@ -715,6 +835,12 @@ def main(argv: list[str] | None = None) -> None:
     if (
         arguments.command == "metadata"
         and arguments.metadata_command not in {"runs", "run-show"}
+        and result.get("status") in {"paused", "failed"}
+    ):
+        raise SystemExit(2)
+    if (
+        arguments.command == "library"
+        and arguments.library_command in {"run", "resume"}
         and result.get("status") in {"paused", "failed"}
     ):
         raise SystemExit(2)
