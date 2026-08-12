@@ -42,11 +42,11 @@ deliberately deferred.
 
 ## Current state
 
-The `add-artist-library-expansion` OpenSpec change is active under Bead `data-processing-3rs`.
-Its persistence, offline target resolution, provider capability/count probing, bounded execution,
-resume lineage, target-scoped browsing, and CLI workflow are implemented and verified. The change
-is ready to archive. This milestone connects the existing review, metadata synchronization, media
-browsing, and acquisition capabilities into a practical artist-library workflow.
+The `add-artist-library-expansion` OpenSpec change is complete and archived under Bead
+`data-processing-3rs`. Its persistence, offline target resolution, provider capability/count
+probing, bounded execution, resume lineage, target-scoped browsing, and CLI workflow are
+implemented and verified. This milestone connects the existing review, metadata synchronization,
+media browsing, and acquisition capabilities into a practical artist-library workflow.
 
 Live task state can be checked with:
 
