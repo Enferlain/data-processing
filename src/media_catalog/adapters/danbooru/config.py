@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..contracts import LookupCapabilities, LookupCapability, LookupStrategy
+from media_catalog.adapters.contracts import LookupCapabilities, LookupCapability, LookupStrategy
 
 
 @dataclass(frozen=True, slots=True)

@@ -46,10 +46,9 @@ class DiscoveryService:
 
     def discover(self) -> DiscoveryResult:
         now = _now()
-        counts = {
-            key: 0
-            for key in ("scanned", "observed", "recognized", "unresolved", "existing", "failed")
-        }
+        counts = dict.fromkeys(
+            ("scanned", "observed", "recognized", "unresolved", "existing", "failed"), 0
+        )
         versions = {
             "extractor": EXTRACTOR_VERSION,
             "canonicalizer": CANONICALIZER_VERSION,

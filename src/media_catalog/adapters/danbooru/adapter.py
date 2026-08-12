@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from ..contracts import (
+from media_catalog.adapters.contracts import (
     AdapterFailure,
     AdapterOperation,
     AdapterOutcome,
@@ -27,7 +27,7 @@ from ..contracts import (
     NormalizedPage,
     ResponseEnvelope,
 )
-from .config import DanbooruInstance
+from media_catalog.adapters.danbooru.config import DanbooruInstance
 
 ADAPTER_VERSION = "danbooru-native-v1"
 ALLOWED_RESPONSE_HEADERS = {"content-type", "retry-after", "x-rate-limit"}
@@ -46,9 +46,7 @@ def _stable_id(value: str, name: str) -> str:
 
 def _public_headers(headers: httpx.Headers) -> dict[str, str]:
     return {
-        name: value
-        for name, value in headers.items()
-        if name.lower() in ALLOWED_RESPONSE_HEADERS
+        name: value for name, value in headers.items() if name.lower() in ALLOWED_RESPONSE_HEADERS
     }
 
 
@@ -73,9 +71,7 @@ class DanbooruCredentials:
         if login is None and api_key is None:
             return None
         if not login or not api_key:
-            raise ValueError(
-                f"configure both {instance.login_env} and {instance.api_key_env}"
-            )
+            raise ValueError(f"configure both {instance.login_env} and {instance.api_key_env}")
         return cls(login, api_key)
 
 
@@ -224,9 +220,7 @@ class DanbooruAdapter:
         identity = "lookup:" + hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()
         return endpoint, params, identity, cursor
 
-    def _request_parts(
-        self, request: AdapterRequest
-    ) -> tuple[str, dict[str, str | int], str]:
+    def _request_parts(self, request: AdapterRequest) -> tuple[str, dict[str, str | int], str]:
         if request.operation is AdapterOperation.FETCH_POST:
             target = _stable_id(request.target, "post ID")
             return f"/posts/{target}.json", {}, f"{self.instance_key}:fetch_post:{target}"
@@ -336,8 +330,7 @@ class DanbooruAdapter:
         source = entry.get("source")
         declared_md5 = entry.get("md5")
         artist_tags = {
-            category: entry.get(f"tag_string_{category}", "")
-            for category in TAG_CATEGORIES
+            category: entry.get(f"tag_string_{category}", "") for category in TAG_CATEGORIES
         }
         data = {
             "platform": self.instance_key,
@@ -542,9 +535,7 @@ class DanbooruAdapter:
             return None
         extension = body.get("file_ext")
         mime_type = (
-            mimetypes.guess_type(f"file.{extension}")[0]
-            if isinstance(extension, str)
-            else None
+            mimetypes.guess_type(f"file.{extension}")[0] if isinstance(extension, str) else None
         )
         variants = [
             {"role": role, "url": value}
@@ -572,9 +563,7 @@ class DanbooruAdapter:
             },
         )
 
-    def _reference_items(
-        self, post_id: str, body: Mapping[str, Any]
-    ) -> list[NormalizedItem]:
+    def _reference_items(self, post_id: str, body: Mapping[str, Any]) -> list[NormalizedItem]:
         items: list[NormalizedItem] = []
         source = body.get("source")
         if isinstance(source, str) and source:
@@ -610,9 +599,7 @@ class DanbooruAdapter:
             )
         return items
 
-    def _relation_items(
-        self, post_id: str, body: Mapping[str, Any]
-    ) -> list[NormalizedItem]:
+    def _relation_items(self, post_id: str, body: Mapping[str, Any]) -> list[NormalizedItem]:
         items: list[NormalizedItem] = []
         parent_id = body.get("parent_id")
         if isinstance(parent_id, int) and parent_id > 0:

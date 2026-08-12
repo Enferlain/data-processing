@@ -334,9 +334,7 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_resume = lookup_commands.add_parser("resume")
     lookup_resume.add_argument("catalog", type=Path)
     lookup_resume.add_argument("run_id", type=int)
-    lookup_resume.add_argument(
-        "--provider", choices=("danbooru", "aibooru"), required=True
-    )
+    lookup_resume.add_argument("--provider", choices=("danbooru", "aibooru"), required=True)
     _add_lookup_limits(lookup_resume)
     _add_json(lookup_resume)
     lookup_runs = lookup_commands.add_parser("runs")
@@ -594,9 +592,10 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 "pixiv-artwork": AdapterOperation.FETCH_POST,
                 "pixiv-account-artworks": AdapterOperation.LIST_ACCOUNT_POSTS,
             }[command]
-            with CatalogDatabase(arguments.catalog) as database, PixivAdapter(
-                require_auth=True
-            ) as adapter:
+            with (
+                CatalogDatabase(arguments.catalog) as database,
+                PixivAdapter(require_auth=True) as adapter,
+            ):
                 result = MetadataSyncService(database, adapter).synchronize(
                     operation,
                     arguments.target,
@@ -719,12 +718,20 @@ def main(argv: list[str] | None = None) -> None:
         and result.get("status") in {"paused", "failed"}
     ):
         raise SystemExit(2)
-    if arguments.command == "lookup" and arguments.lookup_command in {"run", "resume"} and (
-        result.get("status") in {"paused", "failed"}
-        or any(
-            item.get("status") in {"paused", "failed"}
-            for item in result.get("results", ())
-            if isinstance(item, dict)
+    lookup_results = result.get("results")
+    if (
+        arguments.command == "lookup"
+        and arguments.lookup_command in {"run", "resume"}
+        and (
+            result.get("status") in {"paused", "failed"}
+            or (
+                isinstance(lookup_results, list)
+                and any(
+                    item.get("status") in {"paused", "failed"}
+                    for item in lookup_results
+                    if isinstance(item, dict)
+                )
+            )
         )
     ):
         raise SystemExit(2)

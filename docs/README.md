@@ -12,6 +12,8 @@ recovery or troubleshooting steps. Add a guide here when adding another tool.
 
 ## Plans
 
+- [Project roadmap](../ROADMAP.md) — concise status of completed capabilities, active direction,
+  the next milestone, and later work.
 - [Cross-platform media catalog](plans/cross-platform-media-catalog.md) — researched architecture
   and delivery plan for combining X likes/bookmarks with Pixiv, booru, account matching, asset
   provenance, and bounded discovery.

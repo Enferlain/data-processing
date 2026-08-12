@@ -27,14 +27,14 @@ from ctypes import CDLL, c_char_p, c_int
 from ctypes import get_errno as ctypes_get_errno
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, Protocol
+from typing import Any, BinaryIO, Protocol
 
 from PIL import Image, UnidentifiedImageError
 
 try:
-    import imagehash
+    import imagehash as _imagehash
 except ImportError:  # pragma: no cover - declared runtime dependency
-    imagehash = None  # type: ignore[assignment]
+    _imagehash: Any = None
 
 
 class AnyHash(Protocol):
@@ -702,9 +702,7 @@ class AssetStorage:
         )
         try:
             self.media = (
-                RootHandle.open(media_root, label="managed")
-                if self._owns_media
-                else media_root
+                RootHandle.open(media_root, label="managed") if self._owns_media else media_root
             )
             if self.source is not None:
                 _ensure_disjoint(self.source, self.media)
@@ -1254,7 +1252,7 @@ class AssetStorage:
                             frame_count = self._bounded_frame_count(image)
                             image.seek(0)
                             image.load()
-                            if image_format not in _MIME_BY_FORMAT or imagehash is None:
+                            if image_format not in _MIME_BY_FORMAT or _imagehash is None:
                                 result = InspectionResult(
                                     staged.size,
                                     staged.sha256,
@@ -1266,7 +1264,7 @@ class AssetStorage:
                                     exact_only=True,
                                 )
                             else:
-                                digest = str(imagehash.phash(image))
+                                digest = str(_imagehash.phash(image))
                                 result = InspectionResult(
                                     staged.size,
                                     staged.sha256,
@@ -1404,7 +1402,8 @@ class AssetStorage:
         except BaseException:
             if name and target_fd >= 0:
                 self._cleanup_staging_name(
-                    name, staging_fd=staging_fd if staging_fd >= 0 else None,
+                    name,
+                    staging_fd=staging_fd if staging_fd >= 0 else None,
                     expected_fd=target_fd,
                 )
                 self._staged_fds.pop(name, None)

@@ -18,6 +18,7 @@ catalog = "media_catalog.cli:main"
 dev = [
     "pytest>=8.4.1,<10",
     "ruff>=0.12.7,<1",
+    "ty>=0.0.17,<1",
 ]
 
 [build-system]
@@ -34,6 +35,29 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+exclude = ["src/xarchive/vendor"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "TID252", "RUF"]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+exclude = ["src/xarchive/vendor"]
+
+[tool.ty.rules]
+# Existing dynamic SQLite/JSON boundaries are being adopted gradually. Keep
+# these diagnostics visible while the baseline is worked down separately.
+possibly-unresolved-reference = "warn"
+invalid-argument-type = "warn"
+possibly-missing-attribute = "warn"
+unresolved-attribute = "warn"

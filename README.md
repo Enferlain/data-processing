@@ -2,6 +2,9 @@
 
 Small, local-first tools for collecting and processing personal data.
 
+See the [project roadmap](ROADMAP.md) for the current capabilities, active direction, and planned
+work.
+
 ## Tool guides
 
 - [`x-likes`](docs/tools/x-likes.md) — import and enrich liked posts from an exported X

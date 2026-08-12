@@ -14,11 +14,19 @@ Rules:
 
 ### Added
 
+- **The repository now has an evolving project roadmap** — documented the overall goal, working
+  pipeline, completed capabilities, current state, next artist-library milestone, future provider
+  and operations work, and later supervised similarity research without duplicating Beads tasks or
+  the detailed architecture plan.
 - **The catalog can perform bounded cross-platform candidate lookups** — added explicit plan, run, resume, list, and show workflows for provenance-rich Danbooru and AIBooru source-URL, platform-ID, hash, artist-name, and alias searches without treating results as identity or authorship proof.
 - **Candidate lookups are durable, finite, and review-oriented** — added immutable limits, sanitized request attempts, retained raw observations, checkpoints, typed provider outcomes, result associations, and evidence integration with the existing manual match-review ledger.
 
 ### Changed
 
+- **Python quality tooling now documents a gradual type-checking path** — added ty as a development
+  dependency with Python 3.13 and vendored-code boundaries, expanded Ruff with explicit formatting,
+  comprehension, and absolute-import policy, and documented the applicable test, lint, format, and
+  type-check commands for agents.
 - **Managed asset code now has a cohesive package layout** — moved content-addressed storage mechanics, local-file adoption, integrity verification, and read-only inspection into `media_catalog.storage` while keeping remote downloads under the separate acquisition boundary.
 - **Remote page execution now has a reusable bounded loop** — metadata synchronization and candidate lookup share request, retention, normalization, commit, continuation, and budget semantics without coupling provider adapters to catalog persistence.
 
