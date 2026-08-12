@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -82,7 +83,9 @@ def run_import(
                    ) VALUES (?, ?, ?, ?, ?, 'running')""",
                 (source_kind, public_path(source), digest, size, started_at),
             )
-            import_run_id = int(cursor.lastrowid)
+            if cursor.lastrowid is None:
+                raise sqlite3.DatabaseError("import run insert did not produce a row identifier")
+            import_run_id = cursor.lastrowid
         else:
             import_run_id = int(existing["import_run_id"])
             database.connection.execute(

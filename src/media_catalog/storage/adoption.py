@@ -295,7 +295,10 @@ def plan_adoption(
         # initialize_layout=False is important: planning must not create storage
         # directories, even when the selected root is empty.
         with AssetStorage(source_path, managed_path, initialize_layout=False) as storage:
-            source_identity = f"{storage.source.identity[0]}:{storage.source.identity[1]}"
+            source_handle = storage.source
+            if source_handle is None:
+                raise ValueError("source root is required for adoption planning")
+            source_identity = f"{source_handle.identity[0]}:{source_handle.identity[1]}"
             rows = _candidate_rows(
                 connection,
                 source_path,
@@ -499,8 +502,7 @@ def _hash_open_source(storage: AssetStorage, relative_path: str) -> ExactEvidenc
         after = os.fstat(opened.fd)
         evidence = ExactEvidence(size, sha256.hexdigest(), md5.hexdigest())
         if (
-            (int(before.st_dev), int(before.st_ino))
-            != (int(after.st_dev), int(after.st_ino))
+            (int(before.st_dev), int(before.st_ino)) != (int(after.st_dev), int(after.st_ino))
             or before.st_size != size
             or after.st_size != size
             or before.st_mtime_ns != after.st_mtime_ns
@@ -582,7 +584,10 @@ def adopt_assets(
         limits=storage_limits,
         initialize_layout=False,
     ) as storage:
-        opened_source_identity = f"{storage.source.identity[0]}:{storage.source.identity[1]}"
+        source_handle = storage.source
+        if source_handle is None:
+            raise ValueError("source root is required for asset adoption")
+        opened_source_identity = f"{source_handle.identity[0]}:{source_handle.identity[1]}"
         opened_managed_identity = f"{storage.media.identity[0]}:{storage.media.identity[1]}"
         if (
             opened_source_identity != plan.source_root_identity
@@ -650,6 +655,8 @@ def adopt_assets(
                         result_items.append(result)
                         continue
                     exact_evidence: ExactEvidence | None = None
+                    size = 0
+                    source_md5: str | None = None
                     try:
                         # A successful prior item can be reused without another
                         # staging file.  We still securely open and hash the
@@ -681,6 +688,7 @@ def adopt_assets(
                                     existing["byte_size"],
                                 )
                         if existing is not None:
+                            assert source_md5 is not None
                             inspection = InspectionResult(
                                 int(existing["byte_size"] or size),
                                 str(existing["verified_sha256"]).lower(),
@@ -818,6 +826,9 @@ def adopt_assets(
                         )
                     except Exception as error:  # item isolation is intentional
                         outcome, diagnostic = _error_outcome(error)
+                        # Storage errors declare optional evidence; preserve evidence calculated
+                        # before a later storage-integrity failure when that field is empty.
+                        failure_evidence = getattr(error, "exact_evidence", None) or exact_evidence
                         result = _persist_failure(
                             database,
                             writer,
@@ -826,7 +837,7 @@ def adopt_assets(
                             outcome,
                             diagnostic,
                             started_at=item_started,
-                            exact_evidence=getattr(error, "exact_evidence", exact_evidence),
+                            exact_evidence=failure_evidence,
                         )
                         failed += 1
                         counts[outcome] += 1

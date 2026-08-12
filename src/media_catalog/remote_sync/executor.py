@@ -15,7 +15,7 @@ from media_catalog.adapters import (
     Adapter,
     AdapterOperation,
     AdapterRequest,
-    Continuation,
+    LookupAdapter,
     ResponseEnvelope,
 )
 
@@ -68,14 +68,14 @@ class BoundedRemoteExecutor:
 
     def __init__(
         self,
-        adapter: Adapter,
+        adapter: Adapter | LookupAdapter,
         operation: AdapterOperation,
         target: str,
         *,
         limits: SyncLimits,
         retain_response: ResponseRetainer,
         commit_page: PageCommitter,
-        continuation: Continuation | None = None,
+        continuation: object | None = None,
         continue_pages: Callable[[object, Any], bool] | None = None,
         request_factory: Callable[[object | None], object] | None = None,
         fetch_page: Callable[[object], ResponseEnvelope] | None = None,
@@ -95,10 +95,16 @@ class BoundedRemoteExecutor:
         self.request_factory = request_factory or (
             lambda current: AdapterRequest(self.operation, self.target, current)
         )
-        self.fetch_page = fetch_page or (lambda request: self.adapter.fetch(request))
-        self.normalize_page = normalize_page or (
-            lambda response, _request: self.adapter.normalize(response)
-        )
+        if fetch_page is None or normalize_page is None:
+            if not isinstance(adapter, Adapter):
+                raise TypeError("callback-free remote execution requires a metadata adapter")
+            self.fetch_page = fetch_page or (lambda request: adapter.fetch(request))
+            self.normalize_page = normalize_page or (
+                lambda response, _request: adapter.normalize(response)
+            )
+        else:
+            self.fetch_page = fetch_page
+            self.normalize_page = normalize_page
         self.budget = BudgetTracker(limits, monotonic=monotonic)
         self.gate = RequestGate(
             self.budget,
@@ -124,9 +130,7 @@ class BoundedRemoteExecutor:
             response = self.gate.execute(
                 lambda current_request=request: self.fetch_page(current_request), retain
             )
-            raw_id = next(
-                raw_id for retained, raw_id in reversed(captured) if retained is response
-            )
+            raw_id = next(raw_id for retained, raw_id in reversed(captured) if retained is response)
             page = self.normalize_page(response, request)
             self.budget.admit_page(page.record_count)
             self.commit_page(

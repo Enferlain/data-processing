@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -46,10 +46,9 @@ def _lookup_values(value: object, name: str) -> tuple[str, ...]:
     if isinstance(value, str):
         values = (value,)
     else:
-        try:
-            values = tuple(value)  # type: ignore[arg-type]
-        except TypeError as error:
-            raise TypeError(f"{name} must be text or a sequence of text") from error
+        if not isinstance(value, Iterable):
+            raise TypeError(f"{name} must be text or a sequence of text")
+        values = tuple(value)
     if not values or not all(isinstance(item, str) and item.strip() for item in values):
         raise ValueError(f"{name} must contain non-empty text")
     return tuple(item.strip() for item in values)
@@ -426,13 +425,15 @@ class LookupCapabilities:
         return LookupStrategy(strategy) in self.strategies
 
     def __contains__(self, strategy: object) -> bool:
+        if not isinstance(strategy, (LookupStrategy, str)):
+            return False
         try:
-            return self.supports(strategy)  # type: ignore[arg-type]
+            return self.supports(strategy)
         except (TypeError, ValueError):
             return False
 
-    def __iter__(self):
-        return iter(sorted(self.strategies, key=lambda item: item.value))
+    def __iter__(self) -> Iterator[LookupStrategy]:
+        return iter(sorted(self.strategies, key=str))
 
     def as_dict(self) -> dict[str, dict[str, object]]:
         return {
@@ -770,9 +771,7 @@ class NormalizedPage:
 
     @property
     def record_count(self) -> int:
-        return sum(
-            item.object_kind in TOP_LEVEL_OBJECT_KINDS for item in self.items
-        )
+        return sum(item.object_kind in TOP_LEVEL_OBJECT_KINDS for item in self.items)
 
 
 class AdapterFailure(Exception):
@@ -813,7 +812,10 @@ class LookupAdapter(Protocol):
     instance_key: str
     adapter_version: str
     schema_version: str
-    lookup_capabilities: LookupCapabilities
+
+    @property
+    def lookup_capabilities(self) -> LookupCapabilities: ...
+
     instance: Any
 
     def fetch_lookup(self, request: LookupRequest) -> ResponseEnvelope: ...

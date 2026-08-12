@@ -158,7 +158,8 @@ def normalize_fxtwitter(payload: dict[str, Any], *, expected_post_id: str) -> Po
     author = status.get("author") if isinstance(status.get("author"), dict) else {}
     account = _normalize_account(author)
     media = status.get("media") if isinstance(status.get("media"), dict) else {}
-    photos = media.get("photos") if isinstance(media.get("photos"), list) else []
+    photos_value = media.get("photos")
+    photos = photos_value if isinstance(photos_value, list) else []
     images: list[ImageMetadata] = []
     for index, photo in enumerate(photos, start=1):
         if not isinstance(photo, dict):

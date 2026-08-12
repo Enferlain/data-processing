@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any, cast
 
 from media_catalog.database import CatalogDatabase
 from media_catalog.imports.common import CountMap, ImportReport, now, run_import
@@ -85,7 +86,8 @@ def _import_bookmark(
         RawRecord(raw, "application/json", "post", tweet_id, exported_at, "xarchive"),
         import_run_id=import_run_id,
     )
-    author = bookmark.get("author") if isinstance(bookmark.get("author"), dict) else {}
+    author_value = bookmark.get("author")
+    author = cast(dict[str, Any], author_value) if isinstance(author_value, dict) else {}
     author_id = _string(author.get("user_id"))
     handle = _real_handle(_string(author.get("screen_name")), author_id)
     display_name = _real_name(_string(author.get("name")), author_id)

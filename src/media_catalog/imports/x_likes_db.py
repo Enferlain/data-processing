@@ -111,19 +111,19 @@ def _import_rows(
                 "x",
                 author_id,
                 observed_at,
-                canonical_url=_value(row, "profile_url"),
-                handle=_value(row, "handle"),
-                display_name=_value(row, "display_name"),
-                bio=_value(row, "bio"),
-                location=_value(row, "location"),
-                website_url=_value(row, "website_url"),
-                profile_url=_value(row, "profile_url"),
-                avatar_url=_value(row, "avatar_url"),
-                banner_url=_value(row, "banner_url"),
-                followers=_value(row, "followers"),
-                following=_value(row, "following"),
+                canonical_url=_text_value(row, "profile_url"),
+                handle=_text_value(row, "handle"),
+                display_name=_text_value(row, "display_name"),
+                bio=_text_value(row, "bio"),
+                location=_text_value(row, "location"),
+                website_url=_text_value(row, "website_url"),
+                profile_url=_text_value(row, "profile_url"),
+                avatar_url=_text_value(row, "avatar_url"),
+                banner_url=_text_value(row, "banner_url"),
+                followers=_integer_value(row, "followers"),
+                following=_integer_value(row, "following"),
                 verified=_bool(_value(row, "verified")),
-                verification_type=_value(row, "verification_type"),
+                verification_type=_text_value(row, "verification_type"),
             ),
             raw_observation_id=raw_id,
         )
@@ -142,13 +142,13 @@ def _import_rows(
                 "x",
                 native_id,
                 observed_at,
-                canonical_url=_value(row, "post_url"),
-                text=_value(row, "post_text") or _value(row, "archive_text"),
+                canonical_url=_text_value(row, "post_url"),
+                text=_text_value(row, "post_text") or _text_value(row, "archive_text"),
                 created_at=_optional_time(_value(row, "created_at")),
                 availability=(
                     "unavailable" if _value(row, "fetch_status") == "unavailable" else "available"
                 ),
-                status=_value(row, "fetch_status"),
+                status=_text_value(row, "fetch_status"),
             ),
             raw_observation_id=raw_id,
         )
@@ -184,11 +184,11 @@ def _import_rows(
                 media_index,
                 str(row["media_type"]),
                 remote_url=str(row["source_url"]),
-                width=_value(row, "width"),
-                height=_value(row, "height"),
-                alt_text=_value(row, "alt_text"),
-                declared_md5=_value(row, "md5"),
-                declared_sha256=_value(row, "sha256"),
+                width=_integer_value(row, "width"),
+                height=_integer_value(row, "height"),
+                alt_text=_text_value(row, "alt_text"),
+                declared_md5=_text_value(row, "md5"),
+                declared_sha256=_text_value(row, "sha256"),
                 observed_at=post_times[native_id],
                 local_path=(str(_value(row, "local_path")) if _value(row, "local_path") else None),
             ),
@@ -233,9 +233,9 @@ def _import_rows(
             result.id,
             AssetRecord(
                 normalized_sha,
-                _value(row, "md5"),
-                _value(row, "phash"),
-                _value(row, "file_size"),
+                _text_value(row, "md5"),
+                _text_value(row, "phash"),
+                _integer_value(row, "file_size"),
                 "legacy_reference",
                 None,
                 post_times[native_id],
@@ -317,6 +317,23 @@ def _value(row: sqlite3.Row, name: str) -> object | None:
         return row[name]
     except IndexError:
         return None
+
+
+def _text_value(row: sqlite3.Row, name: str) -> str | None:
+    value = _value(row, name)
+    return None if value is None else str(value)
+
+
+def _integer_value(row: sqlite3.Row, name: str) -> int | None:
+    value = _value(row, name)
+    if value is None:
+        return None
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        raise XLikesDatabaseError(f"x-likes column {name} must be an integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise XLikesDatabaseError(f"x-likes column {name} must be an integer") from error
 
 
 def _bool(value: object) -> bool | None:

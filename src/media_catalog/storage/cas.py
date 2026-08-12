@@ -27,7 +27,7 @@ from ctypes import CDLL, c_char_p, c_int
 from ctypes import get_errno as ctypes_get_errno
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, BinaryIO, Protocol
+from typing import Any, BinaryIO
 
 from PIL import Image, UnidentifiedImageError
 
@@ -37,16 +37,12 @@ except ImportError:  # pragma: no cover - declared runtime dependency
     _imagehash: Any = None
 
 
-class AnyHash(Protocol):
-    def update(self, data: bytes) -> None: ...
-
-    def hexdigest(self) -> str: ...
-
-
 class AssetStorageError(Exception):
     """Base class for bounded, stable storage failures."""
 
     category = "storage_error"
+    staged: StagedAsset | None = None
+    exact_evidence: ExactEvidence | None = None
 
 
 class CapabilityError(AssetStorageError):
@@ -410,8 +406,8 @@ class RemoteStagingSession:
         fd: int,
         max_bytes: int,
         size: int,
-        sha256: AnyHash,
-        md5: AnyHash,
+        sha256: Any,
+        md5: Any,
         staging_identity: tuple[int, int],
     ) -> None:
         self.storage = storage
@@ -697,13 +693,19 @@ class AssetStorage:
         self._owns_media = not isinstance(media_root, RootHandle)
         self._owned_staging: set[str] = set()
         self._staged_fds: dict[str, int] = {}
-        self.source = (
-            RootHandle.open(source_root, label="source") if self._owns_source else source_root
-        )
+        self.source: RootHandle | None
+        if source_root is None:
+            self.source = None
+        elif isinstance(source_root, RootHandle):
+            self.source = source_root
+        else:
+            self.source = RootHandle.open(source_root, label="source")
         try:
-            self.media = (
-                RootHandle.open(media_root, label="managed") if self._owns_media else media_root
-            )
+            self.media: RootHandle
+            if isinstance(media_root, RootHandle):
+                self.media = media_root
+            else:
+                self.media = RootHandle.open(media_root, label="managed")
             if self.source is not None:
                 _ensure_disjoint(self.source, self.media)
             if initialize_layout:

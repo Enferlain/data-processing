@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
@@ -57,6 +58,12 @@ def _now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _inserted_id(cursor: sqlite3.Cursor) -> int:
+    if cursor.lastrowid is None:
+        raise sqlite3.DatabaseError("insert did not produce a row identifier")
+    return cursor.lastrowid
+
+
 def _reference_url(platform: str, object_kind: str, native_id: str) -> str:
     if platform == "pixiv" and object_kind == "post":
         return f"https://www.pixiv.net/artworks/{native_id}"
@@ -106,7 +113,7 @@ class CatalogWriter:
                 started_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def finish_discovery(
         self,
@@ -386,7 +393,7 @@ class CatalogWriter:
                 record.started_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def finish_remote_run(
         self,
@@ -478,7 +485,7 @@ class CatalogWriter:
                 record.request_finished_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def save_remote_checkpoint(self, record: RemoteCheckpointRecord) -> int:
         self.connection.execute(
@@ -680,9 +687,7 @@ class CatalogWriter:
                 (entity_id, url, record.observed_at, raw_observation_id),
             )
         outcome = (
-            "inserted"
-            if prior is None
-            else ("updated" if snapshot_cursor.rowcount else "existing")
+            "inserted" if prior is None else ("updated" if snapshot_cursor.rowcount else "existing")
         )
         return WriteResult(entity_id, outcome)
 
@@ -1471,7 +1476,7 @@ class CatalogWriter:
                 record.diagnostic,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def finish_adoption_run(
         self,
@@ -1617,7 +1622,7 @@ class CatalogWriter:
                 record.created_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def add_acquisition_plan_item(self, record: AcquisitionPlanItemRecord) -> int:
         values = (
@@ -1705,7 +1710,7 @@ class CatalogWriter:
                 record.started_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def finish_acquisition_run(
         self,
@@ -1800,7 +1805,7 @@ class CatalogWriter:
                     record.updated_at,
                 ),
             )
-            return int(cursor.lastrowid)
+            return _inserted_id(cursor)
         terminal = row["state"] not in {"pending", "running"}
         existing = tuple(
             row[column]
@@ -1863,7 +1868,7 @@ class CatalogWriter:
                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (record.acquisition_run_item_id, record.attempt_number, *values),
             )
-            return int(cursor.lastrowid)
+            return _inserted_id(cursor)
         columns = (
             "state",
             "outcome",
@@ -1954,7 +1959,7 @@ class CatalogWriter:
                 record.updated_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def record_acquisition_verification(self, record: AcquisitionVerificationRecord) -> int:
         self.connection.execute(
@@ -2073,7 +2078,7 @@ class CatalogWriter:
                 record.started_at,
             ),
         )
-        return int(cursor.lastrowid)
+        return _inserted_id(cursor)
 
     def finish_candidate_lookup(
         self,
@@ -2134,18 +2139,24 @@ class CatalogWriter:
         if row is None or tuple(row) != values:
             raise ValueError("lookup run is missing or already finished differently")
 
-    def record_candidate_lookup_request(
-        self, record: CandidateLookupRequestRecord
-    ) -> int:
+    def record_candidate_lookup_request(self, record: CandidateLookupRequestRecord) -> int:
         row = self.connection.execute(
             """SELECT * FROM candidate_lookup_requests
                WHERE candidate_lookup_run_id = ? AND attempt_number = ?""",
             (record.candidate_lookup_run_id, record.attempt_number),
         ).fetchone()
         columns = (
-            "request_identity", "state", "outcome", "status_code", "retry_after",
-            "response_size", "raw_observation_id", "candidate_lookup_checkpoint_id",
-            "started_at", "observed_at", "finished_at",
+            "request_identity",
+            "state",
+            "outcome",
+            "status_code",
+            "retry_after",
+            "response_size",
+            "raw_observation_id",
+            "candidate_lookup_checkpoint_id",
+            "started_at",
+            "observed_at",
+            "finished_at",
         )
         values = tuple(getattr(record, name) for name in columns)
         if row is None:
@@ -2157,7 +2168,7 @@ class CatalogWriter:
                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (record.candidate_lookup_run_id, record.attempt_number, *values),
             )
-            return int(cursor.lastrowid)
+            return _inserted_id(cursor)
         existing = tuple(row[name] for name in columns)
         if row["state"] != "running":
             if existing != values:
@@ -2176,9 +2187,7 @@ class CatalogWriter:
             )
         return int(row["candidate_lookup_request_id"])
 
-    def save_candidate_lookup_checkpoint(
-        self, record: CandidateLookupCheckpointRecord
-    ) -> int:
+    def save_candidate_lookup_checkpoint(self, record: CandidateLookupCheckpointRecord) -> int:
         self.connection.execute(
             """INSERT INTO candidate_lookup_checkpoints (
                    candidate_lookup_run_id, continuation_adapter, continuation_version,
@@ -2202,18 +2211,31 @@ class CatalogWriter:
                 record.committed_at,
             ),
         )
-        return int(self.connection.execute(
-            "SELECT candidate_lookup_checkpoint_id FROM candidate_lookup_checkpoints "
-            "WHERE candidate_lookup_run_id = ?",
-            (record.candidate_lookup_run_id,),
-        ).fetchone()[0])
+        return int(
+            self.connection.execute(
+                "SELECT candidate_lookup_checkpoint_id FROM candidate_lookup_checkpoints "
+                "WHERE candidate_lookup_run_id = ?",
+                (record.candidate_lookup_run_id,),
+            ).fetchone()[0]
+        )
 
     def record_candidate_lookup_result(self, record: CandidateLookupResultRecord) -> int:
         columns = (
-            "result_kind", "result_digest", "page_number", "result_order",
-            "normalized_post_id", "attribution_entity_id", "platform_reference_id",
-            "post_candidate_id", "account_candidate_id", "match_evidence_id",
-            "raw_observation_id", "normalized_name", "match_mode", "explanation", "observed_at",
+            "result_kind",
+            "result_digest",
+            "page_number",
+            "result_order",
+            "normalized_post_id",
+            "attribution_entity_id",
+            "platform_reference_id",
+            "post_candidate_id",
+            "account_candidate_id",
+            "match_evidence_id",
+            "raw_observation_id",
+            "normalized_name",
+            "match_mode",
+            "explanation",
+            "observed_at",
         )
         values = tuple(getattr(record, name) for name in columns)
         self.connection.execute(

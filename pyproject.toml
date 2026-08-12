@@ -53,11 +53,3 @@ python-version = "3.13"
 
 [tool.ty.src]
 exclude = ["src/xarchive/vendor"]
-
-[tool.ty.rules]
-# Existing dynamic SQLite/JSON boundaries are being adopted gradually. Keep
-# these diagnostics visible while the baseline is worked down separately.
-possibly-unresolved-reference = "warn"
-invalid-argument-type = "warn"
-possibly-missing-attribute = "warn"
-unresolved-attribute = "warn"

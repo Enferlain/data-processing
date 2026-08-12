@@ -194,9 +194,7 @@ class CandidateLookupService:
             raise ValueError("lookup plan schema version is stale")
         limits = LookupLimits(**dict(contract.limits))
         search_term = (
-            item.material.value
-            if item.item.strategy.value.startswith("artist_")
-            else None
+            item.material.value if item.item.strategy.value.startswith("artist_") else None
         )
         refreshed = self.plan(
             seed,
@@ -238,9 +236,28 @@ class CandidateLookupService:
                     started_at=started_at,
                 )
             )
-        sync_limits = SyncLimits(
-            limits.requests, limits.pages, limits.results, limits.seconds
-        )
+        sync_limits = SyncLimits(limits.requests, limits.pages, limits.results, limits.seconds)
+
+        def request_factory(continuation: object | None) -> LookupRequest:
+            if continuation is not None and not isinstance(continuation, LookupContinuation):
+                raise TypeError("candidate lookup continuation has an unexpected type")
+            return LookupRequest(
+                contract.strategy,
+                item.material,
+                continuation=continuation,
+                limit=min(200, limits.results),
+            )
+
+        def fetch_page(request: object) -> ResponseEnvelope:
+            if not isinstance(request, LookupRequest):
+                raise TypeError("candidate lookup request has an unexpected type")
+            return self.adapter.fetch_lookup(request)
+
+        def normalize_page(response: ResponseEnvelope, request: object) -> NormalizedLookupPage:
+            if not isinstance(request, LookupRequest):
+                raise TypeError("candidate lookup request has an unexpected type")
+            return self.adapter.normalize_lookup(response, request)
+
         executor = BoundedRemoteExecutor(
             self.adapter,
             LookupRequest(contract.strategy, item.material).operation,
@@ -250,24 +267,17 @@ class CandidateLookupService:
             retain_response=lambda response, attempt: self._retain_response(
                 run_id, attempt, response
             ),
-            commit_page=lambda retained_page, budget: self._commit_retained_page(
+            commit_page=lambda page, budget: self._commit_retained_page(
                 run_id,
                 item,
-                retained_page,
+                page,
                 budget,
                 seed_post_id=seed_post_id,
             ),
             continue_pages=lambda _request, _page: True,
-            request_factory=lambda continuation: LookupRequest(
-                contract.strategy,
-                item.material,
-                continuation=continuation,
-                limit=min(200, limits.results),
-            ),
-            fetch_page=lambda request: self.adapter.fetch_lookup(request),
-            normalize_page=lambda response, request: self.adapter.normalize_lookup(
-                response, request
-            ),
+            request_factory=request_factory,
+            fetch_page=fetch_page,
+            normalize_page=normalize_page,
             minimum_interval_seconds=self.minimum_interval_seconds,
             maximum_retries=self.maximum_retries,
             monotonic=self.monotonic,
@@ -338,9 +348,7 @@ class CandidateLookupService:
             )
             raise
 
-    def _retain_response(
-        self, run_id: int, attempt: int, response: ResponseEnvelope
-    ) -> int:
+    def _retain_response(self, run_id: int, attempt: int, response: ResponseEnvelope) -> int:
         outcome = _response_outcome(response.status_code)
         with self.database.transaction():
             raw_id = self.writer.store_raw(

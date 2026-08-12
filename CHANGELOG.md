@@ -23,10 +23,10 @@ Rules:
 
 ### Changed
 
-- **Python quality tooling now documents a gradual type-checking path** — added ty as a development
-  dependency with Python 3.13 and vendored-code boundaries, expanded Ruff with explicit formatting,
-  comprehension, and absolute-import policy, and documented the applicable test, lint, format, and
-  type-check commands for agents.
+- **Python quality tooling now has a blocking type-check gate** — added ty as a development
+  dependency with Python 3.13 and vendored-code boundaries, resolved the first-party diagnostic
+  baseline, expanded Ruff with explicit formatting, comprehension, and absolute-import policy, and
+  documented the applicable test, lint, format, and type-check commands for agents.
 - **Managed asset code now has a cohesive package layout** — moved content-addressed storage mechanics, local-file adoption, integrity verification, and read-only inspection into `media_catalog.storage` while keeping remote downloads under the separate acquisition boundary.
 - **Remote page execution now has a reusable bounded loop** — metadata synchronization and candidate lookup share request, retention, normalization, commit, continuation, and budget semantics without coupling provider adapters to catalog persistence.
 

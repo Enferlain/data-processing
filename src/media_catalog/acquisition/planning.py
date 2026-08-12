@@ -287,8 +287,9 @@ def _plan_item(
             None,
             None,
         )
+    row_data = dict(row)
     policy = policy_resolver(row["platform_key"])
-    variants, variants_error = _variant_map(row)
+    variants, variants_error = _variant_map(row_data)
     selected_url = variants.get(selection.variant_key)
     exclusion_reason = None
     if policy is None:
@@ -323,7 +324,7 @@ def _plan_item(
         "declared": declared,
     }
     satisfied_asset_id = (
-        _satisfied_asset(connection, row, selection.variant_key, selected_url)
+        _satisfied_asset(connection, row_data, selection.variant_key, selected_url)
         if selected_url is not None and exclusion_reason is None
         else None
     )

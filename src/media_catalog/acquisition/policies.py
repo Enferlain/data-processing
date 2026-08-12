@@ -182,7 +182,10 @@ def validate_destination(url: str, *, allowed_hosts: frozenset[str]) -> SplitRes
     """Validate a request destination without reflecting its sensitive components."""
 
     parsed = _parsed_https_url(url)
-    hostname = parsed.hostname.lower().rstrip(".")  # type: ignore[union-attr]
+    hostname_value = parsed.hostname
+    if hostname_value is None:
+        raise RequestPolicyError("invalid_host", "request destination has no host")
+    hostname = hostname_value.lower().rstrip(".")
     if hostname not in allowed_hosts:
         raise RequestPolicyError("host_not_allowed", "request destination host is not trusted")
     return parsed
@@ -222,6 +225,9 @@ class MediaRequestPolicy:
         selected_url: str,
     ) -> RequestRecipe:
         parsed = validate_destination(selected_url, allowed_hosts=self.allowed_hosts)
+        hostname = parsed.hostname
+        if hostname is None:
+            raise RequestPolicyError("invalid_host", "request destination has no host")
         if not variant_key:
             raise RequestPolicyError("invalid_variant", "variant key is required")
         operation = self.operation_for_variant(variant_key)
@@ -234,7 +240,7 @@ class MediaRequestPolicy:
                 "variant": variant_key,
                 # Digest the sensitive rendered target instead of persisting it.
                 "target_digest": hashlib.sha256(selected_url.encode("utf-8")).hexdigest(),
-                "host": parsed.hostname.lower(),  # type: ignore[union-attr]
+                "host": hostname.lower(),
                 "header_names": sorted(self.headers),
                 "credential_reference": (
                     self.credential_reference.key if self.credential_reference else None
@@ -257,9 +263,7 @@ class MediaRequestPolicy:
         )
 
     def validate_redirect(self, current_url: str, location: str) -> str:
-        return validate_redirect(
-            current_url, location, allowed_hosts=self.redirect_hosts
-        )
+        return validate_redirect(current_url, location, allowed_hosts=self.redirect_hosts)
 
     def operation_for_variant(self, variant_key: str) -> str:
         return "download-media"
@@ -312,9 +316,7 @@ class DanbooruMediaPolicy(MediaRequestPolicy):
 
     def operation_for_variant(self, variant_key: str) -> str:
         if variant_key not in {"primary", "original", "sample", "preview"}:
-            raise RequestPolicyError(
-                "invalid_variant", "Danbooru media variant is not supported"
-            )
+            raise RequestPolicyError("invalid_variant", "Danbooru media variant is not supported")
         return f"download-{variant_key}"
 
 

@@ -126,8 +126,8 @@ class MetadataSyncService:
             retain_response=lambda response, attempt: self._retain_response(
                 run_id, attempt, response, target
             ),
-            commit_page=lambda retained_page, budget: self._commit_page(
-                run_id, operation, target, retained_page, budget
+            commit_page=lambda page, budget: self._commit_page(
+                run_id, operation, target, page, budget
             ),
             minimum_interval_seconds=self.minimum_interval_seconds,
             maximum_retries=self.maximum_retries,

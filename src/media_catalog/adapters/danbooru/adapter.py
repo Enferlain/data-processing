@@ -5,7 +5,7 @@ import hashlib
 import json
 import mimetypes
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -375,7 +375,7 @@ class DanbooruAdapter:
         return NormalizedLookupResult("attribution", str(entry["id"]), data, rank, (item,))
 
     def _lookup_continuation(
-        self, request: LookupRequest, body: list[object]
+        self, request: LookupRequest, body: Sequence[object]
     ) -> LookupContinuation | None:
         cursor = request.continuation
         alias_index = cursor.alias_index if cursor is not None else 0

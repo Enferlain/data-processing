@@ -56,7 +56,7 @@ def _variant_projection(
     connection: sqlite3.Connection,
     row: sqlite3.Row,
 ) -> tuple[list[dict[str, Any]], int, bool]:
-    variants, _variant_error = resolve_occurrence_variants(row)
+    variants, _variant_error = resolve_occurrence_variants(dict(row))
     keys = sorted(variants) or ["primary"]
     total = len(keys)
     shown = keys[:MAX_RELATED_ITEMS]
@@ -70,9 +70,7 @@ def _variant_projection(
             {
                 "key": key,
                 "selection": f"{row['media_occurrence_id']}:{key}",
-                "request_policy_key": (
-                    item.request_policy.key if item.request_policy else None
-                ),
+                "request_policy_key": (item.request_policy.key if item.request_policy else None),
                 "request_policy_version": (
                     item.request_policy.version if item.request_policy else None
                 ),
@@ -337,9 +335,7 @@ def _assets(connection: sqlite3.Connection, occurrence_id: int) -> dict[str, Any
                     "detected_height": row["detected_height"],
                     "detected_frame_count": row["detected_frame_count"],
                 },
-                "fingerprints": fingerprints[int(row["asset_id"])][
-                    :MAX_RELATED_ITEMS
-                ],
+                "fingerprints": fingerprints[int(row["asset_id"])][:MAX_RELATED_ITEMS],
                 "fingerprints_truncated": fingerprint_truncated[int(row["asset_id"])],
             }
             for row in selected

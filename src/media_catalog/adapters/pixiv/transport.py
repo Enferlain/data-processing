@@ -100,8 +100,10 @@ def _text(value: object) -> str | None:
 def _positive_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return None
     try:
-        result = int(value) if value is not None else None
+        result = int(value)
     except (TypeError, ValueError):
         return None
     return result if result is not None and result >= 0 else None
