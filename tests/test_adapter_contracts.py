@@ -14,6 +14,7 @@ from media_catalog.adapters import (
     ResponseEnvelope,
     load_fixture_suite,
 )
+from media_catalog.records import RemoteRunRecord
 
 FIXTURES = Path(__file__).parent / "fixtures" / "metadata_adapters"
 
@@ -24,6 +25,8 @@ def test_adapter_contract_values_are_stable_and_continuations_round_trip() -> No
         "fetch_post",
         "list_account_posts",
         "fetch_attribution",
+        "fetch_tag",
+        "fetch_tag_alias",
     ]
     assert {outcome.value for outcome in AdapterOutcome} >= {
         "success",
@@ -34,6 +37,23 @@ def test_adapter_contract_values_are_stable_and_continuations_round_trip() -> No
     }
     continuation = Continuation("pixiv", "v1", {"offset": 2})
     assert Continuation.from_json(continuation.to_json()) == continuation
+
+
+@pytest.mark.parametrize("operation", ["fetch_tag", "fetch_tag_alias"])
+def test_tag_operations_are_valid_remote_run_operations(operation: str) -> None:
+    record = RemoteRunRecord(
+        platform="e621",
+        operation=operation,
+        target="fox",
+        adapter_version="e621-native-v1",
+        schema_version="e621-json-v1",
+        request_budget=1,
+        page_budget=1,
+        record_budget=1,
+        time_budget_seconds=1,
+        started_at="2026-08-13T00:00:00Z",
+    )
+    assert record.operation == operation
 
 
 def test_page_record_count_budgets_top_level_entities_not_child_metadata() -> None:
@@ -47,6 +67,17 @@ def test_page_record_count_budgets_top_level_entities_not_child_metadata() -> No
         )
     )
     assert page.record_count == 2
+
+
+@pytest.mark.parametrize("object_kind", ["tag", "tag_alias"])
+def test_tag_pages_count_as_one_top_level_record(object_kind: str) -> None:
+    page = NormalizedPage(
+        (
+            NormalizedItem(object_kind, "1", {}),
+            NormalizedItem("tag_observation", "1:observation", {}),
+        )
+    )
+    assert page.record_count == 1
 
 
 def test_response_envelope_rejects_secret_bearing_identity_and_headers() -> None:
@@ -96,6 +127,25 @@ def test_redacted_fixture_suites_cover_required_contract_cases() -> None:
         "compatible_post",
         "incompatible_shape",
     }
+    e621 = load_fixture_suite(FIXTURES / "e621.json")
+    assert {case.name for case in e621.cases} >= {
+        "normal_post",
+        "deleted_post",
+        "null_media_post",
+        "video_post",
+        "artist_record",
+        "tag_record",
+        "active_alias",
+        "listing_first",
+        "listing_continuation",
+        "unknown_post",
+        "malformed_post",
+        "authentication_required",
+        "access_denied",
+        "rate_limited",
+        "transient_provider",
+    }
+    assert e621.manifest.provider == "e621"
     assert "2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5" in oracle.manifest.adapter_version
 
 

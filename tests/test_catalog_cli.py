@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+import media_catalog.cli as cli_module
+from media_catalog.adapters import AdapterOperation
 from media_catalog.cli import build_parser, main
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
@@ -19,6 +21,7 @@ from media_catalog.records import (
     PostRecord,
     RemoteRunRecord,
 )
+from media_catalog.remote_sync import SyncResult
 from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
 
@@ -83,6 +86,11 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
         ["metadata", "danbooru-artist", str(catalog), "4001"],
         ["metadata", "danbooru-list", str(catalog), "artist_a"],
         ["metadata", "aibooru-post", str(catalog), "3001"],
+        ["metadata", "e621-post", str(catalog), "5001"],
+        ["metadata", "e621-artist", str(catalog), "7001"],
+        ["metadata", "e621-tag", str(catalog), "artist_tag"],
+        ["metadata", "e621-alias", str(catalog), "old_artist_tag"],
+        ["metadata", "e621-list", str(catalog), "artist_tag"],
         ["metadata", "runs", str(catalog), "--json"],
         ["metadata", "run-show", str(catalog), "1"],
         [
@@ -106,6 +114,223 @@ def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
     )
     for argv in cases:
         assert parser.parse_args(argv).command == argv[0]
+
+
+@pytest.mark.parametrize(
+    ("command", "target", "operation"),
+    [
+        ("e621-post", "5001", AdapterOperation.FETCH_POST),
+        ("e621-artist", "7001", AdapterOperation.FETCH_ATTRIBUTION),
+        ("e621-tag", "artist_tag", AdapterOperation.FETCH_TAG),
+        ("e621-alias", "old_artist_tag", AdapterOperation.FETCH_TAG_ALIAS),
+        ("e621-list", "artist_tag", AdapterOperation.LIST_ACCOUNT_POSTS),
+    ],
+)
+def test_e621_metadata_cli_routes_operations_with_provider_limits_and_resume(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    target: str,
+    operation: AdapterOperation,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+
+    adapter_calls: list[tuple[object, object, object]] = []
+    service_calls: list[tuple[object, str, object, int | None]] = []
+    service_intervals: list[float] = []
+
+    class FakeAdapter:
+        adapter_version = "e621-native-v1"
+        schema_version = "e621-json-v1"
+        instance_key = "e621"
+
+        def __init__(self, instance: object, *, client: object, credentials: object) -> None:
+            adapter_calls.append((instance, client, credentials))
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: FakeAdapter,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            assert _adapter is not None
+            service_intervals.append(minimum_interval_seconds)
+            self.minimum_interval_seconds = minimum_interval_seconds
+
+        def synchronize(
+            self,
+            actual_operation: AdapterOperation,
+            actual_target: str,
+            *,
+            limits: object,
+            resume_from_run_id: int | None,
+        ) -> SyncResult:
+            service_calls.append((actual_operation, actual_target, limits, resume_from_run_id))
+            return SyncResult(
+                remote_run_id=41,
+                platform="e621",
+                operation=actual_operation.value,
+                target=actual_target,
+                status="complete",
+                outcome="success",
+                request_count=1,
+                page_count=1,
+                record_count=1,
+                resumed_from_run_id=resume_from_run_id,
+            )
+
+    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.delenv("E621_USERNAME", raising=False)
+    monkeypatch.delenv("E621_API_KEY", raising=False)
+
+    main(
+        [
+            "metadata",
+            command,
+            str(catalog),
+            target,
+            "--max-requests",
+            "7",
+            "--max-pages",
+            "8",
+            "--max-records",
+            "9",
+            "--max-seconds",
+            "11",
+            "--resume-from",
+            "13",
+            "--json",
+        ]
+    )
+    rendered = capsys.readouterr().out
+    output = json.loads(rendered)
+    assert output == {
+        "catalog": "catalog.sqlite3",
+        "operation": operation.value,
+        "outcome": "success",
+        "page_count": 1,
+        "platform": "e621",
+        "record_count": 1,
+        "remote_run_id": 41,
+        "request_count": 1,
+        "resumed_from_run_id": 13,
+        "status": "complete",
+        "target": target,
+        "budget_boundary": None,
+        "retry_after": None,
+        "diagnostic": None,
+    }
+    assert len(adapter_calls) == 1
+    assert adapter_calls[0][0] is cli_module.E621
+    assert adapter_calls[0][2] is None
+    assert service_intervals == [cli_module.E621.minimum_interval_seconds]
+    assert len(service_calls) == 1
+    actual_operation, actual_target, limits, resumed_from = service_calls[0]
+    assert actual_operation is operation
+    assert actual_target == target
+    assert (limits.requests, limits.pages, limits.records, limits.elapsed_seconds) == (7, 8, 9, 11)
+    assert resumed_from == 13
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_e621_partial_credentials_fail_with_safe_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    as_json: bool,
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    sentinel = "e621-secret-value"
+    monkeypatch.setenv("E621_USERNAME", sentinel)
+    monkeypatch.delenv("E621_API_KEY", raising=False)
+
+    argv = ["metadata", "e621-post", str(catalog), "5001"]
+    if as_json:
+        argv.append("--json")
+    with pytest.raises(SystemExit) as raised:
+        main(argv)
+    message = str(raised.value)
+    assert sentinel not in message
+    assert "E621_USERNAME" in message
+    assert "E621_API_KEY" in message
+    if as_json:
+        payload = json.loads(message)
+        assert sentinel not in json.dumps(payload)
+        assert "error" in payload
+    else:
+        assert "configure both" in message
+    assert capsys.readouterr().out == ""
+
+
+def test_e621_metadata_cli_human_output_and_help_keep_credentials_external(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+
+    class FakeAdapter:
+        adapter_version = "e621-native-v1"
+        schema_version = "e621-json-v1"
+        instance_key = "e621"
+
+        def __init__(self, _instance: object, *, client: object, credentials: object) -> None:
+            assert client is not None
+            assert credentials.username == "external-user"
+            assert credentials.api_key == "sentinel-secret"
+
+    class FakeService:
+        def __init__(self, _database: CatalogDatabase, _adapter: FakeAdapter, **_kwargs) -> None:
+            pass
+
+        def synchronize(self, operation, target, *, limits, resume_from_run_id):
+            return SyncResult(
+                42,
+                "e621",
+                operation.value,
+                target,
+                "complete",
+                "success",
+                1,
+                1,
+                1,
+            )
+
+    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setenv("E621_USERNAME", "external-user")
+    monkeypatch.setenv("E621_API_KEY", "sentinel-secret")
+    main(["metadata", "e621-post", str(catalog), "5001"])
+    human = capsys.readouterr().out
+    assert "catalog: catalog.sqlite3" in human
+    assert "platform: e621" in human
+    assert "operation: fetch_post" in human
+    assert str(tmp_path) not in human
+    assert "external-user" not in human
+    assert "sentinel-secret" not in human
+
+    with pytest.raises(SystemExit) as raised:
+        build_parser().parse_args(["metadata", "e621-post", "--help"])
+    assert raised.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "E621_USERNAME" in help_text
+    assert "E621_API_KEY" in help_text
+    assert "never CLI flags" in help_text
+
+    with pytest.raises(SystemExit) as raised:
+        build_parser().parse_args(["metadata", "--help"])
+    assert raised.value.code == 0
+    assert "E621_USERNAME" in capsys.readouterr().out
 
 
 def test_init_json_uses_only_catalog_basename(tmp_path: Path, capsys: object) -> None:

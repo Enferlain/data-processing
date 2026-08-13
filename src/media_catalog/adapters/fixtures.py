@@ -93,8 +93,7 @@ def load_fixture_suite(path: Path | str) -> FixtureSuite:
         adapter_version=_required_text(manifest_data.get("adapter_version"), "adapter_version"),
         schema_version=_required_text(manifest_data.get("schema_version"), "schema_version"),
         redactions=tuple(
-            _required_text(item, "redaction")
-            for item in manifest_data.get("redactions", ())
+            _required_text(item, "redaction") for item in manifest_data.get("redactions", ())
         ),
         source=_required_text(manifest_data.get("source"), "source"),
     )
@@ -107,6 +106,7 @@ def load_fixture_suite(path: Path | str) -> FixtureSuite:
             raise ValueError("fixture case and response must be objects")
         response_data = raw_case["response"]
         operation = AdapterOperation(_required_text(raw_case.get("operation"), "operation"))
+        target = _required_text(raw_case.get("target"), "target")
         request_identity = _required_text(raw_case.get("request_identity"), "request_identity")
         response = ResponseEnvelope(
             provider=manifest.provider,
@@ -119,6 +119,7 @@ def load_fixture_suite(path: Path | str) -> FixtureSuite:
             observed_at=manifest.captured_at,
             adapter_version=manifest.adapter_version,
             schema_version=manifest.schema_version,
+            request_target=target,
         )
         expected = raw_case.get("expected")
         if not isinstance(expected, dict):
@@ -127,7 +128,7 @@ def load_fixture_suite(path: Path | str) -> FixtureSuite:
             FixtureCase(
                 name=_required_text(raw_case.get("name"), "case name"),
                 operation=operation,
-                target=_required_text(raw_case.get("target"), "target"),
+                target=target,
                 request_identity=request_identity,
                 response=response,
                 expected=expected,

@@ -127,7 +127,7 @@ Those are boundaries for future network adapters and image/work matching. Booru 
 URLs are evidence, not proof of authorship. Keep private exports and catalog backups out of version
 control, and run `catalog doctor` after restoring or migrating a catalog.
 
-## Synchronize Pixiv and booru metadata
+## Synchronize Pixiv, booru, and e621 metadata
 
 Metadata synchronization is explicit, finite, and separate from media acquisition. Each command
 records an auditable run, sanitized request attempts, retained JSON responses, normalized records,
@@ -144,6 +144,13 @@ uv run catalog metadata danbooru-post catalog-output/catalog.sqlite3 3001
 uv run catalog metadata danbooru-artist catalog-output/catalog.sqlite3 4001
 uv run catalog metadata danbooru-list catalog-output/catalog.sqlite3 artist_a \
   --max-requests 3 --max-pages 2 --max-records 500
+
+uv run catalog metadata e621-post catalog-output/catalog.sqlite3 5001 --json
+uv run catalog metadata e621-artist catalog-output/catalog.sqlite3 7001
+uv run catalog metadata e621-tag catalog-output/catalog.sqlite3 artist_tag
+uv run catalog metadata e621-alias catalog-output/catalog.sqlite3 old_artist_tag
+uv run catalog metadata e621-list catalog-output/catalog.sqlite3 artist_tag \
+  --max-requests 3 --max-pages 2 --max-records 500 --max-seconds 60
 ```
 
 The corresponding `aibooru-post`, `aibooru-artist`, and `aibooru-list` commands use an independent
@@ -160,6 +167,11 @@ Pixiv refresh authentication reads `PIXIV_REFRESH_TOKEN`, `PIXIV_CLIENT_ID`, and
 optional for public records and use `DANBOORU_LOGIN` plus `DANBOORU_API_KEY`, or the corresponding
 `AIBOORU_LOGIN` and `AIBOORU_API_KEY`. Credentials are resolved at request time and excluded from
 request identities, database diagnostics, structured output, and retained provider payloads.
+e621 credentials are optional external environment references named `E621_USERNAME` and
+`E621_API_KEY`; they are never accepted as CLI flags. When both are present they are supplied as
+ephemeral Basic authentication, while the credential values remain outside request identities,
+diagnostics, structured output, and retained provider payloads. e621 requests use a descriptive
+User-Agent and enforce a one-second minimum interval; the provider's listing page ceiling is 320.
 Pixiv uses an unofficial app API and may need adapter updates when its contract changes. Provider
 permissions, deletions, and rate limits remain typed outcomes rather than guessed records.
 

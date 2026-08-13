@@ -99,7 +99,9 @@ def list_post_tags(
     return _rows(
         database,
         """SELECT t.tag_id, p.platform_key AS platform, t.category, t.name,
-                  t.normalization_version, pt.first_seen_at, pt.last_seen_at,
+                  t.normalization_version, t.provider_tag_id, t.native_category,
+                  t.native_category_code, t.post_count, t.is_locked,
+                  pt.first_seen_at, pt.last_seen_at,
                   COUNT(pto.post_tag_observation_id) AS observation_count
            FROM post_tags pt JOIN tags t USING(tag_id) JOIN platforms p USING(platform_id)
            LEFT JOIN post_tag_observations pto USING(post_tag_id)
@@ -165,6 +167,78 @@ def list_attributions(
     )
 
 
+def list_tag_alias_observations(
+    database: CatalogDatabase | Path | str,
+    *,
+    platform: str | None = None,
+    antecedent: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    clauses = []
+    values: list[object] = []
+    if platform is not None:
+        clauses.append("p.platform_key = ?")
+        values.append(platform)
+    if antecedent is not None:
+        clauses.append("ta.antecedent_name = ?")
+        values.append(antecedent)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    values.append(limit)
+    return _rows(
+        database,
+        f"""SELECT ta.tag_alias_observation_id, p.platform_key AS platform,
+                   ta.provider_alias_id, ta.antecedent_name, ta.consequent_name,
+                   ta.status, ta.post_count, ta.creator_id, ta.created_at,
+                   ta.updated_at, ta.reason, ta.forum_topic_id, ta.observed_at
+            FROM tag_alias_observations ta JOIN platforms p USING(platform_id)
+            {where} ORDER BY ta.observed_at DESC, ta.tag_alias_observation_id DESC LIMIT ?""",
+        tuple(values),
+    )
+
+
+def list_post_metadata_observations(
+    database: CatalogDatabase | Path | str,
+    post_id: int,
+) -> list[dict[str, Any]]:
+    return _rows(
+        database,
+        """SELECT post_metadata_observation_id, post_id, observed_at,
+                  score_up, score_down, score_total, favorite_count, comment_count,
+                  flag_deleted, flag_pending, flag_flagged
+           FROM post_metadata_observations
+           WHERE post_id = ? ORDER BY observed_at, post_metadata_observation_id""",
+        (post_id,),
+    )
+
+
+def list_post_pool_observations(
+    database: CatalogDatabase | Path | str,
+    post_id: int,
+) -> list[dict[str, Any]]:
+    return _rows(
+        database,
+        """SELECT post_pool_observation_id, post_id, pool_native_id, observed_at
+           FROM post_pool_observations
+           WHERE post_id = ? ORDER BY observed_at, post_pool_observation_id""",
+        (post_id,),
+    )
+
+
+def list_post_flag_observations(
+    database: CatalogDatabase | Path | str,
+    post_id: int,
+) -> list[dict[str, Any]]:
+    return _rows(
+        database,
+        """SELECT post_flag_observation_id, post_id, flag_name, flag_value, observed_at
+           FROM post_flag_observations
+           WHERE post_id = ? ORDER BY observed_at, post_flag_observation_id""",
+        (post_id,),
+    )
+
+
 class RemoteQueryService:
     def __init__(self, database: CatalogDatabase | Path | str) -> None:
         self.database = database
@@ -186,3 +260,23 @@ class RemoteQueryService:
 
     def attributions(self, *, platform: str | None = None) -> list[dict[str, Any]]:
         return list_attributions(self.database, platform=platform)
+
+    def tag_aliases(
+        self,
+        *,
+        platform: str | None = None,
+        antecedent: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return list_tag_alias_observations(
+            self.database, platform=platform, antecedent=antecedent, limit=limit
+        )
+
+    def post_metadata(self, post_id: int) -> list[dict[str, Any]]:
+        return list_post_metadata_observations(self.database, post_id)
+
+    def post_pools(self, post_id: int) -> list[dict[str, Any]]:
+        return list_post_pool_observations(self.database, post_id)
+
+    def post_flags(self, post_id: int) -> list[dict[str, Any]]:
+        return list_post_flag_observations(self.database, post_id)

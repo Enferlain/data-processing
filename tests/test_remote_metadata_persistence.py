@@ -157,8 +157,7 @@ def test_remote_writer_keeps_distinct_observations_and_metadata_history(tmp_path
         assert raw_ids[0] != raw_ids[1]
         assert database.connection.execute("SELECT COUNT(*) FROM raw_payloads").fetchone()[0] == 1
         assert (
-            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0]
-            == 2
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 2
         )
         assert database.connection.execute("SELECT title FROM posts").fetchone()[0] == "Known"
         assert database.connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0

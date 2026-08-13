@@ -19,7 +19,7 @@ from media_catalog.adapters import (
     ResponseEnvelope,
 )
 
-from .budget import BudgetTracker, SyncLimits
+from .budget import BudgetExhausted, BudgetTracker, SyncLimits
 from .request_gate import RequestGate
 
 
@@ -106,9 +106,12 @@ class BoundedRemoteExecutor:
             self.fetch_page = fetch_page
             self.normalize_page = normalize_page
         self.budget = BudgetTracker(limits, monotonic=monotonic)
+        provider_interval = getattr(adapter, "minimum_interval_seconds", 0.0)
+        if not isinstance(provider_interval, (int, float)) or provider_interval < 0:
+            raise ValueError("adapter minimum interval must be a non-negative number")
         self.gate = RequestGate(
             self.budget,
-            minimum_interval_seconds=minimum_interval_seconds,
+            minimum_interval_seconds=max(minimum_interval_seconds, float(provider_interval)),
             maximum_retries=maximum_retries,
             monotonic=monotonic,
             sleep=sleep,
@@ -117,6 +120,15 @@ class BoundedRemoteExecutor:
     def execute(self) -> RemoteExecutionResult:
         continuation = self.initial_continuation
         while True:
+            # A committed continuation means another page is available, but the
+            # page/record budgets are admission limits rather than post-fetch
+            # observations.  Stop before constructing or requesting that page
+            # once either budget has already been consumed.
+            if continuation is not None:
+                if self.budget.pages >= self.budget.limits.pages:
+                    raise BudgetExhausted("page")
+                if self.budget.records >= self.budget.limits.records:
+                    raise BudgetExhausted("record")
             request = self.request_factory(continuation)
             captured: list[tuple[ResponseEnvelope, int]] = []
 

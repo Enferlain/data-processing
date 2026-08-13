@@ -38,11 +38,15 @@ from media_catalog.records import (
     OccurrenceSourceRecord,
     PlatformReferenceRecord,
     PostExternalReferenceRecord,
+    PostFlagObservationRecord,
+    PostMetadataObservationRecord,
+    PostPoolObservationRecord,
     PostRecord,
     RawRecord,
     RemoteCheckpointRecord,
     RemoteRequestRecord,
     RemoteRunRecord,
+    TagAliasObservationRecord,
     TagObservationRecord,
     normalize_timestamp,
     validate_acquisition_run_outcome,
@@ -537,13 +541,39 @@ class CatalogWriter:
     ) -> WriteResult:
         platform_id = self.platform_id(record.platform)
         self.connection.execute(
-            """INSERT INTO tags (platform_id, category, name, normalization_version)
-               VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            """INSERT INTO tags (
+                   platform_id, category, name, normalization_version, provider_tag_id,
+                   native_category, native_category_code, post_count, is_locked,
+                   last_observed_at, raw_observation_id
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(platform_id, category, name, normalization_version) DO UPDATE SET
+                   provider_tag_id = COALESCE(excluded.provider_tag_id, tags.provider_tag_id),
+                   native_category = COALESCE(excluded.native_category, tags.native_category),
+                   native_category_code = COALESCE(
+                       excluded.native_category_code, tags.native_category_code
+                   ),
+                   post_count = COALESCE(excluded.post_count, tags.post_count),
+                   is_locked = COALESCE(excluded.is_locked, tags.is_locked),
+                   last_observed_at = CASE
+                       WHEN excluded.last_observed_at IS NULL THEN tags.last_observed_at
+                       WHEN tags.last_observed_at IS NULL THEN excluded.last_observed_at
+                       WHEN excluded.last_observed_at >= tags.last_observed_at
+                       THEN excluded.last_observed_at ELSE tags.last_observed_at END,
+                   raw_observation_id = COALESCE(
+                       excluded.raw_observation_id, tags.raw_observation_id
+                   )""",
             (
                 platform_id,
                 record.category,
                 record.normalized_name,
                 record.normalization_version,
+                record.provider_tag_id,
+                record.native_category,
+                record.native_category_code,
+                record.post_count,
+                record.is_locked,
+                record.observed_at,
+                raw_observation_id,
             ),
         )
         tag_id = int(
@@ -581,6 +611,8 @@ class CatalogWriter:
             "provider_spelling": record.provider_spelling,
             "translated_label": record.translated_label,
             "position": record.position,
+            "native_category": record.native_category,
+            "native_category_code": record.native_category_code,
             "observed_at": record.observed_at,
         }
         digest = hashlib.sha256(
@@ -594,8 +626,9 @@ class CatalogWriter:
         cursor = self.connection.execute(
             """INSERT INTO post_tag_observations (
                    post_tag_id, observed_at, provider_spelling, translated_label,
-                   position, raw_observation_id, observation_digest
-               ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+                   position, raw_observation_id, observation_digest,
+                   native_category, native_category_code
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
             (
                 post_tag_id,
                 record.observed_at,
@@ -604,10 +637,302 @@ class CatalogWriter:
                 record.position,
                 raw_observation_id,
                 digest,
+                record.native_category,
+                record.native_category_code,
             ),
         )
         outcome = "inserted" if prior is None else ("updated" if cursor.rowcount else "existing")
         return WriteResult(post_tag_id, outcome)
+
+    def upsert_tag_record(
+        self,
+        record: TagObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        """Persist a standalone provider tag observation without inventing a post link."""
+
+        if record.provider_tag_id is None:
+            raise ValueError("standalone tag observations require a provider tag id")
+        platform_id = self.platform_id(record.platform)
+        prior = self.connection.execute(
+            """SELECT tag_id FROM tags
+               WHERE platform_id = ? AND provider_tag_id = ?""",
+            (platform_id, record.provider_tag_id),
+        ).fetchone()
+        if prior is None:
+            self.connection.execute(
+                """INSERT INTO tags (
+                   platform_id, category, name, normalization_version, provider_tag_id,
+                   native_category, native_category_code, post_count, is_locked,
+                   last_observed_at, raw_observation_id
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(platform_id, category, name, normalization_version) DO UPDATE SET
+                   provider_tag_id = COALESCE(excluded.provider_tag_id, tags.provider_tag_id),
+                   native_category = COALESCE(excluded.native_category, tags.native_category),
+                   native_category_code = COALESCE(
+                       excluded.native_category_code, tags.native_category_code
+                   ),
+                   post_count = COALESCE(excluded.post_count, tags.post_count),
+                   is_locked = COALESCE(excluded.is_locked, tags.is_locked),
+                   last_observed_at = excluded.last_observed_at,
+                   raw_observation_id = excluded.raw_observation_id""",
+                (
+                    platform_id,
+                    record.category,
+                    record.normalized_name,
+                    record.normalization_version,
+                    record.provider_tag_id,
+                    record.native_category,
+                    record.native_category_code,
+                    record.post_count,
+                    record.is_locked,
+                    record.observed_at,
+                    raw_observation_id,
+                ),
+            )
+            row = self.connection.execute(
+                "SELECT tag_id FROM tags WHERE platform_id = ? AND provider_tag_id = ?",
+                (platform_id, record.provider_tag_id),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("failed to store standalone tag")
+            tag_id = int(row[0])
+        else:
+            tag_id = int(prior[0])
+            self.connection.execute(
+                """UPDATE tags SET
+                       category = ?, name = ?, native_category = ?, native_category_code = ?,
+                       post_count = ?, is_locked = ?, last_observed_at = ?, raw_observation_id = ?
+                   WHERE tag_id = ?""",
+                (
+                    record.category,
+                    record.normalized_name,
+                    record.native_category,
+                    record.native_category_code,
+                    record.post_count,
+                    record.is_locked,
+                    record.observed_at,
+                    raw_observation_id,
+                    tag_id,
+                ),
+            )
+        digest_value = {
+            "provider_tag_id": record.provider_tag_id,
+            "native_category": record.native_category,
+            "native_category_code": record.native_category_code,
+            "post_count": record.post_count,
+            "is_locked": record.is_locked,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+            "observed_at": record.observed_at,
+        }
+        digest = hashlib.sha256(
+            json.dumps(digest_value, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        cursor = self.connection.execute(
+            """INSERT INTO tag_observations (
+                   tag_id, observed_at, provider_tag_id, native_category,
+                   native_category_code, post_count, is_locked, created_at, updated_at,
+                   raw_observation_id, observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (
+                tag_id,
+                record.observed_at,
+                record.provider_tag_id,
+                record.native_category,
+                record.native_category_code,
+                record.post_count,
+                record.is_locked,
+                record.created_at,
+                record.updated_at,
+                raw_observation_id,
+                digest,
+            ),
+        )
+        outcome = "inserted" if prior is None else ("updated" if cursor.rowcount else "existing")
+        return WriteResult(tag_id, outcome)
+
+    def upsert_tag_alias(
+        self,
+        record: TagAliasObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        platform_id = self.platform_id(record.platform)
+        digest_value = {
+            "provider_alias_id": record.provider_alias_id,
+            "antecedent_name": record.antecedent_name,
+            "consequent_name": record.consequent_name,
+            "status": record.status,
+            "post_count": record.post_count,
+            "creator_id": record.creator_id,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+            "reason": record.reason,
+            "forum_topic_id": record.forum_topic_id,
+            "observed_at": record.observed_at,
+        }
+        digest = hashlib.sha256(
+            json.dumps(digest_value, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        cursor = self.connection.execute(
+            """INSERT INTO tag_alias_observations (
+                   platform_id, provider_alias_id, antecedent_name, consequent_name,
+                   status, post_count, creator_id, created_at, updated_at, reason,
+                   forum_topic_id, observed_at, raw_observation_id, observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(platform_id, provider_alias_id, observation_digest) DO NOTHING""",
+            (
+                platform_id,
+                record.provider_alias_id,
+                record.antecedent_name,
+                record.consequent_name,
+                record.status,
+                record.post_count,
+                record.creator_id,
+                record.created_at,
+                record.updated_at,
+                record.reason,
+                record.forum_topic_id,
+                record.observed_at,
+                raw_observation_id,
+                digest,
+            ),
+        )
+        row = self.connection.execute(
+            """SELECT tag_alias_observation_id FROM tag_alias_observations
+               WHERE platform_id = ? AND provider_alias_id = ? AND observation_digest = ?""",
+            (platform_id, record.provider_alias_id, digest),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("failed to store tag alias observation")
+        return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
+
+    def record_post_metadata(
+        self,
+        post_id: int,
+        record: PostMetadataObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        values = {
+            "score_up": record.score_up,
+            "score_down": record.score_down,
+            "score_total": record.score_total,
+            "favorite_count": record.favorite_count,
+            "comment_count": record.comment_count,
+            "flag_deleted": record.flag_deleted,
+            "flag_pending": record.flag_pending,
+            "flag_flagged": record.flag_flagged,
+            "observed_at": record.observed_at,
+        }
+        digest = hashlib.sha256(
+            json.dumps(values, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        cursor = self.connection.execute(
+            """INSERT INTO post_metadata_observations (
+                   post_id, observed_at, score_up, score_down, score_total,
+                   favorite_count, comment_count, flag_deleted, flag_pending,
+                   flag_flagged, raw_observation_id, observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(post_id, observation_digest) DO NOTHING""",
+            (
+                post_id,
+                record.observed_at,
+                record.score_up,
+                record.score_down,
+                record.score_total,
+                record.favorite_count,
+                record.comment_count,
+                record.flag_deleted,
+                record.flag_pending,
+                record.flag_flagged,
+                raw_observation_id,
+                digest,
+            ),
+        )
+        row = self.connection.execute(
+            """SELECT post_metadata_observation_id FROM post_metadata_observations
+               WHERE post_id = ? AND observation_digest = ?""",
+            (post_id, digest),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("failed to store post metadata observation")
+        return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
+
+    def record_post_pool(
+        self,
+        post_id: int,
+        record: PostPoolObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "pool_native_id": record.pool_native_id,
+                    "observed_at": record.observed_at,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        cursor = self.connection.execute(
+            """INSERT INTO post_pool_observations (
+                   post_id, pool_native_id, observed_at, raw_observation_id, observation_digest
+               ) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (post_id, record.pool_native_id, record.observed_at, raw_observation_id, digest),
+        )
+        row = self.connection.execute(
+            """SELECT post_pool_observation_id FROM post_pool_observations
+               WHERE post_id = ? AND pool_native_id = ? AND observation_digest = ?""",
+            (post_id, record.pool_native_id, digest),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("failed to store post pool observation")
+        return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
+
+    def record_post_flag(
+        self,
+        post_id: int,
+        record: PostFlagObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "flag_name": record.flag_name,
+                    "flag_value": record.flag_value,
+                    "observed_at": record.observed_at,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        cursor = self.connection.execute(
+            """INSERT INTO post_flag_observations (
+                   post_id, flag_name, flag_value, observed_at, raw_observation_id,
+                   observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+            (
+                post_id,
+                record.flag_name,
+                record.flag_value,
+                record.observed_at,
+                raw_observation_id,
+                digest,
+            ),
+        )
+        row = self.connection.execute(
+            """SELECT post_flag_observation_id FROM post_flag_observations
+               WHERE post_id = ? AND flag_name = ? AND observation_digest = ?""",
+            (post_id, record.flag_name, digest),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("failed to store post flag observation")
+        return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
 
     def upsert_attribution(
         self,
@@ -659,21 +984,35 @@ class CatalogWriter:
             "primary_name": record.primary_name,
             "other_names": record.other_names,
             "urls": record.urls,
+            "group_name": record.group_name,
             "is_deleted": record.is_deleted,
+            "is_banned": record.is_banned,
+            "is_locked": record.is_locked,
+            "linked_user_id": record.linked_user_id,
+            "domains": record.domains,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
         }
         snapshot_digest = hashlib.sha256(
             json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
         snapshot_cursor = self.connection.execute(
             """INSERT INTO attribution_snapshots (
-                   attribution_entity_id, observed_at, availability, is_deleted,
-                   snapshot_digest, raw_observation_id
-               ) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+                   attribution_entity_id, observed_at, availability, is_deleted, group_name,
+                   is_banned, is_locked, linked_user_id, provider_created_at,
+                   provider_updated_at, snapshot_digest, raw_observation_id
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
             (
                 entity_id,
                 record.observed_at,
                 record.availability,
                 record.is_deleted,
+                record.group_name,
+                record.is_banned,
+                record.is_locked,
+                record.linked_user_id,
+                record.created_at,
+                record.updated_at,
                 snapshot_digest,
                 raw_observation_id,
             ),
@@ -692,6 +1031,13 @@ class CatalogWriter:
                        attribution_entity_id, url, observed_at, raw_observation_id
                    ) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING""",
                 (entity_id, url, record.observed_at, raw_observation_id),
+            )
+        for domain in record.domains:
+            self.connection.execute(
+                """INSERT INTO attribution_urls (
+                       attribution_entity_id, url, url_kind, observed_at, raw_observation_id
+                   ) VALUES (?, ?, 'domain', ?, ?) ON CONFLICT DO NOTHING""",
+                (entity_id, domain, record.observed_at, raw_observation_id),
             )
         outcome = (
             "inserted" if prior is None else ("updated" if snapshot_cursor.rowcount else "existing")

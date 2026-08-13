@@ -211,7 +211,7 @@ def test_v7_upgrade_preserves_catalog_and_remote_run_ids(tmp_path: Path) -> None
         connection.commit()
 
     with CatalogDatabase(path) as database:
-        assert database.schema_version == current_schema_version() == 8
+        assert database.schema_version == current_schema_version() == 10
         row = database.connection.execute(
             "SELECT remote_run_id, origin_kind, origin_reference FROM remote_runs"
         ).fetchone()

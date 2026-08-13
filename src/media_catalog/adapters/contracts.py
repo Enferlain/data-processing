@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ class AdapterOperation(StrEnum):
     FETCH_POST = "fetch_post"
     LIST_ACCOUNT_POSTS = "list_account_posts"
     FETCH_ATTRIBUTION = "fetch_attribution"
+    FETCH_TAG = "fetch_tag"
+    FETCH_TAG_ALIAS = "fetch_tag_alias"
 
 
 class LookupStrategy(StrEnum):
@@ -655,7 +658,7 @@ class AdapterOutcome(StrEnum):
     LOCAL_PERSISTENCE = "local_persistence"
 
 
-TOP_LEVEL_OBJECT_KINDS = frozenset({"account", "post", "attribution"})
+TOP_LEVEL_OBJECT_KINDS = frozenset({"account", "post", "attribution", "tag", "tag_alias"})
 
 
 def _nonempty(value: str, name: str) -> str:
@@ -757,6 +760,11 @@ class ResponseEnvelope:
     lookup_query_digest: str | None = None
     lookup_continuation: LookupContinuation | None = field(default=None, repr=False)
     lookup_material: LookupQueryMaterial | None = field(default=None, repr=False)
+    # The target is retained as a bounded, non-secret request fact so adapters
+    # can validate opaque continuations against the exact rendered target when
+    # a page is normalized.  Existing providers leave this unset for backwards
+    # compatibility with fixtures and callers that construct envelopes directly.
+    request_target: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "provider", _nonempty(self.provider, "provider"))
@@ -772,6 +780,11 @@ class ResponseEnvelope:
             self, "adapter_version", _nonempty(self.adapter_version, "adapter version")
         )
         object.__setattr__(self, "schema_version", _nonempty(self.schema_version, "schema version"))
+        if self.request_target is not None:
+            target = _nonempty(self.request_target, "request target")
+            if len(target) > 500 or any(ord(char) < 32 for char in target):
+                raise ValueError("request target must be bounded text without control characters")
+            object.__setattr__(self, "request_target", target)
         if self.lookup_strategy is not None:
             object.__setattr__(self, "lookup_strategy", LookupStrategy(self.lookup_strategy))
             if not isinstance(self.lookup_query_digest, str) or not re.fullmatch(
@@ -825,11 +838,20 @@ class AdapterFailure(Exception):
         *,
         status_code: int | None = None,
         retry_at: str | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         self.outcome = outcome
         self.public_message = _nonempty(message, "failure message")[:1000]
         self.status_code = status_code
         self.retry_at = _timestamp(retry_at) if retry_at is not None else None
+        if retry_after_seconds is not None and (
+            isinstance(retry_after_seconds, bool)
+            or not isinstance(retry_after_seconds, (int, float))
+            or not math.isfinite(retry_after_seconds)
+            or retry_after_seconds < 0
+        ):
+            raise ValueError("retry-after seconds must be a finite non-negative number")
+        self.retry_after_seconds = retry_after_seconds
         super().__init__(self.public_message)
 
 

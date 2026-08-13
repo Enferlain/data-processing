@@ -21,6 +21,7 @@ from media_catalog.adapters.danbooru import (
     DanbooruAdapter,
     DanbooruCredentials,
 )
+from media_catalog.adapters.e621 import E621, E621Adapter, E621Credentials
 from media_catalog.adapters.pixiv import PixivAdapter
 from media_catalog.candidate_lookup import (
     CandidateLookupQueryService,
@@ -78,6 +79,12 @@ def _add_sync_limits(parser: argparse.ArgumentParser, *, listing: bool) -> None:
     parser.add_argument("--max-seconds", type=int, default=60)
     parser.add_argument("--resume-from", type=int)
     _add_json(parser)
+
+
+E621_CREDENTIAL_GUIDANCE = (
+    "Optional e621 credentials are resolved from external E621_USERNAME and E621_API_KEY "
+    "environment references; credentials are never CLI flags."
+)
 
 
 def _add_acquisition_limits(parser: argparse.ArgumentParser) -> None:
@@ -321,7 +328,10 @@ def build_parser() -> argparse.ArgumentParser:
     failures.add_argument("--run-id", type=int)
     _add_json(failures)
 
-    metadata = commands.add_parser("metadata")
+    metadata = commands.add_parser(
+        "metadata",
+        description=(f"Explicit bounded metadata synchronization. {E621_CREDENTIAL_GUIDANCE}"),
+    )
     metadata_commands = metadata.add_subparsers(dest="metadata_command", required=True)
     operations = {
         "pixiv-profile": False,
@@ -333,9 +343,17 @@ def build_parser() -> argparse.ArgumentParser:
         "aibooru-post": False,
         "aibooru-artist": False,
         "aibooru-list": True,
+        "e621-post": False,
+        "e621-artist": False,
+        "e621-tag": False,
+        "e621-alias": False,
+        "e621-list": True,
     }
     for name, listing in operations.items():
-        command = metadata_commands.add_parser(name)
+        command = metadata_commands.add_parser(
+            name,
+            description=E621_CREDENTIAL_GUIDANCE if name.startswith("e621-") else None,
+        )
         command.add_argument("catalog", type=Path)
         command.add_argument("target")
         _add_sync_limits(command, listing=listing)
@@ -646,6 +664,27 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 PixivAdapter(require_auth=True) as adapter,
             ):
                 result = MetadataSyncService(database, adapter).synchronize(
+                    operation,
+                    arguments.target,
+                    limits=limits,
+                    resume_from_run_id=arguments.resume_from,
+                )
+        elif command.startswith("e621-"):
+            operation = {
+                "e621-post": AdapterOperation.FETCH_POST,
+                "e621-artist": AdapterOperation.FETCH_ATTRIBUTION,
+                "e621-tag": AdapterOperation.FETCH_TAG,
+                "e621-alias": AdapterOperation.FETCH_TAG_ALIAS,
+                "e621-list": AdapterOperation.LIST_ACCOUNT_POSTS,
+            }[command]
+            credentials = E621Credentials.from_environment(E621)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = E621Adapter(E621, client=client, credentials=credentials)
+                result = MetadataSyncService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=E621.minimum_interval_seconds,
+                ).synchronize(
                     operation,
                     arguments.target,
                     limits=limits,

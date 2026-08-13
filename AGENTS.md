@@ -4,6 +4,17 @@
 
 Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions.
 
+### GLM failure recovery
+
+- A `glm-worker` timeout, error, or partial result is not a reason to stop the task. Inspect and
+  verify any shared-worktree edits, then continue locally or with a native worker as appropriate.
+- Treat structured `status: partial` output as a usable handoff that still requires verification,
+  regardless of the worker process exit code.
+- If the evaluation tracker lacks a finish event after a confirmed terminal result, run
+  `agent_eval.py recover` with the explicit run ID, observed status, finish time, execution time,
+  and exit code. Then label the recovered run normally. Do not leave a confirmed ended run marked
+  as running, and do not claim it is unlabelable merely because the normal finish hook was missed.
+
 
 ## Python Quality Gates
 

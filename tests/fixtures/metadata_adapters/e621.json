@@ -1,0 +1,175 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "e621",
+    "instance": "e621",
+    "captured_at": "2026-08-13T00:00:00Z",
+    "adapter_version": "e621-fixture-v1",
+    "schema_version": "e621-json-v1",
+    "redactions": [
+      "names replaced with synthetic spellings",
+      "media URLs reduced to representative synthetic staticN.e621.net shapes",
+      "credentials removed",
+      "descriptions cleared"
+    ],
+    "source": "minimal redacted contract derived from e621 JSON API documentation; no live request made"
+  },
+  "cases": [
+    {
+      "name": "normal_post",
+      "operation": "fetch_post",
+      "target": "5001",
+      "request_identity": "e621:fetch_post:5001",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"id": 5001, "created_at": "2026-02-01T00:00:00.000Z", "updated_at": "2026-02-02T00:00:00.000Z", "rating": "s", "uploader_id": 42, "description": "", "fav_count": 12, "comment_count": 3, "score": {"up": 20, "down": 2, "total": 18}, "pools": [77001], "sources": ["https://www.pixiv.net/artworks/9001", "https://example.com/source"], "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "jpg", "size": 234567, "width": 1600, "height": 1200, "url": "https://static1.e621.net/original/ab/abcdef0123456789abcdef0123456789.jpg"}, "sample": {"has": true, "width": 850, "height": 638, "url": "https://static1.e621.net/sample/ab/abcdef0123456789abcdef0123456789.jpg", "ext": "jpg"}, "preview": {"width": 150, "height": 113, "url": "https://static1.e621.net/preview/abcdef0123456789abcdef0123456789.jpg"}, "tags": {"general": ["solo"], "artist": ["artist_a"], "copyright": ["series_a"], "character": ["character_a"], "species": ["canine", "fox"], "meta": ["highres"], "lore": ["background_story"]}, "relationships": {"parent_id": 4999, "has_children": false}, "flags": {"deleted": false, "pending": false, "flagged": false}}
+      },
+      "expected": {"outcome": "success", "post_ids": ["5001"], "uploader_ids": ["42"], "categories": ["artist", "character", "copyright", "general", "meta", "unknown"], "declared_md5": "abcdef0123456789abcdef0123456789", "variant_roles": ["original", "sample", "preview"]}
+    },
+    {
+      "name": "deleted_post",
+      "operation": "fetch_post",
+      "target": "5002",
+      "request_identity": "e621:fetch_post:5002",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"id": 5002, "rating": "s", "uploader_id": 42, "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "jpg", "size": 111111, "width": 800, "height": 600, "url": null}, "sample": {"has": false, "width": null, "height": null, "url": null}, "preview": {"width": null, "height": null, "url": null}, "tags": {"general": ["deleted_marker"]}, "relationships": {"parent_id": 0, "has_children": false}, "flags": {"deleted": true, "pending": false, "flagged": false}}
+      },
+      "expected": {"outcome": "deleted", "post_ids": ["5002"], "availability": "deleted"}
+    },
+    {
+      "name": "null_media_post",
+      "operation": "fetch_post",
+      "target": "5003",
+      "request_identity": "e621:fetch_post:5003",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"id": 5003, "rating": "s", "uploader_id": 42, "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "jpg", "size": 500000, "width": 1000, "height": 1000, "url": null}, "sample": {"has": false, "width": null, "height": null, "url": null}, "preview": {"width": null, "height": null, "url": null}, "tags": {"general": ["test"]}, "relationships": {"parent_id": 0, "has_children": false}, "flags": {"deleted": false}}
+      },
+      "expected": {"outcome": "success", "post_ids": ["5003"], "post_availability": "available", "media_availability": "unavailable"}
+    },
+    {
+      "name": "video_post",
+      "operation": "fetch_post",
+      "target": "5004",
+      "request_identity": "e621:fetch_post:5004",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"id": 5004, "rating": "e", "uploader_id": 42, "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "webm", "size": 999999, "width": 1280, "height": 720, "url": "https://static1.e621.net/original/cd/abcdef0123456789abcdef0123456789.webm"}, "sample": {"has": true, "width": 850, "height": 478, "url": "https://static1.e621.net/sample/cd/abcdef0123456789abcdef0123456789.webm", "ext": "webm"}, "preview": {"width": 150, "height": 84, "url": "https://static1.e621.net/preview/abcdef0123456789abcdef0123456789.jpg"}, "tags": {"meta": ["animated"]}, "relationships": {"parent_id": 0, "has_children": false}, "flags": {"deleted": false}}
+      },
+      "expected": {"outcome": "success", "post_ids": ["5004"], "mime_type": "video/webm"}
+    },
+    {
+      "name": "artist_record",
+      "operation": "fetch_attribution",
+      "target": "6001",
+      "request_identity": "e621:fetch_attribution:6001",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {"id": 6001, "name": "artist_a", "other_names": ["artist-a", "alt_name"], "group_name": "group_x", "is_deleted": false, "is_banned": false, "created_at": "2026-01-01T00:00:00.000Z", "updated_at": "2026-01-02T00:00:00.000Z", "urls": [{"url": "https://www.pixiv.net/users/1001", "is_active": true}, {"url": "https://example.com/artist_a", "is_active": true}]}
+      },
+      "expected": {"outcome": "success", "attribution_ids": ["6001"], "account": false, "url_count": 2}
+    },
+    {
+      "name": "tag_record",
+      "operation": "fetch_tag",
+      "target": "fox",
+      "request_identity": "e621:fetch_tag:fox",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [{"id": 7001, "name": "fox", "category": 5, "post_count": 4321, "is_locked": false, "created_at": "2026-01-01T00:00:00.000Z", "updated_at": "2026-01-02T00:00:00.000Z"}]
+      },
+      "expected": {"outcome": "success", "tag_ids": ["7001"], "neutral_category": "unknown", "native_category": "species", "post_count": 4321}
+    },
+    {
+      "name": "active_alias",
+      "operation": "fetch_tag_alias",
+      "target": "fox_tail",
+      "request_identity": "e621:fetch_tag_alias:fox_tail",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [{"id": 8001, "antecedent_name": "fox_tail", "consequent_name": "fox", "status": "active", "post_count": 123, "creator_id": 1, "created_at": "2026-01-01T00:00:00.000Z", "updated_at": "2026-01-02T00:00:00.000Z", "reason": "merge", "forum_topic_id": null}]
+      },
+      "expected": {"outcome": "success", "alias_ids": ["8001"], "antecedent": "fox_tail", "consequent": "fox", "status": "active"}
+    },
+    {
+      "name": "listing_first",
+      "operation": "list_account_posts",
+      "target": "artist_a",
+      "request_identity": "e621:list_account_posts:artist_a:first",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [{"id": 5102, "rating": "s", "uploader_id": 42, "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "jpg", "size": 1, "width": 10, "height": 10, "url": "https://static1.e621.net/a.jpg"}, "sample": {"has": false, "width": null, "height": null, "url": null}, "preview": {"width": 1, "height": 1, "url": "https://static1.e621.net/p.jpg"}, "tags": {"general": ["solo"], "artist": ["artist_a"]}, "relationships": {"parent_id": 0, "has_children": false}, "flags": {"deleted": false}}, {"id": 5101, "rating": "s", "uploader_id": 42, "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "png", "size": 2, "width": 20, "height": 20, "url": "https://static1.e621.net/b.png"}, "sample": {"has": false, "width": null, "height": null, "url": null}, "preview": {"width": 2, "height": 2, "url": "https://static1.e621.net/q.png"}, "tags": {"general": ["duo"], "artist": ["artist_a"]}, "relationships": {"parent_id": 0, "has_children": false}, "flags": {"deleted": false}}]
+      },
+      "expected": {"outcome": "success", "post_ids": ["5102", "5101"], "continuation": {"page": "b5101", "direction": "older"}}
+    },
+    {
+      "name": "listing_continuation",
+      "operation": "list_account_posts",
+      "target": "artist_a",
+      "request_identity": "e621:list_account_posts:artist_a:b5101",
+      "response": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "body": [{"id": 5100, "rating": "s", "uploader_id": 42, "file": {"md5": "abcdef0123456789abcdef0123456789", "ext": "jpg", "size": 3, "width": 30, "height": 30, "url": "https://static1.e621.net/c.jpg"}, "sample": {"has": false, "width": null, "height": null, "url": null}, "preview": {"width": 3, "height": 3, "url": "https://static1.e621.net/r.jpg"}, "tags": {"general": ["trio"], "artist": ["artist_a"]}, "relationships": {"parent_id": 0, "has_children": false}, "flags": {"deleted": false}}]
+      },
+      "expected": {"outcome": "success", "post_ids": ["5100"], "continuation": {"page": "b5100", "direction": "older"}}
+    },
+    {
+      "name": "unknown_post",
+      "operation": "fetch_post",
+      "target": "5999",
+      "request_identity": "e621:fetch_post:5999",
+      "response": {"status_code": 404, "headers": {"content-type": "application/json"}, "body": {"message": "not found"}},
+      "expected": {"outcome": "unavailable", "normalized_records": 0}
+    },
+    {
+      "name": "malformed_post",
+      "operation": "fetch_post",
+      "target": "5001",
+      "request_identity": "e621:fetch_post:5001:malformed",
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"rating": "s"}},
+      "expected": {"outcome": "malformed_response", "normalized_records": 0}
+    },
+    {
+      "name": "authentication_required",
+      "operation": "fetch_post",
+      "target": "5001",
+      "request_identity": "e621:fetch_post:5001:auth",
+      "response": {"status_code": 401, "headers": {"content-type": "application/json"}, "body": {"message": "credentials required"}},
+      "expected": {"outcome": "authentication_required", "normalized_records": 0}
+    },
+    {
+      "name": "access_denied",
+      "operation": "fetch_post",
+      "target": "5001",
+      "request_identity": "e621:fetch_post:5001:denied",
+      "response": {"status_code": 403, "headers": {"content-type": "application/json"}, "body": {"message": "forbidden"}},
+      "expected": {"outcome": "authorization_denied", "normalized_records": 0}
+    },
+    {
+      "name": "rate_limited",
+      "operation": "fetch_post",
+      "target": "5001",
+      "request_identity": "e621:fetch_post:5001:rate",
+      "response": {"status_code": 429, "headers": {"content-type": "application/json", "retry-after": "2"}, "body": {"message": "rate limited"}},
+      "expected": {"outcome": "rate_limited", "retry_after_seconds": 2, "normalized_records": 0}
+    },
+    {
+      "name": "transient_provider",
+      "operation": "fetch_post",
+      "target": "5001",
+      "request_identity": "e621:fetch_post:5001:transient",
+      "response": {"status_code": 503, "headers": {"content-type": "application/json"}, "body": {"message": "service unavailable"}},
+      "expected": {"outcome": "transient_provider", "normalized_records": 0}
+    }
+  ]
+}

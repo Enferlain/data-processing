@@ -411,4 +411,6 @@ def _operation_object_kind(operation: AdapterOperation) -> str:
         AdapterOperation.FETCH_POST: "post",
         AdapterOperation.LIST_ACCOUNT_POSTS: "post",
         AdapterOperation.FETCH_ATTRIBUTION: "attribution",
+        AdapterOperation.FETCH_TAG: "tag",
+        AdapterOperation.FETCH_TAG_ALIAS: "tag_alias",
     }[operation]

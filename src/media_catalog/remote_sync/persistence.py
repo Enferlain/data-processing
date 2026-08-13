@@ -11,7 +11,11 @@ from media_catalog.records import (
     AttributionRecord,
     MediaOccurrenceRecord,
     PostExternalReferenceRecord,
+    PostFlagObservationRecord,
+    PostMetadataObservationRecord,
+    PostPoolObservationRecord,
     PostRecord,
+    TagAliasObservationRecord,
     TagObservationRecord,
 )
 from media_catalog.writer import CatalogWriter
@@ -110,6 +114,7 @@ class NormalizedPageWriter:
                     raw_observation_id=raw_observation_id,
                 )
                 posts[(platform, native_id)] = result.id
+                self._write_post_facts(result.id, data, observed_at, raw_observation_id)
             elif item.object_kind == "attribution":
                 self.writer.upsert_attribution(
                     AttributionRecord(
@@ -119,9 +124,36 @@ class NormalizedPageWriter:
                         observed_at=observed_at,
                         availability=("deleted" if data.get("deleted") is True else "available"),
                         primary_name=_text(data.get("name")),
+                        group_name=_text(data.get("group_name")),
                         other_names=tuple(_string_list(data.get("other_names"))),
                         urls=tuple(_string_list(data.get("urls"))),
                         is_deleted=_boolean(data.get("deleted")),
+                        is_banned=_boolean(data.get("is_banned")),
+                        is_locked=_boolean(data.get("is_locked")),
+                        linked_user_id=_text(data.get("linked_user_id")),
+                        domains=tuple(_string_list(data.get("domains"))),
+                        created_at=_text(data.get("created_at")),
+                        updated_at=_text(data.get("updated_at")),
+                    ),
+                    raw_observation_id=raw_observation_id,
+                )
+            elif item.object_kind == "tag":
+                name = _required_text(data, "name")
+                self.writer.upsert_tag_record(
+                    TagObservationRecord(
+                        platform=platform,
+                        category=_text(data.get("category")) or "unknown",
+                        normalized_name=_text(data.get("normalized_name")) or name.casefold(),
+                        provider_spelling=name,
+                        observed_at=_text(data.get("observation_time")) or observed_at,
+                        normalization_version="provider-tag-v1",
+                        provider_tag_id=native_id,
+                        native_category=_text(data.get("native_category")),
+                        native_category_code=_integer(data.get("native_category_code")),
+                        post_count=_integer(data.get("post_count")),
+                        is_locked=_boolean(data.get("is_locked")),
+                        created_at=_text(data.get("created_at")),
+                        updated_at=_text(data.get("updated_at")),
                     ),
                     raw_observation_id=raw_observation_id,
                 )
@@ -157,12 +189,32 @@ class NormalizedPageWriter:
                         normalization_version="provider-tag-v1",
                         translated_label=_text(data.get("translated_name")),
                         position=_integer(data.get("position")),
+                        native_category=_text(data.get("native_category")),
+                        native_category_code=_integer(data.get("native_category_code")),
                     ),
                     raw_observation_id=raw_observation_id,
                 )
             elif item.object_kind == "media_occurrence":
                 post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 self._write_media(post_id, data, observed_at, raw_observation_id)
+            elif item.object_kind == "tag_alias":
+                self.writer.upsert_tag_alias(
+                    TagAliasObservationRecord(
+                        platform=platform,
+                        provider_alias_id=native_id,
+                        antecedent_name=_required_text(data, "antecedent"),
+                        consequent_name=_required_text(data, "consequent"),
+                        status=_required_text(data, "status"),
+                        observed_at=_text(data.get("observation_time")) or observed_at,
+                        post_count=_integer(data.get("post_count")),
+                        creator_id=_text(data.get("creator_id")),
+                        created_at=_text(data.get("created_at")),
+                        updated_at=_text(data.get("updated_at")),
+                        reason=_text(data.get("reason")),
+                        forum_topic_id=_integer(data.get("forum_topic_id")),
+                    ),
+                    raw_observation_id=raw_observation_id,
+                )
             elif item.object_kind == "external_reference":
                 post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 target_platform = _text(data.get("target_platform"))
@@ -195,6 +247,55 @@ class NormalizedPageWriter:
                     raw_observation_id=raw_observation_id,
                 )
         return NormalizedWriteResult(len(page.items), tuple(sorted(set(posts.values()))))
+
+    def _write_post_facts(
+        self,
+        post_id: int,
+        data: Mapping[str, Any],
+        observed_at: str,
+        raw_observation_id: int,
+    ) -> None:
+        score = data.get("score")
+        score_data = score if isinstance(score, Mapping) else {}
+        flags_data = data.get("flags")
+        flags = flags_data if isinstance(flags_data, Mapping) else {}
+        pools = data.get("pools")
+        has_facts = bool(
+            score_data
+            or any(data.get(name) is not None for name in ("fav_count", "comment_count"))
+            or flags
+            or pools
+        )
+        if not has_facts:
+            return
+        metadata = PostMetadataObservationRecord(
+            observed_at=observed_at,
+            score_up=_integer(score_data.get("up")),
+            score_down=_integer(score_data.get("down")),
+            score_total=_integer(score_data.get("total")),
+            favorite_count=_integer(data.get("fav_count")),
+            comment_count=_integer(data.get("comment_count")),
+            flag_deleted=_boolean(flags.get("deleted")),
+            flag_pending=_boolean(flags.get("pending")),
+            flag_flagged=_boolean(flags.get("flagged")),
+        )
+        self.writer.record_post_metadata(post_id, metadata, raw_observation_id=raw_observation_id)
+        if isinstance(pools, list):
+            for pool in pools:
+                if isinstance(pool, int) and not isinstance(pool, bool) and pool > 0:
+                    self.writer.record_post_pool(
+                        post_id,
+                        PostPoolObservationRecord(str(pool), observed_at),
+                        raw_observation_id=raw_observation_id,
+                    )
+        if isinstance(flags, Mapping):
+            for name, value in flags.items():
+                if isinstance(name, str) and isinstance(value, bool):
+                    self.writer.record_post_flag(
+                        post_id,
+                        PostFlagObservationRecord(name, value, observed_at),
+                        raw_observation_id=raw_observation_id,
+                    )
 
     def _write_media(
         self,

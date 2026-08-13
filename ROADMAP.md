@@ -42,11 +42,12 @@ deliberately deferred.
 
 ## Current state
 
-The `add-artist-library-expansion` OpenSpec change is complete and archived under Bead
-`data-processing-3rs`. Its persistence, offline target resolution, provider capability/count
-probing, bounded execution, resume lineage, target-scoped browsing, and CLI workflow are
-implemented and verified. This milestone connects the existing review, metadata synchronization,
-media browsing, and acquisition capabilities into a practical artist-library workflow.
+The `add-artist-library-expansion` milestone is complete and archived. The active
+`add-e621-metadata-adapter` OpenSpec change under Bead `data-processing-7cy` is extending that
+workflow with first-class e621 metadata, attribution lookup, artist-library enumeration, and
+verified media acquisition. Implementation is paused at 15/30 tasks after completing the native
+adapter, neutral persistence, metadata synchronization, CLI, resume, budget, and privacy work.
+Candidate lookup is the next section.
 
 Live task state can be checked with:
 
@@ -188,6 +189,17 @@ Expected outcomes:
 
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
+
+## Active milestone: first-class e621 support
+
+- Add a native e621 adapter under its documented descriptive User-Agent, authentication, pacing,
+  page-size, keyset-pagination, availability, and privacy contracts.
+- Preserve nested post/media facts, categorized tags, approved aliases, artist attribution,
+  sources, relationships, uploader roles, and raw observations without inventing unavailable URLs.
+- Extend bounded candidate lookup, artist-library expansion, target-scoped browsing, and explicit
+  verified acquisition while keeping attribution separate from accounts and review conclusions.
+- Keep Gelbooru separate until credentialed fixtures establish its undocumented response schema
+  and an explicit personal-use policy decision permits bounded automation.
 
 ## Planned after the active milestone
 
