@@ -10,6 +10,28 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-08-13]
+
+### Added
+
+- **e621 metadata can be synchronized through the catalog** — added a native adapter for bounded
+  post, artist, tag, alias, and artist-tag listing requests with descriptive identification,
+  optional external Basic-auth credentials, conservative pacing, typed failures, raw-response
+  provenance, and resumable ID-keyset pagination without requesting media bytes.
+- **e621 provider facts have neutral queryable persistence** — added versioned storage for native
+  tag identities and categories, aliases, attribution details, post scores and counts, flags, and
+  pool observations while preserving uploader roles, artist attribution, and locally verified
+  asset facts as distinct concepts.
+- **The metadata CLI supports explicit e621 workflows** — added post, artist, tag, alias, and
+  bounded listing commands with finite budgets, stable human and JSON output, checkpoint resume,
+  credential privacy, and no implicit media acquisition.
+
+### Changed
+
+- **Remote synchronization admits continuation pages before requesting them** — request, page,
+  record, and time boundaries now stop unadmitted work before the next provider call, including
+  tag and alias pages, while retaining committed checkpoints for safe restart.
+
 ## [2026-08-12]
 
 ### Added
