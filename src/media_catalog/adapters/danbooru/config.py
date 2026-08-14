@@ -8,9 +8,16 @@ from media_catalog.adapters.contracts import (
     EnumerationCapability,
     LookupCapabilities,
     LookupCapability,
+    LookupPlanContext,
     LookupStrategy,
 )
 
+# The Danbooru native adapter serves every Danbooru-family instance under one
+# provider key and adapter version; these are the source of truth for the
+# provider-neutral lookup planning context, replacing the values the planner
+# previously hardcoded.
+PROVIDER_KEY = "danbooru"
+ADAPTER_VERSION = "danbooru-native-v1"
 ENUMERATION_VERSION = "library-expansion-v1"
 
 
@@ -40,6 +47,18 @@ class DanbooruInstance:
     @property
     def lookup_strategies(self) -> frozenset[LookupStrategy]:
         return self.lookup_capabilities.strategies
+
+    @property
+    def lookup_plan_context(self) -> LookupPlanContext:
+        """Provider-neutral planning identity for this Danbooru-family instance."""
+
+        return LookupPlanContext(
+            provider=PROVIDER_KEY,
+            instance_key=self.platform_key,
+            adapter_version=ADAPTER_VERSION,
+            schema_version=self.schema_version,
+            lookup_capabilities=self.lookup_capabilities,
+        )
 
 
 DANBOORU = DanbooruInstance(

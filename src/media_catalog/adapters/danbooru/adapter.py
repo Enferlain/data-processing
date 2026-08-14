@@ -27,9 +27,8 @@ from media_catalog.adapters.contracts import (
     NormalizedPage,
     ResponseEnvelope,
 )
-from media_catalog.adapters.danbooru.config import DanbooruInstance
+from media_catalog.adapters.danbooru.config import ADAPTER_VERSION, PROVIDER_KEY, DanbooruInstance
 
-ADAPTER_VERSION = "danbooru-native-v1"
 ALLOWED_RESPONSE_HEADERS = {"content-type", "retry-after", "x-rate-limit"}
 TAG_CATEGORIES = ("artist", "character", "copyright", "general", "meta")
 
@@ -76,7 +75,7 @@ class DanbooruCredentials:
 
 
 class DanbooruAdapter:
-    provider_key = "danbooru"
+    provider_key = PROVIDER_KEY
     adapter_version = ADAPTER_VERSION
 
     def __init__(

@@ -10,11 +10,12 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from media_catalog.adapters import (
+    LookupPlanConfiguration,
+    LookupPlanContext,
     LookupPlanItem,
     LookupQueryMaterial,
     LookupStrategy,
 )
-from media_catalog.adapters.danbooru.config import DanbooruInstance
 from media_catalog.database import CatalogDatabase
 
 DatabaseSource = CatalogDatabase | Path | str
@@ -160,10 +161,7 @@ def _x_aliases(url: str) -> tuple[str, ...]:
     path = parsed.path.rstrip("/")
     if host not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
         return (urlunsplit(("https", host, path, "", "")),)
-    return tuple(
-        urlunsplit(("https", alias, path, "", ""))
-        for alias in ("x.com", "twitter.com")
-    )
+    return tuple(urlunsplit(("https", alias, path, "", "")) for alias in ("x.com", "twitter.com"))
 
 
 def _post_materials(
@@ -302,7 +300,7 @@ def _account_materials(
 def plan_candidate_lookup(
     database: DatabaseSource,
     seed: str,
-    instance: DanbooruInstance,
+    instance: LookupPlanConfiguration | LookupPlanContext,
     strategies: tuple[LookupStrategy | str, ...],
     *,
     limits: LookupLimits | None = None,
@@ -310,6 +308,7 @@ def plan_candidate_lookup(
 ) -> CandidateLookupPlan:
     """Resolve finite private query material without network or catalog writes."""
 
+    context = instance if isinstance(instance, LookupPlanContext) else instance.lookup_plan_context
     if not strategies:
         raise ValueError("at least one lookup strategy is required")
     if limits is None:
@@ -327,7 +326,7 @@ def plan_candidate_lookup(
         items: list[PlannedLookup] = []
         exclusions: list[dict[str, str]] = []
         for strategy in normalized:
-            if not instance.lookup_capabilities.supports(strategy):
+            if not context.lookup_capabilities.supports(strategy):
                 exclusions.append(
                     {"strategy": strategy.value, "reason": "unsupported_provider_capability"}
                 )
@@ -338,15 +337,15 @@ def plan_candidate_lookup(
                 continue
             for material in strategy_materials:
                 contract = LookupPlanItem(
-                    provider="danbooru",
-                    instance=instance.platform_key,
+                    provider=context.provider,
+                    instance=context.instance_key,
                     strategy=strategy,
                     query_digest=material.digest,
                     limits=limits.as_dict(),
                     seed_kind=seed_kind,
                     seed_id=str(seed_id),
-                    adapter_version="danbooru-native-v1",
-                    schema_version=instance.schema_version,
+                    adapter_version=context.adapter_version,
+                    schema_version=context.schema_version,
                 )
                 items.append(
                     PlannedLookup(
@@ -359,7 +358,7 @@ def plan_candidate_lookup(
                 )
         return CandidateLookupPlan(
             seed,
-            instance.platform_key,
+            context.instance_key,
             limits,
             tuple(items),
             tuple(exclusions),

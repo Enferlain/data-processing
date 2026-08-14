@@ -25,6 +25,18 @@ Rules:
 - **The metadata CLI supports explicit e621 workflows** — added post, artist, tag, alias, and
   bounded listing commands with finite budgets, stable human and JSON output, checkpoint resume,
   credential privacy, and no implicit media acquisition.
+- **e621 evidence can feed bounded lookup and library expansion** — added source-URL, external-ID,
+  declared/verified-MD5, exact-name, and approved-alias strategies; stable artist-tag expansion
+  with retained-count estimates, opaque `b<ID>` resume, target-scoped browsing, and no fuzzy search
+  or automatic identity/authorship conclusions.
+- **Selected e621 variants can enter verified acquisition** — added explicit original/sample/preview
+  handoff from browse selectors, a bounded `static1`–`static9` host and redirect policy, original-only
+  claim comparison, derivative claim separation, quarantine, and CAS reuse without metadata-triggered
+  downloads.
+- **The catalog guide documents e621 operations and boundaries** — added external credential and
+  pacing guidance, dynamic category and alias provenance, privacy/troubleshooting notes, and the
+  disabled-by-default live-smoke limitation; Gelbooru and cross-database alias mapping remain future
+  work.
 
 ### Changed
 

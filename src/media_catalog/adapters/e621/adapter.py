@@ -16,6 +16,7 @@ derivation is explicitly forbidden.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
@@ -34,22 +35,32 @@ from media_catalog.adapters.contracts import (
     AdapterOutcome,
     AdapterRequest,
     Continuation,
+    LookupCapabilities,
+    LookupContinuation,
+    LookupQueryMaterial,
+    LookupRequest,
+    LookupStrategy,
     NormalizedItem,
+    NormalizedLookupPage,
+    NormalizedLookupResult,
     NormalizedPage,
     ResponseEnvelope,
 )
 from media_catalog.adapters.e621.config import (
     ADAPTER_VERSION,
     CONTINUATION_VERSION,
+    PROVIDER_KEY,
     TAG_CATEGORY_ORDER,
     E621Instance,
     e621_category_label,
     neutral_category,
 )
+from media_catalog.links import recognize_url
 
 ALLOWED_RESPONSE_HEADERS = {"content-type", "retry-after", "x-rate-limit"}
 _PAGE_RE = re.compile(r"^b(\d+)$")
 _MAX_TARGET_LENGTH = 500
+_MAX_LOOKUP_TEXT = 200
 
 
 def _utc_now() -> str:
@@ -96,7 +107,7 @@ class E621Credentials:
 
 
 class E621Adapter:
-    provider_key = "e621"
+    provider_key = PROVIDER_KEY
     adapter_version = ADAPTER_VERSION
 
     def __init__(
@@ -126,6 +137,12 @@ class E621Adapter:
 
         return self.instance.enumeration_capabilities
 
+    @property
+    def lookup_capabilities(self) -> LookupCapabilities:
+        """Immutable exact reverse-lookup contract for this configured instance."""
+
+        return self.instance.lookup_capabilities
+
     def fetch(self, request: AdapterRequest) -> ResponseEnvelope:
         endpoint, params, identity = self._request_parts(request)
         headers = {"User-Agent": self.instance.user_agent, "Accept": "application/json"}
@@ -150,6 +167,125 @@ class E621Adapter:
             schema_version=self.schema_version,
             request_target=self._canonical_request_target(request),
         )
+
+    def fetch_lookup(self, request: LookupRequest) -> ResponseEnvelope:
+        """Fetch one fixed-endpoint lookup page using injected HTTP transport only.
+
+        Only the six declared exact strategies are rendered.  ``ARTIST_TEXT`` (and
+        any other undeclared strategy) is rejected before any HTTP request.  The
+        rendered envelope is lookup-marked and retains private query material
+        only on the (non-repr) ``lookup_material`` field; the public request
+        identity and digest are secret-free.
+        """
+
+        if not self.lookup_capabilities.supports(request.strategy):
+            raise ValueError(
+                f"{self.instance_key} does not support lookup strategy {request.strategy.value}"
+            )
+        endpoint, params, identity, cursor = self._lookup_request_parts(request)
+        headers = {"User-Agent": self.instance.user_agent, "Accept": "application/json"}
+        if self._credentials is not None:
+            raw = f"{self._credentials.username}:{self._credentials.api_key}".encode()
+            headers["Authorization"] = "Basic " + base64.b64encode(raw).decode("ascii")
+        response = self._client.get(
+            self.instance.base_url + endpoint,
+            params=params,
+            headers=headers,
+        )
+        return ResponseEnvelope(
+            provider=self.provider_key,
+            instance=self.instance_key,
+            operation=request.operation,
+            request_identity=identity,
+            status_code=response.status_code,
+            headers=_public_headers(response.headers),
+            payload=response.content or b"{}",
+            observed_at=self._clock(),
+            adapter_version=self.adapter_version,
+            schema_version=self.schema_version,
+            lookup_strategy=request.strategy,
+            lookup_query_digest=request.material.digest,
+            lookup_continuation=cursor,
+            lookup_material=request.material,
+        )
+
+    def _lookup_request_parts(
+        self, request: LookupRequest
+    ) -> tuple[str, dict[str, str | int], str, LookupContinuation | None]:
+        material = request.material
+        cursor = request.continuation
+        if cursor is not None:
+            if (
+                cursor.adapter != self.provider_key
+                or cursor.version != self.schema_version
+                or cursor.strategy is not request.strategy
+                or cursor.query_digest != material.digest
+            ):
+                raise ValueError("incompatible e621 lookup continuation")
+            alias_index = cursor.alias_index
+            page = cursor.page
+        else:
+            alias_index = 0
+            page = None
+        if alias_index >= len(material.values):
+            raise ValueError("lookup continuation alias index is out of range")
+        value = material.values[alias_index]
+        strategy = request.strategy
+        limit = min(request.limit, self.instance.page_size)
+        params: dict[str, str | int]
+        if strategy is LookupStrategy.SOURCE_POST_URL:
+            _exact_source_lookup_text(value)
+            params = {"tags": f"source:{value}", "limit": limit}
+            endpoint = "/posts.json"
+        elif strategy is LookupStrategy.EXTERNAL_POST_ID:
+            params = {"tags": f"source:{_external_post_source(material, value)}", "limit": limit}
+            endpoint = "/posts.json"
+        elif strategy in {LookupStrategy.DECLARED_MD5, LookupStrategy.VERIFIED_MD5}:
+            params = {"tags": f"md5:{value}", "limit": limit}
+            endpoint = "/posts.json"
+        elif strategy is LookupStrategy.ARTIST_EXACT_NAME:
+            # Exact artist-category tag metadata lookup -- a bounded, exact
+            # ``search[name]`` against the tag record, never unrestricted text.
+            _bounded_lookup_text(value, "artist name")
+            params = {"search[name]": value, "limit": 1}
+            endpoint = "/tags.json"
+        elif strategy is LookupStrategy.ARTIST_ALIAS:
+            # Alias evidence restricted at request time to approved/active
+            # canonicalizable aliases; status interpretation is task 5.3.
+            _bounded_lookup_text(value, "artist alias")
+            params = {
+                "search[antecedent_name]": value,
+                "search[status]": "active",
+                "limit": 1,
+            }
+            endpoint = "/tag_aliases.json"
+        else:  # pragma: no cover - undeclared strategies are rejected in fetch_lookup
+            raise ValueError(f"e621 does not render lookup strategy {strategy.value}")
+        if page is not None:
+            if strategy in {LookupStrategy.ARTIST_EXACT_NAME, LookupStrategy.ARTIST_ALIAS}:
+                raise ValueError("e621 artist metadata lookup does not support pagination")
+            match = _PAGE_RE.fullmatch(page)
+            if match is None or int(match.group(1)) < 1:
+                raise ValueError("e621 lookup continuation page must be an opaque b<ID> boundary")
+            params["page"] = page
+        # Identity is intentionally digest-only: rendered URLs, query text, and
+        # secrets never enter it.
+        identity = self._lookup_identity(strategy, material.digest, alias_index, page, limit)
+        return endpoint, params, identity, cursor
+
+    def _lookup_identity(
+        self,
+        strategy: LookupStrategy,
+        digest: str,
+        alias_index: int,
+        page: str | None,
+        limit: int,
+    ) -> str:
+        payload = (
+            f"{self.provider_key}|{self.instance_key}|{strategy.value}|"
+            f"{digest}|{alias_index}|{page or 'first'}|{limit}"
+        )
+        return "lookup:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _canonical_request_target(self, request: AdapterRequest) -> str:
         if request.operation is AdapterOperation.FETCH_POST:
@@ -258,6 +394,353 @@ class E621Adapter:
                 request_identity=response.request_identity,
             )
         raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "unsupported response operation")
+
+    def normalize_lookup(
+        self, response: ResponseEnvelope, request: LookupRequest | None = None
+    ) -> NormalizedLookupPage:
+        """Normalize one bounded e621 lookup response.
+
+        Lookup endpoints return arrays even when they contain one metadata record.  The
+        lookup path therefore stays stricter than ordinary object fetches: malformed
+        envelopes and non-array payloads fail closed, while the existing post/tag/alias
+        normalizers provide the nested provider facts.  Raw response bytes are retained by
+        the lookup service; the safe provenance marker attached here binds each normalized
+        item to that retained response without copying query text or secrets.
+        """
+
+        self._validate_envelope(response)
+        if response.adapter_version != self.adapter_version:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "incompatible provider adapter version"
+            )
+        self._raise_for_outcome(response)
+        strategy = response.lookup_strategy
+        if strategy is None:
+            raise ValueError("response is not a lookup envelope")
+        if request is None:
+            if response.lookup_material is None:
+                raise ValueError("lookup material is required to normalize a lookup response")
+            request = LookupRequest(
+                strategy,
+                response.lookup_material,
+                continuation=response.lookup_continuation,
+            )
+        elif request.strategy is not strategy:
+            raise ValueError("lookup request strategy does not match response")
+        if response.lookup_material is not None:
+            if response.lookup_material.strategy is not strategy:
+                raise ValueError("lookup response material strategy does not match response")
+            if response.lookup_material.digest != request.material.digest:
+                raise ValueError("lookup response material does not match request")
+        if response.lookup_query_digest != request.material.digest:
+            raise ValueError("lookup request material does not match response")
+        if response.lookup_continuation != request.continuation:
+            raise ValueError("lookup request continuation does not match response")
+        try:
+            body = json.loads(response.payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "provider returned invalid JSON"
+            ) from error
+        if not isinstance(body, list):
+            raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "lookup response is not a list")
+
+        provenance = {
+            "provider": self.provider_key,
+            "schema_version": self.schema_version,
+            "strategy": strategy.value,
+            "query_digest": request.material.digest,
+            "request_identity": response.request_identity,
+        }
+        results: list[NormalizedLookupResult] = []
+        for rank, entry in enumerate(body):
+            if strategy in {
+                LookupStrategy.SOURCE_POST_URL,
+                LookupStrategy.EXTERNAL_POST_ID,
+                LookupStrategy.DECLARED_MD5,
+                LookupStrategy.VERIFIED_MD5,
+            }:
+                results.append(self._lookup_post_result(entry, request, rank, provenance))
+            elif strategy is LookupStrategy.ARTIST_EXACT_NAME:
+                result = self._lookup_artist_tag_result(entry, request, rank, provenance)
+                if result is not None:
+                    results.append(result)
+            elif strategy is LookupStrategy.ARTIST_ALIAS:
+                result = self._lookup_alias_result(entry, request, rank, provenance)
+                if result is not None:
+                    results.append(result)
+            else:  # pragma: no cover - capabilities reject undeclared strategies first
+                raise ValueError(f"e621 does not normalize lookup strategy {strategy.value}")
+
+        self._validate_lookup_boundary(body, request.continuation)
+        continuation = self._lookup_continuation(request, body)
+        return NormalizedLookupPage(tuple(results), continuation, len(results))
+
+    def _lookup_post_result(
+        self,
+        entry: object,
+        request: LookupRequest,
+        rank: int,
+        provenance: Mapping[str, Any],
+    ) -> NormalizedLookupResult:
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("id"), int)
+            or isinstance(entry.get("id"), bool)
+            or entry["id"] < 1
+        ):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "lookup post has no stable numeric ID"
+            )
+        # e621 /posts.json lookup responses are full post objects.  Reuse the ordinary
+        # normalizer so null media, dynamic categories, uploader role, sources, hashes,
+        # and relationships keep exactly the same representation as explicit fetches.
+        items = self._with_lookup_provenance(tuple(self._post_items(entry)), provenance)
+        post_id = str(entry["id"])
+        sources = _source_values(entry.get("sources"))
+        tags = entry.get("tags")
+        if not isinstance(tags, dict):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "lookup post lacks categorized tags"
+            )
+        artist_tags = tags.get("artist", [])
+        if not isinstance(artist_tags, list) or any(
+            not isinstance(tag, str) or not tag for tag in artist_tags
+        ):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "lookup post has malformed artist tags"
+            )
+        declared_md5: str | None = None
+        file_obj = entry.get("file")
+        if isinstance(file_obj, dict):
+            value = file_obj.get("md5")
+            if value is not None and not isinstance(value, str):
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE, "lookup post has malformed declared MD5"
+                )
+            declared_md5 = value
+        external_ids = _proven_external_ids(sources)
+        data = {
+            "platform": self.instance_key,
+            "post_id": post_id,
+            "canonical_url": f"{self.instance.base_url}/posts/{post_id}",
+            "query_kind": request.strategy.value,
+            "query": request.material.value if len(request.material.values) == 1 else None,
+            "source": sources[0] if len(sources) == 1 else None,
+            "sources": sources,
+            "external_ids": external_ids,
+            "declared_md5": declared_md5,
+            "uploader_id": entry.get("uploader_id"),
+            "uploader_name": entry.get("uploader_name"),
+            "artist_tags": list(artist_tags),
+            "tag_categories": {
+                category: list(values)
+                for category, values in tags.items()
+                if isinstance(category, str) and isinstance(values, list)
+            },
+            "availability": "deleted"
+            if bool(isinstance(entry.get("flags"), dict) and entry["flags"].get("deleted"))
+            else "available",
+            "lookup_provenance": dict(provenance),
+        }
+        return NormalizedLookupResult("post", post_id, data, rank, items)
+
+    def _lookup_artist_tag_result(
+        self,
+        entry: object,
+        request: LookupRequest,
+        rank: int,
+        provenance: Mapping[str, Any],
+    ) -> NormalizedLookupResult | None:
+        tag_items = self._tag_record_items(entry if isinstance(entry, list) else [entry])
+        if len(tag_items) != 1:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist lookup returned an invalid tag record"
+            )
+        tag = tag_items[0]
+        name = tag.data.get("name")
+        if not isinstance(name, str) or name.casefold() != request.material.value.casefold():
+            return None
+        if tag.data.get("native_category") != "artist":
+            return None
+        tag_id = tag.native_id
+        if tag_id is None:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist lookup tag has no stable ID"
+            )
+        tag_data = dict(tag.data)
+        tag_data["lookup_provenance"] = dict(provenance)
+        tag = NormalizedItem(tag.object_kind, tag_id, tag_data)
+        attribution_id = f"tag:{tag_id}"
+        attribution = self._lookup_attribution_item(attribution_id, name, "tag", tag_id, provenance)
+        data = {
+            **tag_data,
+            "attribution_native_id": attribution_id,
+            "query_kind": request.strategy.value,
+            "query": request.material.value,
+            "rank": rank,
+            "attribution_kind": "artist_tag",
+            "target_kind": "tag",
+            "provider_tag_id": tag_id,
+            "urls": [],
+            "lookup_provenance": dict(provenance),
+        }
+        return NormalizedLookupResult("attribution", tag_id, data, rank, (tag, attribution))
+
+    def _lookup_alias_result(
+        self,
+        entry: object,
+        request: LookupRequest,
+        rank: int,
+        provenance: Mapping[str, Any],
+    ) -> NormalizedLookupResult | None:
+        alias_items = self._alias_items(entry if isinstance(entry, list) else [entry])
+        if len(alias_items) != 1:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist alias lookup returned an invalid record"
+            )
+        alias = alias_items[0]
+        antecedent = alias.data.get("antecedent")
+        consequent = alias.data.get("consequent")
+        status = alias.data.get("status")
+        post_count = alias.data.get("post_count")
+        if post_count is not None and (
+            not isinstance(post_count, int) or isinstance(post_count, bool) or post_count < 0
+        ):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist alias post count is malformed"
+            )
+        if (
+            not isinstance(antecedent, str)
+            or antecedent.casefold() != request.material.value.casefold()
+            or not isinstance(consequent, str)
+            or not consequent
+            or not isinstance(status, str)
+            or status.casefold() not in {"active", "approved"}
+        ):
+            return None
+        try:
+            _bounded_lookup_text(consequent, "canonical artist alias")
+        except ValueError as error:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist alias consequent is malformed"
+            ) from error
+        alias_id = alias.native_id
+        if alias_id is None:
+            raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "artist alias has no stable ID")
+        alias_data = dict(alias.data)
+        alias_data["active"] = True
+        alias_data["lookup_provenance"] = dict(provenance)
+        alias = NormalizedItem(alias.object_kind, alias_id, alias_data)
+        attribution_id = f"alias:{alias_id}"
+        attribution = self._lookup_attribution_item(
+            attribution_id, consequent, "alias", alias_id, provenance
+        )
+        data = {
+            **alias_data,
+            "attribution_native_id": attribution_id,
+            "name": consequent,
+            "normalized_name": consequent.casefold(),
+            "query_kind": request.strategy.value,
+            "query": request.material.value,
+            "rank": rank,
+            "attribution_kind": "approved_artist_alias",
+            "target_kind": "tag",
+            "canonical_consequent": consequent,
+            "urls": [],
+            "lookup_provenance": dict(provenance),
+        }
+        return NormalizedLookupResult("attribution", alias_id, data, rank, (alias, attribution))
+
+    def _lookup_attribution_item(
+        self,
+        native_id: str,
+        name: str,
+        evidence_kind: str,
+        evidence_id: str,
+        provenance: Mapping[str, Any],
+    ) -> NormalizedItem:
+        return NormalizedItem(
+            "attribution",
+            native_id,
+            {
+                "platform": self.instance_key,
+                "name": name,
+                "other_names": [],
+                "urls": [],
+                "domains": [],
+                "linked_user_id": None,
+                "account": False,
+                "attribution_kind": evidence_kind,
+                "provider_evidence_id": evidence_id,
+                "lookup_provenance": dict(provenance),
+            },
+        )
+
+    @staticmethod
+    def _with_lookup_provenance(
+        items: tuple[NormalizedItem, ...], provenance: Mapping[str, Any]
+    ) -> tuple[NormalizedItem, ...]:
+        return tuple(
+            NormalizedItem(
+                item.object_kind,
+                item.native_id,
+                {**item.data, "lookup_provenance": dict(provenance)},
+            )
+            for item in items
+        )
+
+    def _validate_lookup_boundary(
+        self, body: list[object], continuation: LookupContinuation | None
+    ) -> None:
+        if continuation is None or continuation.page is None:
+            return
+        match = _PAGE_RE.fullmatch(continuation.page)
+        if match is None:
+            raise ValueError("e621 lookup continuation page must be an opaque b<ID> boundary")
+        boundary = int(match.group(1))
+        for entry in body:
+            if not isinstance(entry, dict) or not isinstance(entry.get("id"), int):
+                continue
+            if entry["id"] >= boundary:
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE,
+                    "lookup response crossed or repeated its keyset boundary",
+                )
+
+    def _lookup_continuation(
+        self, request: LookupRequest, body: list[object]
+    ) -> LookupContinuation | None:
+        if request.strategy in {
+            LookupStrategy.ARTIST_EXACT_NAME,
+            LookupStrategy.ARTIST_ALIAS,
+        }:
+            return None
+        cursor = request.continuation
+        alias_index = cursor.alias_index if cursor is not None else 0
+        last_id = body[-1].get("id") if body and isinstance(body[-1], dict) else None
+        page_size = min(request.limit, self.instance.page_size)
+        if isinstance(last_id, int) and not isinstance(last_id, bool) and len(body) >= page_size:
+            return LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                f"b{last_id}",
+                alias_index,
+            )
+        if request.strategy is LookupStrategy.SOURCE_POST_URL and alias_index + 1 < len(
+            request.material.values
+        ):
+            return LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                None,
+                alias_index + 1,
+            )
+        return None
 
     def _validate_envelope(self, response: ResponseEnvelope) -> None:
         if response.provider != self.provider_key or response.instance != self.instance_key:
@@ -844,6 +1327,70 @@ def _nonempty_target(value: str, name: str) -> str:
     if len(value) > _MAX_TARGET_LENGTH or any(ord(char) < 32 for char in value):
         raise ValueError(f"e621 {name} must be bounded text without control characters")
     return value
+
+
+def _source_values(value: object) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "lookup post sources are malformed")
+    return list(value)
+
+
+def _proven_external_ids(sources: list[str]) -> dict[str, str]:
+    """Extract only stable external IDs explicitly proven by returned source URLs."""
+
+    pixiv_ids: set[str] = set()
+    for source in sources:
+        reference = recognize_url(source).reference
+        if (
+            reference is not None
+            and reference.platform == "pixiv"
+            and reference.object_kind == "post"
+            and reference.identifier_kind == "stable_id"
+            and reference.native_id.isdecimal()
+        ):
+            pixiv_ids.add(reference.native_id)
+    return {"pixiv_id": next(iter(pixiv_ids))} if len(pixiv_ids) == 1 else {}
+
+
+def _bounded_lookup_text(value: str, name: str) -> None:
+    """Defensive check that lookup query text is bounded and non-control.
+
+    ``LookupQueryMaterial`` already enforces a length ceiling and rejects control
+    characters; this guards the render path independently so a future caller that
+    constructs material differently still fails closed before transport.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"e621 {name} must be non-empty text")
+    if any(ord(char) < 32 for char in value):
+        raise ValueError(f"e621 {name} must not contain control characters")
+    if len(value) > _MAX_LOOKUP_TEXT:
+        raise ValueError(f"e621 {name} exceeds {_MAX_LOOKUP_TEXT} characters")
+
+
+def _exact_source_lookup_text(value: str) -> None:
+    _bounded_lookup_text(value, "source post URL")
+    if "*" in value or any(char.isspace() for char in value):
+        raise ValueError("e621 source post URL must be one exact source token")
+
+
+def _external_post_source(material: LookupQueryMaterial, value: str) -> str:
+    """Render the e621 exact source query for an external post-id material.
+
+    e621 exposes no per-platform external-id metatag; its only exact match for a
+    foreign post is the ``source:`` metatag against the canonical source URL.
+    Only the stable, documented pixiv artwork URL is constructed; any other
+    platform (or a non-numeric id) fails closed before any request.
+    """
+
+    platform = material.platform
+    if platform == "pixiv":
+        if not value.isdecimal() or int(value) < 1:
+            raise ValueError("external pixiv post id must be a positive numeric id")
+        return f"https://www.pixiv.net/artworks/{int(value)}"
+    raise ValueError(f"e621 lookup does not support external platform {platform!r}")
 
 
 def _mime_type(extension: object) -> str | None:

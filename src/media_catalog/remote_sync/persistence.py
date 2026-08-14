@@ -58,6 +58,7 @@ class NormalizedPageWriter:
     ) -> NormalizedWriteResult:
         accounts: dict[tuple[str, str], int] = {}
         posts: dict[tuple[str, str], int] = {}
+        top_level_post_ids: set[int] = set()
         for item in page.items:
             data = item.data
             platform = _required_text(data, "platform")
@@ -114,6 +115,7 @@ class NormalizedPageWriter:
                     raw_observation_id=raw_observation_id,
                 )
                 posts[(platform, native_id)] = result.id
+                top_level_post_ids.add(result.id)
                 self._write_post_facts(result.id, data, observed_at, raw_observation_id)
             elif item.object_kind == "attribution":
                 self.writer.upsert_attribution(
@@ -246,7 +248,11 @@ class NormalizedPageWriter:
                     _required_text(data, "relation_type"),
                     raw_observation_id=raw_observation_id,
                 )
-        return NormalizedWriteResult(len(page.items), tuple(sorted(set(posts.values()))))
+        # Track top-level posts explicitly so this origin-association boundary
+        # remains correct if relation materialization later changes how the
+        # per-page post cache is maintained. Referenced parent/child posts are
+        # deliberately absent from this result.
+        return NormalizedWriteResult(len(page.items), tuple(sorted(top_level_post_ids)))
 
     def _write_post_facts(
         self,

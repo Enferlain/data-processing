@@ -70,9 +70,7 @@ def _seed_occurrences(database: CatalogDatabase) -> None:
             json.dumps(
                 {
                     "version": "pixiv-variants-v1",
-                    "variants": [
-                        {"role": "original", "url": "https://i.pximg.net/100_p1.png"}
-                    ],
+                    "variants": [{"role": "original", "url": "https://i.pximg.net/100_p1.png"}],
                 },
                 sort_keys=True,
                 separators=(",", ":"),
@@ -127,6 +125,58 @@ def _seed_occurrences(database: CatalogDatabase) -> None:
     )
 
 
+def _seed_e621_occurrence(database: CatalogDatabase) -> None:
+    connection = database.connection
+    connection.execute(
+        """INSERT INTO posts (
+               post_id, platform_id, native_post_id, first_seen_at, last_seen_at
+           ) VALUES (?, ?, '5001', ?, ?)""",
+        (5, _platform(connection, "e621"), NOW, NOW),
+    )
+    connection.execute(
+        """INSERT INTO media_occurrences (
+               media_occurrence_id, post_id, source_key, media_index, media_type,
+           remote_url, preview_url, mime_type, width, height, variants_json,
+               declared_md5, declared_file_size, availability, observed_at
+           ) VALUES (5, 5, 'primary', 0, 'image/jpeg', ?, ?, 'image/jpeg', 1600, 1200,
+                     ?, ?, ?, 'available', ?)""",
+        (
+            "https://static1.e621.net/original/ab/original.jpg",
+            "https://static1.e621.net/preview/original.jpg",
+            json.dumps(
+                {
+                    "version": "provider-variants-v1",
+                    "variants": [
+                        {
+                            "role": "original",
+                            "url": "https://static1.e621.net/original/ab/original.jpg",
+                        },
+                        {
+                            "role": "sample",
+                            "url": "https://static1.e621.net/sample/ab/sample.jpg",
+                            "mime_type": "image/jpeg",
+                            "width": 850,
+                            "height": 638,
+                        },
+                        {
+                            "role": "preview",
+                            "url": "https://static1.e621.net/preview/original.jpg",
+                            "mime_type": "image/jpeg",
+                            "width": 150,
+                            "height": 113,
+                        },
+                    ],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            "abcdef0123456789abcdef0123456789",
+            234567,
+            NOW,
+        ),
+    )
+
+
 def test_planning_selects_pixiv_pages_and_booru_variants_without_conflating_claims(
     tmp_path: Path,
 ) -> None:
@@ -158,21 +208,64 @@ def test_planning_selects_pixiv_pages_and_booru_variants_without_conflating_clai
         "duplicates": 1,
     }
     items = {(item.media_occurrence_id, item.variant_key): item for item in plan.items}
-    assert items[(1, "primary")].request_policy == PolicyIdentity(
-        "pixiv-media", "pixiv-media-v1"
-    )
+    assert items[(1, "primary")].request_policy == PolicyIdentity("pixiv-media", "pixiv-media-v1")
     assert items[(2, "original")].eligibility == "eligible"
     assert items[(3, "original")].eligibility == "already_satisfied"
     assert items[(3, "original")].satisfied_asset_id == 10
     assert items[(3, "original")].declared_md5 == "a" * 32
     assert items[(3, "sample")].declared_md5 is None
     assert items[(3, "sample")].declared_file_size is None
+    assert items[(3, "sample")].declared_mime_type == "image/jpeg"
     assert items[(3, "preview")].eligibility == "eligible"
     assert items[(4, "primary")].exclusion_reason == "unsupported_provider"
     public = str(plan.as_dict())
     assert "selected_url" not in public
     assert "pximg.net" not in public
     assert "donmai.us" not in public
+
+
+def test_e621_original_claims_are_not_projected_to_sample_or_preview(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database, database.transaction():
+        _seed_e621_occurrence(database)
+
+    plan = plan_acquisition(
+        path,
+        [
+            AcquisitionSelection(5, "original"),
+            AcquisitionSelection(5, "sample"),
+            AcquisitionSelection(5, "preview"),
+        ],
+        max_items=3,
+        clock=lambda: NOW,
+    )
+    items = {(item.media_occurrence_id, item.variant_key): item for item in plan.items}
+
+    original = items[(5, "original")]
+    assert original.request_policy == PolicyIdentity("e621-media", "e621-media-v1")
+    assert original.declared_md5 == "abcdef0123456789abcdef0123456789"
+    assert original.declared_file_size == 234567
+    assert original.declared_mime_type == "image/jpeg"
+    assert (original.declared_width, original.declared_height) == (1600, 1200)
+
+    for variant in ("sample", "preview"):
+        derivative = items[(5, variant)]
+        assert derivative.request_policy == PolicyIdentity("e621-media", "e621-media-v1")
+        assert derivative.declared_sha256 is None
+        assert derivative.declared_md5 is None
+        assert derivative.declared_file_size is None
+        assert derivative.declared_mime_type is None
+        assert derivative.declared_width is None
+        assert derivative.declared_height is None
+
+    default_selection = plan_acquisition(
+        path,
+        [AcquisitionSelection(5)],
+        max_items=1,
+        clock=lambda: NOW,
+    ).items[0]
+    assert default_selection.eligibility == "excluded"
+    assert default_selection.exclusion_reason == "unsupported_variant"
 
 
 def test_planning_is_read_only_network_free_and_does_not_create_layout(tmp_path: Path) -> None:
@@ -215,6 +308,7 @@ def test_changed_variant_or_policy_is_stale_before_any_request(tmp_path: Path) -
             max_items=1,
             clock=lambda: NOW,
         )
+
         def changed_policy(_platform: str) -> PolicyIdentity:
             return PolicyIdentity("pixiv-media", "pixiv-media-v2")
 

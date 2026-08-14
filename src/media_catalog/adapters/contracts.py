@@ -456,6 +456,61 @@ class LookupCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
+class LookupPlanContext:
+    """Provider-neutral planning identity and capabilities for one lookup target.
+
+    The lookup planner consumes only this immutable boundary, so a plan's
+    provider, instance, adapter/schema versions, and declared capabilities are
+    supplied by provider configuration rather than a hardcoded provider string.
+    It deliberately carries no request renderer or normalizer (those remain on
+    the adapter) and no private query material (the planner resolves that from
+    the catalog).  Danbooru/AIBooru instances expose a context with the same
+    identity the planner previously hardcoded, so existing plan digests,
+    exclusions, rendered requests, persistence, candidates, and resume behavior
+    are unchanged.
+    """
+
+    provider: str
+    instance_key: str
+    adapter_version: str
+    schema_version: str
+    lookup_capabilities: LookupCapabilities
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "provider", _nonempty(self.provider, "lookup plan provider"))
+        object.__setattr__(
+            self, "instance_key", _nonempty(self.instance_key, "lookup plan instance key")
+        )
+        object.__setattr__(
+            self,
+            "adapter_version",
+            _nonempty(self.adapter_version, "lookup plan adapter version"),
+        )
+        object.__setattr__(
+            self,
+            "schema_version",
+            _nonempty(self.schema_version, "lookup plan schema version"),
+        )
+        if not isinstance(self.lookup_capabilities, LookupCapabilities):
+            raise TypeError("lookup plan capabilities must be LookupCapabilities")
+
+    def __repr__(self) -> str:
+        return (
+            "LookupPlanContext("
+            f"provider={self.provider!r}, instance_key={self.instance_key!r}, "
+            f"adapter_version={self.adapter_version!r}, "
+            f"schema_version={self.schema_version!r})"
+        )
+
+
+class LookupPlanConfiguration(Protocol):
+    """Provider configuration that supplies a neutral lookup planning context."""
+
+    @property
+    def lookup_plan_context(self) -> LookupPlanContext: ...
+
+
+@dataclass(frozen=True, slots=True)
 class EnumerationCapability:
     """A provider's closed declaration for enumerating one stable target kind."""
 

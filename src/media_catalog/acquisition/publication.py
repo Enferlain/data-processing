@@ -57,6 +57,15 @@ def compare_declared_claims(
     item: PlannedAcquisitionItem,
     inspection: InspectionResult,
 ) -> tuple[ClaimComparison, ...]:
+    # e621 occurrence claims describe only its returned original.  Derivative
+    # selections retain only inspection facts for that representation.  Keep
+    # the existing comparison behavior for other providers.
+    if (
+        item.request_policy is not None
+        and item.request_policy.key == "e621-media"
+        and (item.variant_key != "original")
+    ):
+        return ()
     values: tuple[tuple[str, object | None, object], ...] = (
         ("sha256", item.declared_sha256, inspection.sha256),
         ("md5", item.declared_md5, inspection.md5),
@@ -75,9 +84,7 @@ def compare_declared_claims(
             result = "not_comparable"
         else:
             verified = (
-                str(verified_value).lower()
-                if kind in {"sha256", "md5"}
-                else str(verified_value)
+                str(verified_value).lower() if kind in {"sha256", "md5"} else str(verified_value)
             )
             if kind == "mime_type" and "/" not in declared:
                 result = "not_comparable"

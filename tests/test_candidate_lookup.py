@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from media_catalog.adapters import LookupStrategy
-from media_catalog.adapters.danbooru import DANBOORU, DanbooruAdapter
+from media_catalog.adapters.danbooru import AIBOORU, DANBOORU, DanbooruAdapter
 from media_catalog.candidate_lookup import (
     CandidateLookupService,
     LookupLimits,
@@ -77,6 +77,33 @@ def test_plan_is_read_only_redacted_and_bounded(tmp_path: Path) -> None:
     public = json.dumps(plan.as_dict())
     assert "thiccwithaq" not in public
     assert plan.exclusions == ({"strategy": "verified_md5", "reason": "missing_seed_material"},)
+
+
+def test_unsupported_strategy_is_excluded_through_neutral_context(tmp_path: Path) -> None:
+    # OpenSpec task 5.1: unsupported-strategy exclusions now consult the neutral
+    # planning context's capabilities rather than a provider-specific instance.
+    # AIBooru does not support artist_text, so it is excluded without a request.
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database, database.transaction():
+        account_id = (
+            CatalogWriter(database)
+            .upsert_account(AccountRecord("x", "900", "2026-08-11T00:00:00Z"))
+            .id
+        )
+    plan = plan_candidate_lookup(
+        path,
+        f"account:{account_id}",
+        AIBOORU,
+        (LookupStrategy.ARTIST_TEXT,),
+        limits=LookupLimits(1, 1, 10, 30),
+        search_term="anything",
+    )
+    assert plan.provider == "aibooru"
+    assert plan.items == ()
+    assert plan.exclusions == (
+        {"strategy": "artist_text", "reason": "unsupported_provider_capability"},
+    )
+    assert plan.digest
 
 
 def test_lookup_executes_persists_and_never_decides(tmp_path: Path) -> None:

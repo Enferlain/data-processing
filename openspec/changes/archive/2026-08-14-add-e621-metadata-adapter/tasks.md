@@ -27,27 +27,27 @@
 
 ## 5. Candidate lookup integration
 
-- [ ] 5.1 Extract the minimal provider-neutral lookup planning/configuration boundary needed to remove hardcoded Danbooru identity while preserving all existing Danbooru/AIBooru plan digests, exclusions, requests, persistence, candidates, and resume behavior.
-- [ ] 5.2 Declare and implement e621 source-post URL, external post ID, declared MD5, verified MD5, exact artist-name, and approved artist-alias lookup strategies; explicitly exclude arbitrary fuzzy/unrestricted text search.
-- [ ] 5.3 Normalize e621 lookup results into post candidates or attribution/weak leads with raw provenance, keeping hashes, tags, aliases, uploaders, artist records, and post matches from auto-confirming identity or authorship.
-- [ ] 5.4 Add offline-plan, stale-material, request-budget, pagination/resume, result-idempotency, rejected-decision preservation, alias-status, privacy, and Danbooru/AIBooru regression tests plus CLI provider routing.
+- [x] 5.1 Extract the minimal provider-neutral lookup planning/configuration boundary needed to remove hardcoded Danbooru identity while preserving all existing Danbooru/AIBooru plan digests, exclusions, requests, persistence, candidates, and resume behavior.
+- [x] 5.2 Declare and implement e621 source-post URL, external post ID, declared MD5, verified MD5, exact artist-name, and approved artist-alias lookup strategies; explicitly exclude arbitrary fuzzy/unrestricted text search.
+- [x] 5.3 Normalize e621 lookup results into post candidates or attribution/weak leads with raw provenance, keeping hashes, tags, aliases, uploaders, artist records, and post matches from auto-confirming identity or authorship.
+- [x] 5.4 Add offline-plan, stale-material, request-budget, pagination/resume, result-idempotency, rejected-decision preservation, alias-status, privacy, and Danbooru/AIBooru regression tests plus CLI provider routing.
 
 ## 6. Artist-library expansion integration
 
-- [ ] 6.1 Register a versioned e621 attribution enumeration capability that resolves only stable retained attribution targets and privately renders the exact canonical artist tag.
-- [ ] 6.2 Add offline retained-count estimation only for an unambiguous current canonical artist-category tag observation; keep aliases, filters, missing/stale observations, and arbitrary searches unknown without a probe/listing request.
-- [ ] 6.3 Execute and resume e621 expansions through existing origin/checkpoint/post-association contracts, preserving `b<ID>` lineage, target-scoped browsing, no recursive expansion, and no liked/bookmarked inheritance.
-- [ ] 6.4 Add explicit/confirmed authority, ambiguity, stale tag/alias/capability, count provenance, paused resume, sparse/unavailable media, target-scoped selectors, privacy, CLI, and existing-provider regression tests.
+- [x] 6.1 Register a versioned e621 attribution enumeration capability that resolves only stable retained attribution targets and privately renders the exact canonical artist tag.
+- [x] 6.2 Add offline retained-count estimation only for an unambiguous current canonical artist-category tag observation; keep aliases, filters, missing/stale observations, and arbitrary searches unknown without a probe/listing request.
+- [x] 6.3 Execute and resume e621 expansions through existing origin/checkpoint/post-association contracts, preserving `b<ID>` lineage, target-scoped browsing, no recursive expansion, and no liked/bookmarked inheritance.
+- [x] 6.4 Add explicit/confirmed authority, ambiguity, stale tag/alias/capability, count provenance, paused resume, sparse/unavailable media, target-scoped selectors, privacy, CLI, and existing-provider regression tests.
 
 ## 7. Media acquisition integration
 
-- [ ] 7.1 Add a versioned e621 media policy for returned HTTPS original/sample/preview URLs with a bounded verified `staticN.e621.net` host rule, redirect validation, descriptive User-Agent, response-type expectations, and no URL derivation.
-- [ ] 7.2 Ensure original variants compare verified output with declared original MD5/size/type/dimensions while sample/preview variants retain only their own verified representation facts.
-- [ ] 7.3 Add plan/execution tests for allowed and rejected hosts/redirects, null URLs, original claim match/mismatch, sample/preview claim separation, interruption/quarantine/CAS reuse, redacted output, and zero implicit acquisition from metadata or expansion commands.
+- [x] 7.1 Add a versioned e621 media policy for returned HTTPS original/sample/preview URLs with a bounded verified `staticN.e621.net` host rule, redirect validation, descriptive User-Agent, response-type expectations, and no URL derivation.
+- [x] 7.2 Ensure original variants compare verified output with declared original MD5/size/type/dimensions while sample/preview variants retain only their own verified representation facts.
+- [x] 7.3 Add plan/execution tests for allowed and rejected hosts/redirects, null URLs, original claim match/mismatch, sample/preview claim separation, interruption/quarantine/CAS reuse, redacted output, and zero implicit acquisition from metadata or expansion commands.
 
 ## 8. Documentation and final verification
 
-- [ ] 8.1 Update the catalog guide, roadmap current/completed capabilities, and changelog with e621 configuration, metadata, lookup, expansion, browsing/acquisition handoffs, limitations, pacing, privacy, and troubleshooting.
-- [ ] 8.2 Add disabled-by-default live e621 metadata smoke tests with descriptive User-Agent and hard request/record/time limits; verify they never request returned media URLs and document how to opt in safely.
-- [ ] 8.3 Run focused adapter, schema, synchronization, lookup, expansion, media, acquisition, CLI, privacy, migration, and compatibility tests; run changed-file Ruff formatting plus repository Ruff, blocking ty, and full pytest gates.
-- [ ] 8.4 Validate the OpenSpec change strictly, run the required implementation review, address actionable findings, rerun affected gates, update/close Beads work, and sync/archive only after every task is complete.
+- [x] 8.1 Update the catalog guide, roadmap current/completed capabilities, and changelog with e621 configuration, metadata, lookup, expansion, browsing/acquisition handoffs, limitations, pacing, privacy, and troubleshooting.
+- [x] 8.2 Add disabled-by-default live e621 metadata smoke tests with descriptive User-Agent and hard request/record/time limits; verify they never request returned media URLs and document how to opt in safely.
+- [x] 8.3 Run focused adapter, schema, synchronization, lookup, expansion, media, acquisition, CLI, privacy, migration, and compatibility tests; run changed-file Ruff formatting plus repository Ruff, blocking ty, and full pytest gates.
+- [x] 8.4 Validate the OpenSpec change strictly, run the required implementation review, address actionable findings, rerun affected gates, update/close Beads work, and sync/archive only after every task is complete.

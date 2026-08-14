@@ -9,6 +9,7 @@ import pytest
 
 import media_catalog.cli as cli_module
 from media_catalog.adapters import AdapterOperation
+from media_catalog.candidate_lookup import LookupExecutionResult, LookupLimits
 from media_catalog.cli import build_parser, main
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
@@ -20,6 +21,7 @@ from media_catalog.records import (
     OccurrenceSourceRecord,
     PostRecord,
     RemoteRunRecord,
+    TagObservationRecord,
 )
 from media_catalog.remote_sync import SyncResult
 from media_catalog.writer import CatalogWriter
@@ -547,6 +549,306 @@ def test_lookup_plan_and_queries_are_offline_and_redacted(
     assert json.loads(capsys.readouterr().out)["results"] == []
 
 
+def test_lookup_parser_accepts_e621_provider(tmp_path: Path) -> None:
+    parser = build_parser()
+    catalog = str(tmp_path / "catalog.sqlite3")
+    plan = parser.parse_args(
+        [
+            "lookup",
+            "plan",
+            catalog,
+            "post:1",
+            "--provider",
+            "e621",
+            "--strategy",
+            "source_post_url",
+        ]
+    )
+    assert plan.provider == "e621"
+    run = parser.parse_args(
+        [
+            "lookup",
+            "run",
+            catalog,
+            "post:1",
+            "--provider",
+            "e621",
+            "--strategy",
+            "source_post_url",
+        ]
+    )
+    assert run.provider == "e621"
+    resume = parser.parse_args(["lookup", "resume", catalog, "7", "--provider", "e621"])
+    assert resume.provider == "e621"
+
+
+def test_e621_lookup_plan_uses_e621_identity_and_capability_exclusions(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        post_id = (
+            CatalogWriter(database)
+            .upsert_post(
+                PostRecord(
+                    "x",
+                    "12345",
+                    NOW,
+                    canonical_url="https://x.com/acme/status/12345",
+                )
+            )
+            .id
+        )
+
+    main(
+        [
+            "lookup",
+            "plan",
+            str(catalog),
+            f"post:{post_id}",
+            "--provider",
+            "e621",
+            "--strategy",
+            "artist_text",
+            "--json",
+        ]
+    )
+    excluded = json.loads(capsys.readouterr().out)
+    assert excluded["provider"] == "e621"
+    assert excluded["count"] == 0
+    assert excluded["network_requested"] is False
+    assert excluded["exclusions"] == [
+        {"strategy": "artist_text", "reason": "unsupported_provider_capability"}
+    ]
+
+    main(
+        [
+            "lookup",
+            "plan",
+            str(catalog),
+            f"post:{post_id}",
+            "--provider",
+            "e621",
+            "--strategy",
+            "source_post_url",
+            "--json",
+        ]
+    )
+    planned = json.loads(capsys.readouterr().out)
+    assert planned["provider"] == "e621"
+    assert planned["count"] == 1
+    item = planned["items"][0]
+    assert item["provider"] == "e621"
+    assert item["instance"] == "e621"
+    assert item["strategy"] == "source_post_url"
+    assert item["adapter_version"] == "e621-native-v1"
+    assert item["schema_version"] == "e621-json-v1"
+    assert "acme" not in json.dumps(planned)
+
+
+@pytest.mark.parametrize("lookup_command", ["run", "resume"])
+def test_e621_lookup_run_and_resume_route_through_adapter_with_provider_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lookup_command: str,
+) -> None:
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        post_id = (
+            CatalogWriter(database)
+            .upsert_post(PostRecord("x", "1", NOW, canonical_url="https://x.com/acme/status/1"))
+            .id
+        )
+
+    adapter_calls: list[tuple[object, object, object]] = []
+    service_intervals: list[float] = []
+    plan_limits: list[LookupLimits] = []
+    resume_calls: list[tuple[int, LookupLimits]] = []
+
+    class FakeAdapter:
+        def __init__(self, instance: object, *, client: object, credentials: object) -> None:
+            adapter_calls.append((instance, client, credentials))
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: FakeAdapter,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            service_intervals.append(minimum_interval_seconds)
+
+        def plan(self, seed, strategies, *, limits, search_term=None):
+            plan_limits.append(limits)
+            return "plan-token"
+
+        def execute(self, _plan):
+            return (
+                LookupExecutionResult(
+                    1,
+                    "e621",
+                    "source_post_url",
+                    f"post:{post_id}",
+                    "complete",
+                    "success",
+                    0,
+                    0,
+                    0,
+                ),
+            )
+
+        def resume(self, run_id, *, limits):
+            resume_calls.append((run_id, limits))
+            return LookupExecutionResult(
+                1,
+                "e621",
+                "source_post_url",
+                f"post:{post_id}",
+                "complete",
+                "success",
+                0,
+                0,
+                0,
+            )
+
+    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "CandidateLookupService", FakeService)
+    monkeypatch.delenv("E621_USERNAME", raising=False)
+    monkeypatch.delenv("E621_API_KEY", raising=False)
+
+    argv = ["lookup", lookup_command, str(catalog)]
+    if lookup_command == "run":
+        argv += [f"post:{post_id}", "--provider", "e621", "--strategy", "source_post_url"]
+    else:
+        argv += ["9", "--provider", "e621"]
+    argv += ["--max-results", "5", "--json"]
+    main(argv)
+
+    assert len(adapter_calls) == 1
+    assert adapter_calls[0][0] is cli_module.E621
+    assert adapter_calls[0][1] is not None
+    assert adapter_calls[0][2] is None
+    assert service_intervals == [cli_module.E621.minimum_interval_seconds]
+    forwarded = LookupLimits(3, 3, 5, 60)
+    if lookup_command == "run":
+        assert plan_limits == [forwarded]
+        assert resume_calls == []
+    else:
+        assert resume_calls == [(9, forwarded)]
+        assert plan_limits == []
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_e621_lookup_partial_credentials_fail_with_safe_guidance(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    as_json: bool,
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    sentinel = "e621-secret-value"
+    monkeypatch.setenv("E621_USERNAME", sentinel)
+    monkeypatch.delenv("E621_API_KEY", raising=False)
+
+    argv = [
+        "lookup",
+        "run",
+        str(catalog),
+        "post:1",
+        "--provider",
+        "e621",
+        "--strategy",
+        "source_post_url",
+    ]
+    if as_json:
+        argv.append("--json")
+    with pytest.raises(SystemExit) as raised:
+        main(argv)
+    message = str(raised.value)
+    assert sentinel not in message
+    assert "E621_USERNAME" in message
+    assert "E621_API_KEY" in message
+    assert "configure both" in message
+    if as_json:
+        payload = json.loads(message)
+        assert sentinel not in json.dumps(payload)
+        assert "error" in payload
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    "provider, instance",
+    [("danbooru", cli_module.DANBOORU), ("aibooru", cli_module.AIBOORU)],
+)
+def test_danbooru_family_lookup_routing_is_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    instance: object,
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    adapter_calls: list[tuple[object, object, object]] = []
+    service_intervals: list[float] = []
+
+    class FakeAdapter:
+        def __init__(self, inst: object, *, client: object, credentials: object) -> None:
+            adapter_calls.append((inst, client, credentials))
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: FakeAdapter,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            service_intervals.append(minimum_interval_seconds)
+
+        def plan(self, seed, strategies, *, limits, search_term=None):
+            return "plan-token"
+
+        def execute(self, _plan):
+            return ()
+
+    monkeypatch.setattr(cli_module, "DanbooruAdapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "CandidateLookupService", FakeService)
+    monkeypatch.delenv(instance.login_env, raising=False)
+    monkeypatch.delenv(instance.api_key_env, raising=False)
+    main(
+        [
+            "lookup",
+            "run",
+            str(catalog),
+            "post:1",
+            "--provider",
+            provider,
+            "--strategy",
+            "source_post_url",
+            "--json",
+        ]
+    )
+    assert len(adapter_calls) == 1
+    assert adapter_calls[0][0] is instance
+    assert service_intervals == [instance.minimum_interval_seconds]
+
+
 def test_lookup_run_listing_succeeds_when_history_contains_failure(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -902,3 +1204,235 @@ def test_library_plan_cli_is_read_only_and_unsupported_probe_makes_no_request(
     probed = json.loads(capsys.readouterr().out)
     assert probed["outcome"] == "unsupported"
     assert probed["request_count"] == 0
+
+
+def _seed_e621_library_target(catalog: Path) -> tuple[int, int]:
+    with CatalogDatabase(catalog) as database, database.transaction():
+        writer = CatalogWriter(database)
+        seed_id = writer.upsert_account(AccountRecord("x", "9001", NOW)).id
+        attribution_id = writer.upsert_attribution(
+            AttributionRecord(
+                "e621",
+                "tag:12345",
+                "e621-native-v1",
+                NOW,
+                instance_host="e621.net",
+            )
+        ).id
+        writer.upsert_tag_record(
+            TagObservationRecord(
+                "e621",
+                "artist",
+                "canonical_artist_tag",
+                "canonical_artist_tag",
+                NOW,
+                "provider-tag-v1",
+                provider_tag_id="12345",
+                native_category="artist",
+                native_category_code=1,
+            )
+        )
+    return seed_id, attribution_id
+
+
+def test_e621_library_parser_accepts_stable_attribution_target_and_resume(
+    tmp_path: Path,
+) -> None:
+    catalog = str(tmp_path / "catalog.sqlite3")
+    parser = build_parser()
+    run = parser.parse_args(
+        [
+            "library",
+            "run",
+            catalog,
+            "account:1",
+            "--target",
+            "attribution:2",
+            "--max-requests",
+            "4",
+        ]
+    )
+    assert run.library_command == "run"
+    assert run.target == "attribution:2"
+    assert run.max_requests == 4
+    resume = parser.parse_args(["library", "resume", catalog, "9", "--json"])
+    assert resume.library_command == "resume"
+    assert resume.execution_id == 9
+
+
+@pytest.mark.parametrize("library_command", ["run", "resume"])
+@pytest.mark.parametrize("as_json", [False, True])
+def test_e621_library_cli_routes_with_provider_floor_and_private_target(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    library_command: str,
+    as_json: bool,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    seed_id, attribution_id = _seed_e621_library_target(catalog)
+    target_reference = f"attribution:{attribution_id}"
+    selected_plan = cli_module.plan_library_expansion(
+        catalog,
+        f"account:{seed_id}",
+        target=target_reference,
+        selection_note="operator selected the e621 artist tag",
+    )
+    if library_command == "resume":
+        monkeypatch.setattr(
+            cli_module,
+            "replan_library_execution",
+            lambda _database, _execution_id: selected_plan,
+        )
+
+    adapter_calls: list[tuple[object, object]] = []
+    service_calls: list[tuple[str, object, int | None]] = []
+    service_intervals: list[float] = []
+
+    class FakeAdapter:
+        instance_key = "e621"
+        adapter_version = "e621-native-v1"
+        schema_version = "e621-json-v1"
+
+        def __init__(self, instance: object, *, client: object, credentials: object) -> None:
+            adapter_calls.append((instance, credentials))
+            assert client is not None
+
+    class FakeResult:
+        def as_dict(self) -> dict[str, object]:
+            return {
+                "library_expansion_plan_id": 21,
+                "library_expansion_execution_id": 22,
+                "target": target_reference,
+                "status": "complete",
+                "outcome": "success",
+                "request_count": 1,
+                "page_count": 1,
+                "record_count": 1,
+            }
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: FakeAdapter,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            service_intervals.append(minimum_interval_seconds)
+
+        def run(self, plan: object) -> FakeResult:
+            service_calls.append(("run", plan, None))
+            return FakeResult()
+
+        def resume(self, plan: object, execution_id: int) -> FakeResult:
+            service_calls.append(("resume", plan, execution_id))
+            return FakeResult()
+
+    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "ArtistLibraryExpansionService", FakeService)
+    monkeypatch.setenv("E621_USERNAME", "external-user")
+    monkeypatch.setenv("E621_API_KEY", "external-secret")
+
+    argv = ["library", library_command, str(catalog)]
+    if library_command == "run":
+        argv += [
+            f"account:{seed_id}",
+            "--target",
+            target_reference,
+            "--selection-note",
+            "operator selected the e621 artist tag",
+            "--max-requests",
+            "7",
+            "--max-pages",
+            "8",
+            "--max-records",
+            "9",
+            "--max-seconds",
+            "11",
+        ]
+    else:
+        argv += ["77"]
+    if as_json:
+        argv += ["--json"]
+    main(argv)
+
+    rendered = capsys.readouterr().out
+    if as_json:
+        output = json.loads(rendered)
+        assert output["catalog"] == "catalog.sqlite3"
+        assert output["target"] == target_reference
+        assert output["status"] == "complete"
+    else:
+        assert "catalog: catalog.sqlite3" in rendered
+        assert f"target: {target_reference}" in rendered
+        assert "status: complete" in rendered
+    assert "canonical_artist_tag" not in rendered
+    assert "external-user" not in rendered
+    assert "external-secret" not in rendered
+    assert adapter_calls[0][0] is cli_module.E621
+    credentials = adapter_calls[0][1]
+    assert credentials.username == "external-user"
+    assert credentials.api_key == "external-secret"
+    assert service_intervals == [cli_module.E621.minimum_interval_seconds]
+    assert len(service_calls) == 1
+    called, plan, execution_id = service_calls[0]
+    assert called == library_command
+    assert plan.selected is not None
+    assert plan.selected.target.native_id == "tag:12345"
+    if library_command == "run":
+        assert (
+            plan.limits.requests,
+            plan.limits.pages,
+            plan.limits.records,
+            plan.limits.seconds,
+        ) == (
+            7,
+            8,
+            9,
+            11,
+        )
+        assert execution_id is None
+    else:
+        assert execution_id == 77
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_e621_library_partial_credentials_fail_without_secret_leak(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    as_json: bool,
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    seed_id, attribution_id = _seed_e621_library_target(catalog)
+    sentinel = "e621-library-secret"
+    monkeypatch.setenv("E621_USERNAME", "external-user")
+    monkeypatch.setenv("E621_API_KEY", sentinel)
+    # Force credentials to be incomplete after parser/plan work, before any client request.
+    monkeypatch.delenv("E621_USERNAME", raising=False)
+
+    argv = [
+        "library",
+        "run",
+        str(catalog),
+        f"account:{seed_id}",
+        "--target",
+        f"attribution:{attribution_id}",
+        "--selection-note",
+        "operator selected the e621 artist tag",
+    ]
+    if as_json:
+        argv.append("--json")
+    with pytest.raises(SystemExit) as raised:
+        main(argv)
+    message = str(raised.value)
+    assert sentinel not in message
+    assert "E621_USERNAME" in message
+    assert "E621_API_KEY" in message
+    assert "configure both" in message
+    if as_json:
+        payload = json.loads(message)
+        assert sentinel not in json.dumps(payload)
+        assert "error" in payload
+    assert capsys.readouterr().out == ""

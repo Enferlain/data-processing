@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from media_catalog.adapters import Adapter, AdapterOperation
+from media_catalog.adapters.e621.config import PROVIDER_KEY as E621_PROVIDER_KEY
 from media_catalog.database import CatalogDatabase
-from media_catalog.library.contracts import LibraryExpansionPlan
-from media_catalog.library.planning import plan_library_expansion, replan_library_execution
+from media_catalog.library.contracts import ExpansionTarget, LibraryExpansionPlan
+from media_catalog.library.planning import (
+    e621_tag_provider_id,
+    plan_library_expansion,
+    replan_library_execution,
+)
 from media_catalog.library.probes import materialize_expansion_plan
 from media_catalog.records import LibraryExpansionExecutionRecord, LibraryExpansionPostRecord
 from media_catalog.remote_sync import MetadataSyncService, SyncLimits, SyncResult
@@ -200,6 +205,8 @@ class ArtistLibraryExpansionService:
         target = selected.target
         if target.kind.value == "account":
             return target.native_id
+        if target.provider == E621_PROVIDER_KEY:
+            return self._render_e621_attribution_target(target)
         row = self.database.connection.execute(
             """SELECT name FROM attribution_names
                 WHERE attribution_entity_id = ? AND name_kind = 'primary'
@@ -208,6 +215,25 @@ class ArtistLibraryExpansionService:
         ).fetchone()
         if row is None:
             raise ValueError("attribution expansion target has no current primary name")
+        return str(row["name"])
+
+    def _render_e621_attribution_target(self, target: ExpansionTarget) -> str:
+        # Re-resolve the stable tag id from the durable plan material, verify the
+        # retained tag is still a current artist tag, and privately return the
+        # exact canonical tag name.  Target revision/freshness is already enforced
+        # by _fresh_plan before rendering; this re-resolution is the source of the
+        # canonical name and a defensive current-category check.
+        tag_provider_id = e621_tag_provider_id(target.native_id)
+        row = self.database.connection.execute(
+            """SELECT tag.name, tag.category, tag.native_category
+                 FROM tags tag JOIN platforms platform USING(platform_id)
+                WHERE platform.platform_key = ? AND tag.provider_tag_id = ?""",
+            (E621_PROVIDER_KEY, tag_provider_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError("e621 expansion target has no current artist tag")
+        if str(row["category"]) != "artist" or str(row["native_category"]) != "artist":
+            raise ValueError("e621 expansion target tag is no longer a current artist tag")
         return str(row["name"])
 
     def _fresh_plan(self, plan: LibraryExpansionPlan) -> LibraryExpansionPlan:

@@ -16,6 +16,7 @@ from media_catalog.acquisition.planning import (
 )
 from media_catalog.acquisition.policies import (
     CredentialResolver,
+    RequestPolicyError,
     media_request_policy_for_platform,
     safe_failure_diagnostic,
 )
@@ -206,8 +207,8 @@ class _DurableTransferState:
             finished_at=timestamp if transition.state != "running" else None,
         )
         with self.database.transaction():
-            self.attempt_ids[transition.attempt_number] = (
-                self.writer.record_acquisition_attempt(record)
+            self.attempt_ids[transition.attempt_number] = self.writer.record_acquisition_attempt(
+                record
             )
 
     def _finish_current_partial(self, state: str, timestamp: str) -> None:
@@ -345,9 +346,7 @@ class _DurableTransferState:
 
     def finish_partial(self, *, complete: bool, retained: bool) -> None:
         if self.partial_record is not None and not retained:
-            self._finish_current_partial(
-                "consumed" if complete else "discarded", self.clock()
-            )
+            self._finish_current_partial("consumed" if complete else "discarded", self.clock())
 
     @property
     def last_attempt_id(self) -> int | None:
@@ -393,10 +392,13 @@ class AcquisitionService:
         if len(preview.items) > limits.max_items:
             raise ValueError("acquisition preview exceeds the execution item limit")
         writer = CatalogWriter(self.database)
-        with AssetStorage.for_remote(
-            self.managed_root,
-            limits=self.inspection_limits,
-        ) as storage, storage.lock():
+        with (
+            AssetStorage.for_remote(
+                self.managed_root,
+                limits=self.inspection_limits,
+            ) as storage,
+            storage.lock(),
+        ):
             root_identity = f"{storage.media.identity[0]}:{storage.media.identity[1]}"
             started_at = self.clock()
             with self.database.transaction():
@@ -510,9 +512,7 @@ class AcquisitionService:
                                 self.clock(),
                                 outcome="budget_exhausted",
                                 retryable=True,
-                                diagnostic=safe_failure_diagnostic(
-                                    "catalog", "budget_exhausted"
-                                ),
+                                diagnostic=safe_failure_diagnostic("catalog", "budget_exhausted"),
                             )
                         )
                     deferred += 1
@@ -573,11 +573,36 @@ class AcquisitionService:
                     failed += 1
                     counts[outcome] += 1
                     continue
-                recipe = policy.recipe(
-                    media_occurrence_id=item.media_occurrence_id,
-                    variant_key=item.variant_key,
-                    selected_url=item.selected_url,
-                )
+                try:
+                    recipe = policy.recipe(
+                        media_occurrence_id=item.media_occurrence_id,
+                        variant_key=item.variant_key,
+                        selected_url=item.selected_url,
+                    )
+                except RequestPolicyError:
+                    # A plan may have been created before a provider URL was
+                    # found to violate its installed policy. Keep the failure
+                    # bounded and durable, and never let the untrusted target
+                    # escape through an exception or reach the transport.
+                    outcome = "policy_failure"
+                    with self.database.transaction():
+                        writer.record_acquisition_run_item(
+                            AcquisitionRunItemRecord(
+                                run_id,
+                                plan_item_id,
+                                "failed",
+                                created_at,
+                                self.clock(),
+                                outcome=outcome,
+                                diagnostic=safe_failure_diagnostic(platform, outcome),
+                            )
+                        )
+                    failed += 1
+                    counts[outcome] += 1
+                    result_items.append(
+                        {"item_key": item.item_key, "state": "failed", "outcome": outcome}
+                    )
+                    continue
                 with self.database.transaction():
                     writer.record_acquisition_run_item(
                         AcquisitionRunItemRecord(
@@ -643,9 +668,7 @@ class AcquisitionService:
                             if publication.outcome == "hash_mismatch"
                             else "existing"
                         )
-                        state = (
-                            "quarantined" if outcome == "hash_mismatch" else "complete"
-                        )
+                        state = "quarantined" if outcome == "hash_mismatch" else "complete"
                         if state == "complete":
                             completed += 1
                         else:
@@ -688,13 +711,9 @@ class AcquisitionService:
                 )
                 retry_resume = (_resumes or {}).get(item.item_key)
                 if retry_resume is not None:
-                    durable.claim_resume(
-                        retry_resume.resume, retry_resume.source_record
-                    )
+                    durable.claim_resume(retry_resume.resume, retry_resume.source_record)
 
-                remaining_seconds = max(
-                    0.001, run_deadline - self.transfer_engine.clock()
-                )
+                remaining_seconds = max(0.001, run_deadline - self.transfer_engine.clock())
                 transfer = self.transfer_engine.transfer(
                     recipe,
                     storage,
@@ -955,9 +974,7 @@ class AcquisitionService:
             resume = ResumeState(
                 remote,
                 str(partial["strong_etag"]),
-                int(partial["response_size"])
-                if partial["response_size"] is not None
-                else None,
+                int(partial["response_size"]) if partial["response_size"] is not None else None,
             )
             record = AcquisitionPartialRecord(
                 source_run_item_id,
@@ -1043,9 +1060,7 @@ class AcquisitionService:
                 )
             )
             for item in active_items:
-                received = max(
-                    int(item["received_bytes"]), int(item["partial_bytes"] or 0)
-                )
+                received = max(int(item["received_bytes"]), int(item["partial_bytes"] or 0))
                 attempt_count = int(
                     self.database.connection.execute(
                         "SELECT COUNT(*) FROM media_acquisition_attempts "

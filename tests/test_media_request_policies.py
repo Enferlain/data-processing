@@ -9,6 +9,7 @@ import pytest
 from media_catalog.acquisition.policies import (
     AIBOORU_MEDIA_POLICY,
     DANBOORU_MEDIA_POLICY,
+    E621_MEDIA_POLICY,
     PIXIV_MEDIA_POLICY,
     CredentialReference,
     MediaRequestPolicy,
@@ -74,9 +75,7 @@ def test_redirect_validation_checks_every_resolved_destination() -> None:
         "https://person:secret@i.pximg.net/private.jpg",
     ):
         with pytest.raises(RequestPolicyError) as captured:
-            validate_redirect(
-                current, location, allowed_hosts=frozenset({"i.pximg.net"})
-            )
+            validate_redirect(current, location, allowed_hosts=frozenset({"i.pximg.net"}))
         rendered = f"{captured.value!r} {captured.value}"
         assert "top-secret" not in rendered
         assert "secret" not in rendered
@@ -151,6 +150,116 @@ def test_danbooru_policy_rejects_unknown_variant_and_cross_instance_host() -> No
     assert captured.value.category == "host_not_allowed"
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://static1.e621.net/original/ab/file.jpg",
+        "https://static2.e621.net/sample/ab/file.jpg?token=returned",
+        "https://static9.e621.net/preview/file.jpg",
+        "https://static1.e621.net:443/original/file.webm",
+    ],
+)
+@pytest.mark.parametrize("variant", ["original", "sample", "preview"])
+def test_e621_policy_accepts_returned_static_media_urls(url: str, variant: str) -> None:
+    recipe = E621_MEDIA_POLICY.recipe(
+        media_occurrence_id=72,
+        variant_key=variant,
+        selected_url=url,
+    )
+
+    assert recipe.provider == "e621"
+    assert recipe.policy.version == "e621-media-v1"
+    assert recipe.operation == f"download-{variant}"
+    assert recipe.headers == {
+        "User-Agent": "data-processing-tools/0.1 (metadata-only e621 catalog)",
+        "Referer": "https://e621.net/",
+    }
+    assert recipe.response.accepts("image/jpeg; charset=binary")
+    assert recipe.response.accepts("video/webm")
+    assert not recipe.response.accepts("text/html")
+    assert not recipe.response.accepts(None)
+
+
+@pytest.mark.parametrize(
+    ("url", "category"),
+    [
+        ("https://e621.net/data/file.jpg", "host_not_allowed"),
+        ("https://staticevil.e621.net/data/file.jpg", "host_not_allowed"),
+        ("https://static10.e621.net/data/file.jpg", "host_not_allowed"),
+        ("https://static0.e621.net/data/file.jpg", "host_not_allowed"),
+        ("https://static1.evil.example/data/file.jpg", "host_not_allowed"),
+        ("http://static1.e621.net/data/file.jpg", "scheme_not_allowed"),
+        ("https://static1.e621.net:8443/data/file.jpg", "port_not_allowed"),
+        ("https://user:secret@static1.e621.net/data/file.jpg", "userinfo_not_allowed"),
+    ],
+)
+def test_e621_policy_rejects_untrusted_media_destinations(url: str, category: str) -> None:
+    with pytest.raises(RequestPolicyError) as captured:
+        E621_MEDIA_POLICY.recipe(
+            media_occurrence_id=72,
+            variant_key="original",
+            selected_url=url,
+        )
+
+    assert captured.value.category == category
+    assert "secret" not in str(captured.value)
+    assert url not in repr(captured.value)
+
+
+def test_e621_policy_validates_each_redirect_without_deriving_urls() -> None:
+    selected = "https://static1.e621.net/original/ab/returned.jpg?signature=hidden"
+    recipe = E621_MEDIA_POLICY.recipe(
+        media_occurrence_id=73,
+        variant_key="original",
+        selected_url=selected,
+    )
+    assert E621_MEDIA_POLICY.validate_redirect(recipe.url, "/sample/ab/next.jpg").startswith(
+        "https://static1.e621.net/"
+    )
+
+    for location in (
+        "https://static10.e621.net/data/next.jpg",
+        "https://staticevil.e621.net/data/next.jpg",
+        "https://example.com/data/next.jpg",
+        "http://static1.e621.net/data/next.jpg",
+    ):
+        with pytest.raises(RequestPolicyError) as captured:
+            E621_MEDIA_POLICY.validate_redirect(recipe.url, location)
+        assert captured.value.category in {"host_not_allowed", "scheme_not_allowed"}
+        assert "hidden" not in repr(captured.value)
+
+
+def test_e621_policy_uses_only_returned_url_and_redacts_identity() -> None:
+    selected = "https://static1.e621.net/original/ab/declared-md5.jpg?token=secret"
+    recipe = E621_MEDIA_POLICY.recipe(
+        media_occurrence_id=74,
+        variant_key="original",
+        selected_url=selected,
+    )
+
+    assert recipe.url == selected
+    assert len(recipe.request_identity) == 64
+    public = json.dumps(recipe.as_dict(), sort_keys=True) + repr(recipe)
+    assert selected not in public
+    assert "secret" not in public
+    with pytest.raises(RequestPolicyError, match="HTTPS"):
+        E621_MEDIA_POLICY.recipe(
+            media_occurrence_id=74,
+            variant_key="original",
+            selected_url=None,  # type: ignore[arg-type]
+        )
+
+
+def test_e621_policy_registration_and_variant_boundary() -> None:
+    assert media_request_policy_for_platform("e621") is E621_MEDIA_POLICY
+    with pytest.raises(RequestPolicyError, match="variant"):
+        E621_MEDIA_POLICY.recipe(
+            media_occurrence_id=75,
+            variant_key="primary",
+            selected_url="https://static1.e621.net/original/ab/file.jpg",
+        )
+
+
 def test_policy_lookup_and_retry_classification() -> None:
     assert media_request_policy_for_platform("pixiv") is PIXIV_MEDIA_POLICY
     assert media_request_policy_for_platform("danbooru") is DANBOORU_MEDIA_POLICY
@@ -209,9 +318,7 @@ def test_credentials_and_request_diagnostics_never_render_values() -> None:
     assert cookie not in output
     assert "fixture-media-credentials" in output
 
-    failure = RuntimeError(
-        f"request {signed_url} failed with {bearer} and Cookie: {cookie}"
-    )
+    failure = RuntimeError(f"request {signed_url} failed with {bearer} and Cookie: {cookie}")
     diagnostic = safe_failure_diagnostic("fixture", "policy_failure", error=failure)
     assert diagnostic == "fixture:policy_failure"
     assert signed_url not in diagnostic
@@ -225,6 +332,10 @@ def test_provider_exact_claims_apply_only_to_original_representation() -> None:
         assert policy.declared_exact_claims_apply("original")
         assert not policy.declared_exact_claims_apply("sample")
         assert not policy.declared_exact_claims_apply("preview")
+    assert not E621_MEDIA_POLICY.declared_exact_claims_apply("primary")
+    assert E621_MEDIA_POLICY.declared_exact_claims_apply("original")
+    assert not E621_MEDIA_POLICY.declared_exact_claims_apply("sample")
+    assert not E621_MEDIA_POLICY.declared_exact_claims_apply("preview")
 
 
 def test_explicit_443_is_allowed_but_redirect_hosts_remain_exact() -> None:
@@ -235,9 +346,7 @@ def test_explicit_443_is_allowed_but_redirect_hosts_remain_exact() -> None:
     )
     assert recipe.provider == "pixiv"
     with pytest.raises(RequestPolicyError, match="trusted"):
-        PIXIV_MEDIA_POLICY.validate_redirect(
-            recipe.url, "https://sub.i.pximg.net/image.jpg"
-        )
+        PIXIV_MEDIA_POLICY.validate_redirect(recipe.url, "https://sub.i.pximg.net/image.jpg")
 
 
 def test_persisted_attempt_contains_only_redacted_request_evidence(tmp_path: Path) -> None:
@@ -328,9 +437,7 @@ def test_persisted_attempt_contains_only_redacted_request_evidence(tmp_path: Pat
                 )
             )
 
-        attempt = database.connection.execute(
-            "SELECT * FROM media_acquisition_attempts"
-        ).fetchone()
+        attempt = database.connection.execute("SELECT * FROM media_acquisition_attempts").fetchone()
         durable = json.dumps(dict(attempt), sort_keys=True)
         assert recipe.request_identity in durable
         assert "pixiv:policy_failure" in durable

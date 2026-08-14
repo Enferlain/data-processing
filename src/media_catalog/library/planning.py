@@ -8,6 +8,15 @@ from pathlib import Path
 
 from media_catalog.adapters.danbooru.adapter import ADAPTER_VERSION as DANBOORU_ADAPTER_VERSION
 from media_catalog.adapters.danbooru.config import AIBOORU, DANBOORU
+from media_catalog.adapters.e621.config import (
+    ADAPTER_VERSION as E621_ADAPTER_VERSION,
+)
+from media_catalog.adapters.e621.config import (
+    PROVIDER_KEY as E621_PROVIDER_KEY,
+)
+from media_catalog.adapters.e621.config import (
+    SCHEMA_VERSION as E621_SCHEMA_VERSION,
+)
 from media_catalog.adapters.pixiv.transport import PIXIV_ADAPTER_VERSION, PIXIV_SCHEMA_VERSION
 from media_catalog.database import CatalogDatabase
 from media_catalog.library.contracts import (
@@ -55,6 +64,18 @@ _CAPABILITIES = {
         "list_account_posts",
         DANBOORU_ADAPTER_VERSION,
         AIBOORU.schema_version,
+    ),
+    # e621 attribution enumeration resolves a single stable retained artist tag
+    # (task 6.1).  The exact canonical artist tag is rendered privately by the
+    # service; no count probe is declared (retained-count estimation is task 6.2).
+    (E621_PROVIDER_KEY, ExpansionTargetKind.ATTRIBUTION): ExpansionCapability(
+        "e621-attribution-posts",
+        CAPABILITY_VERSION,
+        E621_PROVIDER_KEY,
+        ExpansionTargetKind.ATTRIBUTION,
+        "list_account_posts",
+        E621_ADAPTER_VERSION,
+        E621_SCHEMA_VERSION,
     ),
 }
 
@@ -159,9 +180,12 @@ def _attribution_target(connection: sqlite3.Connection, attribution_id: int) -> 
     ).fetchone()
     if row is None:
         raise ValueError("expansion target attribution not found")
-    capability = expansion_capability(str(row["platform_key"]), ExpansionTargetKind.ATTRIBUTION)
+    platform_key = str(row["platform_key"])
+    capability = expansion_capability(platform_key, ExpansionTargetKind.ATTRIBUTION)
     if capability is None:
         raise ValueError("unsupported attribution expansion target")
+    if platform_key == E621_PROVIDER_KEY:
+        return _e621_attribution_target(connection, row, capability)
     if row["primary_name"] is None:
         raise ValueError("attribution expansion target has no current primary name")
     revision = stable_digest(
@@ -190,6 +214,187 @@ def _attribution_target(connection: sqlite3.Connection, attribution_id: int) -> 
         str(row["availability"]),
         revision,
         capability,
+    )
+
+
+def e621_tag_provider_id(provider_attribution_id: str) -> str:
+    """Return the positive numeric tag id carried by a ``tag:<ID>`` identity.
+
+    Only the exact ``tag:<positive numeric provider tag id>`` form is an
+    executable e621 attribution target.  Alias ids (``alias:<ID>``) and direct
+    artist-record ids (plain numerics) deliberately fail closed here.
+    """
+
+    kind, separator, raw_id = provider_attribution_id.partition(":")
+    if kind != "tag" or not separator or not raw_id.isdecimal():
+        raise ValueError("e621 attribution target must use a stable tag:<ID> identity")
+    if int(raw_id) <= 0:
+        raise ValueError("e621 attribution target tag id must be positive")
+    return raw_id
+
+
+def _e621_attribution_target(
+    connection: sqlite3.Connection, row: sqlite3.Row, capability: ExpansionCapability
+) -> ExpansionTarget:
+    """Resolve an e621 attribution target against its retained artist tag only."""
+
+    provider_attribution_id = str(row["provider_attribution_id"])
+    tag_provider_id = e621_tag_provider_id(provider_attribution_id)
+    tag = connection.execute(
+        """SELECT tag.tag_id, tag.name, tag.category, tag.native_category,
+                  tag.native_category_code, tag.normalization_version, tag.post_count,
+                  tag.is_locked, tag.last_observed_at, tag.raw_observation_id,
+                  tag.provider_tag_id
+             FROM tags tag JOIN platforms platform USING(platform_id)
+            WHERE platform.platform_key = ? AND tag.provider_tag_id = ?""",
+        (E621_PROVIDER_KEY, tag_provider_id),
+    ).fetchone()
+    if tag is None:
+        raise ValueError("e621 attribution target has no retained artist tag")
+    if str(tag["category"]) != "artist" or str(tag["native_category"]) != "artist":
+        raise ValueError("e621 attribution target tag is not a current artist tag")
+    canonical_name = str(tag["name"])
+    if not canonical_name.strip():
+        raise ValueError("e621 attribution target tag has no canonical name")
+    availability = str(row["availability"])
+    if availability != "available":
+        raise ValueError("e621 attribution target is not available for enumeration")
+    aliases = _e621_tag_alias_state(connection, canonical_name)
+    observation = _e621_latest_tag_observation(connection, int(tag["tag_id"]))
+    revision = _e621_attribution_revision(
+        row, tag, provider_attribution_id, availability, aliases, observation
+    )
+    return ExpansionTarget(
+        ExpansionTargetKind.ATTRIBUTION,
+        int(row["attribution_entity_id"]),
+        E621_PROVIDER_KEY,
+        str(row["instance_host"]),
+        provider_attribution_id,
+        availability,
+        revision,
+        capability,
+    )
+
+
+def _e621_tag_alias_state(
+    connection: sqlite3.Connection, canonical_name: str
+) -> tuple[tuple[object, ...], ...]:
+    """Retained e621 alias observations involving a canonical artist tag.
+
+    Aliases are directed antecedent->consequent provider facts.  Only the
+    latest immutable observation for each provider alias id is current; an old
+    active observation must not keep redirecting a later deleted/pending alias.
+    The complete latest row is retained in the target revision so every
+    material alias fact invalidates a stale plan.  Rows are returned in a
+    deterministic provider-id/observation-id order.
+    """
+
+    return tuple(
+        tuple(item)
+        for item in connection.execute(
+            """WITH latest AS (
+                   SELECT ta.tag_alias_observation_id, ta.provider_alias_id,
+                          ta.antecedent_name, ta.consequent_name, ta.status,
+                          ta.post_count, ta.creator_id, ta.created_at, ta.updated_at,
+                          ta.reason, ta.forum_topic_id, ta.observed_at,
+                          ta.raw_observation_id, ta.observation_digest,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY ta.provider_alias_id
+                              ORDER BY ta.observed_at DESC,
+                                       ta.tag_alias_observation_id DESC
+                          ) AS row_number
+                     FROM tag_alias_observations ta
+                     JOIN platforms platform USING(platform_id)
+                    WHERE platform.platform_key = ?
+               )
+               SELECT provider_alias_id, antecedent_name, consequent_name, status,
+                      post_count, creator_id, created_at, updated_at, reason,
+                      forum_topic_id, observed_at, raw_observation_id,
+                      observation_digest, tag_alias_observation_id
+                 FROM latest
+                WHERE row_number = 1
+                  AND (antecedent_name = ? OR consequent_name = ?)
+                ORDER BY provider_alias_id, tag_alias_observation_id""",
+            (E621_PROVIDER_KEY, canonical_name, canonical_name),
+        )
+    )
+
+
+def _e621_latest_tag_observation(connection: sqlite3.Connection, tag_id: int) -> sqlite3.Row | None:
+    """Return the latest immutable observation for one retained e621 tag."""
+
+    return connection.execute(
+        """SELECT tag_observation_id, tag_id, observed_at, provider_tag_id,
+                  native_category, native_category_code, post_count, is_locked,
+                  created_at, updated_at, raw_observation_id, observation_digest
+             FROM tag_observations
+            WHERE tag_id = ?
+            ORDER BY observed_at DESC, tag_observation_id DESC
+            LIMIT 1""",
+        (tag_id,),
+    ).fetchone()
+
+
+def _e621_observation_matches_projection(tag: sqlite3.Row, observation: sqlite3.Row) -> bool:
+    """Check that mutable tag projection still reflects its latest observation."""
+
+    for projection, retained in (
+        ("provider_tag_id", "provider_tag_id"),
+        ("native_category", "native_category"),
+        ("native_category_code", "native_category_code"),
+        ("post_count", "post_count"),
+        ("is_locked", "is_locked"),
+        ("last_observed_at", "observed_at"),
+        ("raw_observation_id", "raw_observation_id"),
+    ):
+        if tag[projection] != observation[retained]:
+            return False
+    return True
+
+
+def _e621_attribution_revision(
+    row: sqlite3.Row,
+    tag: sqlite3.Row,
+    provider_attribution_id: str,
+    availability: str,
+    aliases: tuple[tuple[object, ...], ...],
+    observation: sqlite3.Row | None,
+) -> str:
+    """Revision for a retained e621 artist tag.
+
+    Binds the retained tag identity (catalog and provider ids), the current
+    canonical tag name, the current artist category, the retained ``post_count``
+    count observation, and every retained alias observation involving the tag.
+    A stable provider tag id is introduced only by ``upsert_tag_record``, which
+    also writes its immutable standalone observation. Its observation time/raw id
+    provide provenance without allowing later post-tag observations to stale an
+    otherwise compatible expansion plan. Any material count, identity, category,
+    or alias change still invalidates the plan before execution.
+    """
+
+    if observation is None:
+        raise ValueError("e621 attribution target has no standalone tag observation")
+    return stable_digest(
+        "e621-attribution",
+        row["attribution_entity_id"],
+        E621_PROVIDER_KEY,
+        row["instance_host"],
+        provider_attribution_id,
+        row["adapter_version"],
+        availability,
+        row["last_seen_at"],
+        tag["tag_id"],
+        tag["name"],
+        tag["category"],
+        tag["native_category"],
+        tag["native_category_code"],
+        tag["normalization_version"],
+        tag["is_locked"],
+        observation["observed_at"],
+        observation["raw_observation_id"],
+        tag["post_count"],
+        tuple(observation),
+        aliases,
     )
 
 
@@ -384,9 +589,51 @@ def _explicit_choice(
     )
 
 
+def _e621_estimate(connection: sqlite3.Connection, target: ExpansionTarget) -> ExpansionEstimate:
+    """Offline retained-count estimate for a stable e621 artist attribution.
+
+    Reports the exact retained ``post_count`` of the canonical artist tag only
+    when a current retained observation supplies a count and no active/approved
+    alias redirects the canonical name away from this tag.  Missing counts and
+    aliased-away targets stay unknown without any probe or listing request.
+    """
+
+    tag = connection.execute(
+        """SELECT tag.tag_id, tag.name, tag.category, tag.native_category,
+                  tag.post_count, tag.last_observed_at, tag.provider_tag_id,
+                  tag.native_category_code, tag.is_locked, tag.raw_observation_id
+             FROM tags tag JOIN platforms platform USING(platform_id)
+            WHERE platform.platform_key = ? AND tag.provider_tag_id = ?""",
+        (E621_PROVIDER_KEY, e621_tag_provider_id(target.native_id)),
+    ).fetchone()
+    if tag is None:
+        return ExpansionEstimate("unknown")
+    observation = _e621_latest_tag_observation(connection, int(tag["tag_id"]))
+    if observation is None or not _e621_observation_matches_projection(tag, observation):
+        return ExpansionEstimate("unknown")
+    if (
+        str(tag["category"]) != "artist"
+        or str(tag["native_category"]) != "artist"
+        or observation["native_category"] != "artist"
+        or observation["post_count"] is None
+    ):
+        return ExpansionEstimate("unknown")
+    aliases = _e621_tag_alias_state(connection, str(tag["name"]))
+    if any(alias[1] == tag["name"] and alias[3] in {"active", "approved"} for alias in aliases):
+        return ExpansionEstimate("unknown")
+    return ExpansionEstimate(
+        "count",
+        int(observation["post_count"]),
+        str(observation["observed_at"]),
+        "provider_estimate",
+    )
+
+
 def _estimate(connection: sqlite3.Connection, target: ExpansionTarget | None) -> ExpansionEstimate:
     if target is None:
         return ExpansionEstimate("unknown")
+    if target.provider == E621_PROVIDER_KEY and target.kind is ExpansionTargetKind.ATTRIBUTION:
+        return _e621_estimate(connection, target)
     target_column = (
         "plan.target_account_id"
         if target.kind is ExpansionTargetKind.ACCOUNT

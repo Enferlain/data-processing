@@ -298,6 +298,15 @@ def _plan_item(
         exclusion_reason = "unavailable_occurrence"
     elif variants_error is not None:
         exclusion_reason = variants_error
+    elif row["platform_key"] == "e621" and selection.variant_key not in {
+        "original",
+        "sample",
+        "preview",
+    }:
+        # e621 exposes explicit representation roles. Do not let the generic
+        # default ``primary`` selection defer an unsupported-variant failure to
+        # execution after a durable run has already been created.
+        exclusion_reason = "unsupported_variant"
     elif selected_url is None:
         exclusion_reason = "missing_variant"
     original = (
@@ -309,7 +318,11 @@ def _plan_item(
         "sha256": row["declared_sha256"] if original else None,
         "md5": row["declared_md5"] if original else None,
         "file_size": row["declared_file_size"] if original else None,
-        "mime_type": row["mime_type"],
+        # e621's occurrence MIME type describes its original file.  Its
+        # derivatives carry no original claims; their MIME, dimensions, and
+        # byte size are recorded from local inspection.  Keep the existing
+        # MIME projection for other providers for compatibility.
+        "mime_type": row["mime_type"] if original or row["platform_key"] != "e621" else None,
         "width": row["width"] if original else None,
         "height": row["height"] if original else None,
     }

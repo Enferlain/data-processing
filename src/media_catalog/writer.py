@@ -661,6 +661,23 @@ class CatalogWriter:
             (platform_id, record.provider_tag_id),
         ).fetchone()
         if prior is None:
+            name_identity = self.connection.execute(
+                """SELECT provider_tag_id FROM tags
+                   WHERE platform_id = ? AND category = ? AND name = ?
+                     AND normalization_version = ?""",
+                (
+                    platform_id,
+                    record.category,
+                    record.normalized_name,
+                    record.normalization_version,
+                ),
+            ).fetchone()
+            if (
+                name_identity is not None
+                and name_identity[0] is not None
+                and str(name_identity[0]) != record.provider_tag_id
+            ):
+                raise ValueError("normalized tag name is already bound to another provider tag id")
             self.connection.execute(
                 """INSERT INTO tags (
                    platform_id, category, name, normalization_version, provider_tag_id,

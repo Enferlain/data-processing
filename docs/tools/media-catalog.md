@@ -160,6 +160,9 @@ boundary reports `status: paused`; continue only from its committed checkpoint:
 ```bash
 uv run catalog metadata pixiv-account-artworks catalog-output/catalog.sqlite3 1001 \
   --resume-from 12 --max-requests 3 --max-pages 2 --max-records 500
+
+uv run catalog metadata e621-list catalog-output/catalog.sqlite3 artist_tag \
+  --resume-from 12 --max-requests 3 --max-pages 2 --max-records 500
 ```
 
 Pixiv refresh authentication reads `PIXIV_REFRESH_TOKEN`, `PIXIV_CLIENT_ID`, and
@@ -174,6 +177,15 @@ diagnostics, structured output, and retained provider payloads. e621 requests us
 User-Agent and enforce a one-second minimum interval; the provider's listing page ceiling is 320.
 Pixiv uses an unofficial app API and may need adapter updates when its contract changes. Provider
 permissions, deletions, and rate limits remain typed outcomes rather than guessed records.
+
+The e621 operations retain the complete response as a raw observation and write normalized,
+versioned post, media, tag, alias, artist, relationship, score/count, flag, and availability facts.
+The post operation records original, sample, and preview representations without requesting their
+URLs. Tag categories are dynamic: the neutral category is used where it is lossless, while the
+native category/code remains recoverable for species, lore, contributor, invalid, and future values.
+Alias observations are append-only history with status, timestamps, IDs, and provenance; an alias is
+not silently treated as a current artist name. The list operation uses at most 320 records per page
+and stores an opaque `b<ID>` continuation toward older posts, rather than a durable numeric page.
 
 Inspect past runs without network access or credentials:
 
@@ -234,6 +246,22 @@ uv run catalog lookup resume catalog-output/catalog.sqlite3 15 \
   --provider danbooru --max-requests 2 --max-pages 2 --max-results 100 --max-seconds 60
 ```
 
+e621 supports only these bounded strategies: `source_post_url`, `external_post_id`,
+`declared_md5`, `verified_md5`, `artist_exact_name`, and `artist_alias`:
+
+```bash
+uv run catalog lookup plan catalog-output/catalog.sqlite3 post:42 \
+  --provider e621 --strategy source_post_url --strategy declared_md5 --strategy verified_md5 --json
+uv run catalog lookup plan catalog-output/catalog.sqlite3 account:7 \
+  --provider e621 --strategy artist_exact_name --strategy artist_alias \
+  --search-term selected_artist_name --json
+```
+
+Arbitrary fuzzy or unrestricted e621 text search (`artist_text`) is rejected during planning and
+does not make a provider request. Exact names, aliases, tags, hashes, uploaders, and matching posts
+remain evidence; they do not establish account identity or authorship. Cross-database alias mapping
+is a later capability, not an implicit lookup step.
+
 A provider source URL may support a directed `sourced_from` candidate. An MD5 calculated from
 verified bytes may support `same_work` plus `exact_bytes`; provider-declared MD5 remains weaker
 declared evidence. Names, aliases, tags, and uploaders never establish identity or authorship.
@@ -275,6 +303,28 @@ observation. Danbooru and AIBooru currently report an unknown/unsupported count 
 request because no committed fixture-backed count contract is available. Neither probe nor run
 requests media bytes. Provider credentials use the same environment configuration as
 `catalog metadata`.
+
+For e621, choose a retained attribution whose provider identity is an exact current artist tag
+(`tag:ID`), then pass its catalog reference explicitly; the canonical tag is rendered privately
+only when the run requests e621 pages:
+
+```bash
+uv run catalog library run catalog-output/catalog.sqlite3 account:12 \
+  --target attribution:34 --selection-note "selected the reviewed e621 artist tag" \
+  --max-requests 3 --max-pages 3 --max-records 200 --max-seconds 60 --json
+```
+
+e621 uses the optional external `E621_USERNAME` and `E621_API_KEY` references for ephemeral Basic
+authentication, never CLI flags. It enforces the provider minimum one-second interval, and a
+paused run can be resumed with `catalog library resume ... EXECUTION_ID` from its committed
+keyset checkpoint.
+
+An offline e621 plan reports a provider `post_count` only when one current retained artist-category
+tag observation unambiguously identifies the selected canonical tag. Aliases, stale or missing tag
+observations, extra filters, and arbitrary multi-tag searches have an unknown estimate; e621 has no
+generic count contract, and planning never lists posts merely to estimate a count. A resumed run
+continues from its secret-free `b<ID>` boundary without recursive expansion, liked/bookmarked
+inheritance, or automatic identity/authorship conclusions.
 
 Each run stores an immutable plan, a remote-run origin, resume lineage, and a per-post association.
 Discovered posts receive no liked/bookmarked event and are never recursively expanded. Pixiv
@@ -320,6 +370,11 @@ uv run catalog media list catalog-output/catalog.sqlite3 --author pixiv:1001 --l
 uv run catalog media list catalog-output/catalog.sqlite3 --post pixiv:2001 --availability available
 uv run catalog media show catalog-output/catalog.sqlite3 42 --json
 ```
+
+For an e621 expansion, keep the returned `--expansion-plan-id` and pass the stable
+`OCCURRENCE_ID:original`, `OCCURRENCE_ID:sample`, or `OCCURRENCE_ID:preview` selector unchanged into
+the acquisition plan. Browsing is target-scoped and offline; it does not fetch missing details or
+media.
 
 `--author` uses `PLATFORM:NATIVE_ACCOUNT_ID`; `--post` accepts either a positive catalog post ID or
 `PLATFORM:NATIVE_POST_ID`. These identifiers are stable—handles and display names remain temporal
@@ -405,6 +460,9 @@ Provider request policies are versioned and fail closed:
 - Danbooru media is restricted to the configured instance plus `cdn.donmai.us`.
 - AIBooru media is restricted to its configured instance and explicit `safe.aibooru.online`,
   `general.aibooru.online`, and `aibooru.download` hosts.
+- e621 media accepts only returned HTTPS URLs on the bounded `static1.e621.net` through
+  `static9.e621.net` host set, sends the descriptive e621 User-Agent and referer, and validates
+  every redirect against that same set. URLs are never reconstructed from an MD5.
 
 Every redirect hop is manually checked. HTTP, downgrade, user-info, IP-literal, unexpected-port,
 and off-policy destinations are rejected before requesting them. Credential values, cookies,
@@ -420,6 +478,14 @@ facts are stored separately with comparison records. Only compatible original/pr
 treated as exact hash claims. An exact SHA-256/MD5 disagreement is never linked as success: bounded
 bytes are retained in opaque quarantine when budget permits, otherwise metadata-only mismatch
 evidence remains.
+
+For e621, only the returned `original` representation is compared with declared MD5, size, MIME/
+extension, and dimensions. `sample` and `preview` retain only their own locally verified facts;
+they do not inherit original claims. An exact hash mismatch is quarantined under the acquisition
+byte budget and is not published or linked into CAS as a successful asset; size, MIME, and dimension
+disagreements remain explicit verification evidence. Metadata synchronization and library expansion
+remain media-free; acquisition requires a separate reviewed browse selector and explicit download
+plan.
 
 CAS publication uses the same immutable SHA-256 layout, managed-root lock, no-follow checks, and
 durable directory synchronization as local adoption. Assets, locations, calculated fingerprints,
@@ -498,6 +564,32 @@ copy, so reserve suitable disk headroom. Removal belongs to a future explicit re
 Absolute roots are redacted from normal human and JSON output.
 Legacy asset-level paths from older catalogs are never printed by asset list/show; only their
 ambiguous/unassociated classification and bounded counts are exposed.
+
+### e621 boundaries, privacy, and troubleshooting
+
+Keep the catalog database and raw observations private: normal output redacts credentials, rendered
+queries and URLs, raw response bodies, signed parameters, and local paths. e621 credentials are
+resolved only from `E621_USERNAME` and `E621_API_KEY` immediately before a request and are not
+stored in runs, identities, diagnostics, or payloads. The required User-Agent identifies this
+application; it is not a browser impersonation.
+
+Common outcomes are deliberate:
+
+- A 401/403 means credentials or provider authorization need attention; set both environment
+  variables or retry anonymously when the record is public. Secret values are never echoed.
+- A 429 means the provider or an intermediate service is rate limiting; a 503 may be rate limiting
+  or a transient provider failure. Lower finite limits, retain the committed checkpoint, and resume
+  after the enforced one-second pacing interval.
+- A 404, deleted flag, or null representation URL is retained as typed unavailable/deleted state;
+  do not derive a URL from the MD5.
+- A stale lookup/expansion plan must be replanned after its retained tag, alias, target, or
+  capability version changes. A rejected acquisition host/variant requires selecting the returned
+  occurrence variant, not editing its URL.
+
+Automatic identity or authorship from e621 tags, aliases, artist records, or uploaders is out of
+scope. Generic filtered counts, cross-database alias mapping, Gelbooru support, and unrestricted
+fuzzy search remain future work. Live e621 smoke tests are disabled by default and are not required
+for offline operation.
 
 ## Recovery and reconciliation
 

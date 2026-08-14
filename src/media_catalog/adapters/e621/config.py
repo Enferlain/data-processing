@@ -72,8 +72,13 @@ from media_catalog.adapters.contracts import (
     AdapterOperation,
     EnumerationCapabilities,
     EnumerationCapability,
+    LookupCapabilities,
+    LookupCapability,
+    LookupPlanContext,
+    LookupStrategy,
 )
 
+PROVIDER_KEY = "e621"
 ADAPTER_VERSION = "e621-native-v1"
 SCHEMA_VERSION = "e621-json-v1"
 CONTINUATION_VERSION = "e621-keyset-v1"
@@ -141,6 +146,31 @@ def neutral_category(native_label: str) -> str:
     return label if label in NEUTRAL_TAG_CATEGORIES else "unknown"
 
 
+# Candidate-lookup capabilities (task 5.2).  e621 supports exactly the six
+# bounded, exact reverse-lookup strategies below.  Arbitrary fuzzy/unrestricted
+# artist text (``ARTIST_TEXT``) is deliberately excluded: e621 has no bounded
+# artist-text contract, so it is rejected before any request rather than routed
+# through unrestricted text search.  Declaring a capability is a hard contract:
+# the adapter renders only these strategies and the planner excludes the rest.
+E621_LOOKUP_CAPABILITIES = LookupCapabilities(
+    tuple(
+        LookupCapability(
+            strategy,
+            "attribution" if strategy.value.startswith("artist_") else "post",
+            "keyset",
+        )
+        for strategy in (
+            LookupStrategy.SOURCE_POST_URL,
+            LookupStrategy.EXTERNAL_POST_ID,
+            LookupStrategy.DECLARED_MD5,
+            LookupStrategy.VERIFIED_MD5,
+            LookupStrategy.ARTIST_EXACT_NAME,
+            LookupStrategy.ARTIST_ALIAS,
+        )
+    )
+)
+
+
 @dataclass(frozen=True, slots=True)
 class E621Instance:
     """Immutable e621 provider configuration and request-policy floors."""
@@ -196,6 +226,31 @@ class E621Instance:
                     "attribution", AdapterOperation.LIST_ACCOUNT_POSTS, ENUMERATION_VERSION
                 ),
             )
+        )
+
+    @property
+    def lookup_capabilities(self) -> LookupCapabilities:
+        # The closed, exact reverse-lookup contract declared in task 5.2.  This
+        # is the single source of truth for both the adapter and the neutral
+        # planning context, so a plan's capability set is provider configuration
+        # rather than a hardcoded provider string.
+        return E621_LOOKUP_CAPABILITIES
+
+    @property
+    def lookup_plan_context(self) -> LookupPlanContext:
+        """Provider-neutral planning identity for the e621 instance.
+
+        provider/instance/adapter/schema identity is supplied here so the
+        read-only planner never references a hardcoded provider string; the
+        capability set is the exact six-strategy contract above.
+        """
+
+        return LookupPlanContext(
+            provider=PROVIDER_KEY,
+            instance_key=self.instance_key,
+            adapter_version=ADAPTER_VERSION,
+            schema_version=self.schema_version,
+            lookup_capabilities=self.lookup_capabilities,
         )
 
 

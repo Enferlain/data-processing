@@ -14,7 +14,7 @@ from media_catalog.acquisition import (
     HTTPTransferEngine,
     plan_acquisition,
 )
-from media_catalog.adapters import AdapterOperation
+from media_catalog.adapters import AdapterOperation, LookupPlanConfiguration
 from media_catalog.adapters.danbooru import (
     AIBOORU,
     DANBOORU,
@@ -372,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
         command = lookup_commands.add_parser(name)
         command.add_argument("catalog", type=Path)
         command.add_argument("seed", metavar="ACCOUNT:ID|POST:ID")
-        command.add_argument("--provider", choices=("danbooru", "aibooru"), required=True)
+        command.add_argument("--provider", choices=("danbooru", "aibooru", "e621"), required=True)
         command.add_argument(
             "--strategy", choices=LOOKUP_STRATEGIES, action="append", required=True
         )
@@ -382,7 +382,7 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_resume = lookup_commands.add_parser("resume")
     lookup_resume.add_argument("catalog", type=Path)
     lookup_resume.add_argument("run_id", type=int)
-    lookup_resume.add_argument("--provider", choices=("danbooru", "aibooru"), required=True)
+    lookup_resume.add_argument("--provider", choices=("danbooru", "aibooru", "e621"), required=True)
     _add_lookup_limits(lookup_resume)
     _add_json(lookup_resume)
     lookup_runs = lookup_commands.add_parser("runs")
@@ -416,6 +416,29 @@ def build_parser() -> argparse.ArgumentParser:
     library_show.add_argument("execution_id", type=int)
     _add_json(library_show)
     return parser
+
+
+def _execute_lookup(
+    arguments: argparse.Namespace,
+    catalog_label: str,
+    service: CandidateLookupService,
+    limits: LookupLimits,
+) -> dict[str, object]:
+    if arguments.lookup_command == "run":
+        plan = service.plan(
+            arguments.seed,
+            tuple(arguments.strategy),
+            limits=limits,
+            search_term=arguments.search_term,
+        )
+        results = service.execute(plan)
+        return {
+            "catalog": catalog_label,
+            "count": len(results),
+            "results": [result.as_dict() for result in results],
+        }
+    result = service.resume(arguments.run_id, limits=limits)
+    return {"catalog": catalog_label, **result.as_dict()}
 
 
 def _run(arguments: argparse.Namespace) -> dict[str, object]:
@@ -742,17 +765,34 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             arguments.max_results,
             arguments.max_seconds,
         )
-        instance = DANBOORU if arguments.provider == "danbooru" else AIBOORU
         if arguments.lookup_command == "plan":
+            plan_configuration: LookupPlanConfiguration = (
+                E621
+                if arguments.provider == "e621"
+                else DANBOORU
+                if arguments.provider == "danbooru"
+                else AIBOORU
+            )
             plan = plan_candidate_lookup(
                 arguments.catalog,
                 arguments.seed,
-                instance,
+                plan_configuration,
                 tuple(arguments.strategy),
                 limits=limits,
                 search_term=arguments.search_term,
             )
             return {"catalog": catalog_label, "status": "planned", **plan.as_dict()}
+        if arguments.provider == "e621":
+            credentials = E621Credentials.from_environment(E621)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = E621Adapter(E621, client=client, credentials=credentials)
+                service = CandidateLookupService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=E621.minimum_interval_seconds,
+                )
+                return _execute_lookup(arguments, catalog_label, service, limits)
+        instance = DANBOORU if arguments.provider == "danbooru" else AIBOORU
         credentials = DanbooruCredentials.from_environment(instance)
         with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
             adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
@@ -761,21 +801,7 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 adapter,
                 minimum_interval_seconds=instance.minimum_interval_seconds,
             )
-            if arguments.lookup_command == "run":
-                plan = service.plan(
-                    arguments.seed,
-                    tuple(arguments.strategy),
-                    limits=limits,
-                    search_term=arguments.search_term,
-                )
-                results = service.execute(plan)
-                return {
-                    "catalog": catalog_label,
-                    "count": len(results),
-                    "results": [result.as_dict() for result in results],
-                }
-            result = service.resume(arguments.run_id, limits=limits)
-            return {"catalog": catalog_label, **result.as_dict()}
+            return _execute_lookup(arguments, catalog_label, service, limits)
     if arguments.command == "library":
         catalog_label = public_path(arguments.catalog)
         if arguments.library_command in {"runs", "show"}:
@@ -838,6 +864,20 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                         database,
                         adapter,
                         minimum_interval_seconds=instance.minimum_interval_seconds,
+                    )
+                    result = (
+                        service.resume(plan, arguments.execution_id)
+                        if arguments.library_command == "resume"
+                        else service.run(plan)
+                    )
+            elif provider == "e621":
+                credentials = E621Credentials.from_environment(E621)
+                with httpx.Client() as client:
+                    adapter = E621Adapter(E621, client=client, credentials=credentials)
+                    service = ArtistLibraryExpansionService(
+                        database,
+                        adapter,
+                        minimum_interval_seconds=E621.minimum_interval_seconds,
                     )
                     result = (
                         service.resume(plan, arguments.execution_id)

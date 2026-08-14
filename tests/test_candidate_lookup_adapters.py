@@ -3,6 +3,8 @@ from __future__ import annotations
 import httpx
 
 from media_catalog.adapters import (
+    LookupPlanContext,
+    LookupPlanItem,
     LookupQueryMaterial,
     LookupRequest,
     LookupStrategy,
@@ -14,8 +16,10 @@ NOW = "2026-08-10T00:00:00Z"
 
 def _adapter(instance=DANBOORU, handler=None) -> DanbooruAdapter:
     if handler is None:
+
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json=[], request=request)
+
     return DanbooruAdapter(
         instance,
         client=httpx.Client(transport=httpx.MockTransport(handler)),
@@ -56,6 +60,65 @@ def test_capabilities_are_instance_specific() -> None:
         if item.strategy is LookupStrategy.ARTIST_ALIAS
     )
     assert alias.result_kind == "attribution"
+
+
+def test_lookup_plan_context_is_provider_neutral_and_preserves_identity() -> None:
+    # OpenSpec task 5.1: the neutral planning context removes the hardcoded
+    # Danbooru identity from the planner while reproducing the exact identity the
+    # planner previously hardcoded, so existing DANBOORU/AIBOORU plan digests,
+    # exclusions, and rendered requests are unchanged.
+    cases = (
+        (DANBOORU, "danbooru", "danbooru-json-v1"),
+        (AIBOORU, "aibooru", "aibooru-json-v1"),
+    )
+    for instance, platform_key, schema_version in cases:
+        context = instance.lookup_plan_context
+        assert isinstance(context, LookupPlanContext)
+        # provider and adapter_version are constant across the Danbooru family;
+        # instance_key and schema_version are instance-specific.
+        assert context.provider == "danbooru"
+        assert context.instance_key == platform_key
+        assert context.adapter_version == "danbooru-native-v1"
+        assert context.schema_version == schema_version
+        assert context.lookup_capabilities is instance.lookup_capabilities
+
+    # The adapter declares the same provider identity as the neutral context.
+    adapter = _adapter()
+    assert adapter.provider_key == DANBOORU.lookup_plan_context.provider
+    assert adapter.adapter_version == DANBOORU.lookup_plan_context.adapter_version
+
+    # A plan item built from the neutral context must be byte-for-byte identical
+    # to one built with the original hardcoded literals.  Any drift in
+    # provider/instance/version identity fails here -- expected digests are not
+    # relaxed to accept drift.
+    material = LookupQueryMaterial(LookupStrategy.SOURCE_POST_URL, "https://x.com/acme/status/1")
+    limits = {"requests": 3, "pages": 3, "results": 200, "seconds": 60}
+    for instance, platform_key, schema_version in cases:
+        context = instance.lookup_plan_context
+        via_context = LookupPlanItem(
+            provider=context.provider,
+            instance=context.instance_key,
+            strategy=material.strategy,
+            query_digest=material.digest,
+            limits=limits,
+            seed_kind="post",
+            seed_id="1",
+            adapter_version=context.adapter_version,
+            schema_version=context.schema_version,
+        )
+        via_literals = LookupPlanItem(
+            provider="danbooru",
+            instance=platform_key,
+            strategy=material.strategy,
+            query_digest=material.digest,
+            limits=limits,
+            seed_kind="post",
+            seed_id="1",
+            adapter_version="danbooru-native-v1",
+            schema_version=schema_version,
+        )
+        assert via_context.digest == via_literals.digest
+        assert via_context.to_json() == via_literals.to_json()
 
 
 def test_lookup_request_uses_fixed_opaque_source_and_md5_queries() -> None:

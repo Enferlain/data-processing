@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from urllib.parse import SplitResult, urljoin, urlsplit
 
+from media_catalog.adapters.e621.config import E621_USER_AGENT
+
 
 class RequestPolicyError(ValueError):
     """A secret-safe provider request-policy failure."""
@@ -320,6 +322,38 @@ class DanbooruMediaPolicy(MediaRequestPolicy):
         return f"download-{variant_key}"
 
 
+class E621MediaPolicy(MediaRequestPolicy):
+    """Policy for explicitly selected e621 media URLs returned by metadata."""
+
+    identity = PolicyIdentity("e621-media", "e621-media-v1")
+    provider = "e621"
+    # Keep the media-host admission rule deliberately bounded.  The provider's
+    # returned URLs use ``staticN.e621.net``; enumerate the supported one-digit
+    # host range instead of broadening the generic exact-host validator.
+    allowed_hosts = frozenset(f"static{index}.e621.net" for index in range(1, 10))
+    redirect_hosts = allowed_hosts
+    headers = MappingProxyType(
+        {
+            "User-Agent": E621_USER_AGENT,
+            "Referer": "https://e621.net/",
+        }
+    )
+    response_expectations = ResponseExpectations(
+        ("image/", "video/"),
+        allow_missing_content_type=False,
+    )
+
+    def operation_for_variant(self, variant_key: str) -> str:
+        if variant_key not in {"original", "sample", "preview"}:
+            raise RequestPolicyError("invalid_variant", "e621 media variant is not supported")
+        return f"download-{variant_key}"
+
+    def declared_exact_claims_apply(self, variant_key: str) -> bool:
+        """Only the returned original owns e621's declared file claims."""
+
+        return variant_key == "original"
+
+
 PIXIV_MEDIA_POLICY = PixivMediaPolicy()
 DANBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
     provider="danbooru",
@@ -331,11 +365,13 @@ AIBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
     base_host="aibooru.online",
     media_hosts=("safe.aibooru.online", "general.aibooru.online", "aibooru.download"),
 )
+E621_MEDIA_POLICY = E621MediaPolicy()
 
 _BUILTIN_POLICIES: dict[str, MediaRequestPolicy] = {
     "pixiv": PIXIV_MEDIA_POLICY,
     "danbooru": DANBOORU_MEDIA_POLICY,
     "aibooru": AIBOORU_MEDIA_POLICY,
+    "e621": E621_MEDIA_POLICY,
 }
 
 

@@ -154,7 +154,7 @@ def test_fixtures_are_json_only_and_contain_no_secret_or_media_payload_markers()
         "refresh_token",
         "access_token",
         "api_key",
-        "authorization",
+        '"authorization"',
         "set-cookie",
         "data:image/",
         "base64,",

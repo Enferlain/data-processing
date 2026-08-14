@@ -10,9 +10,11 @@ from media_catalog.acquisition.planning import (
 from media_catalog.acquisition.policies import (
     AIBOORU_MEDIA_POLICY,
     DANBOORU_MEDIA_POLICY,
+    E621_MEDIA_POLICY,
     PIXIV_MEDIA_POLICY,
     CredentialReference,
     DanbooruMediaPolicy,
+    E621MediaPolicy,
     MediaRequestPolicy,
     PixivMediaPolicy,
     RequestPolicyError,
@@ -55,6 +57,7 @@ from media_catalog.acquisition.transfer import (
 __all__ = [
     "AIBOORU_MEDIA_POLICY",
     "DANBOORU_MEDIA_POLICY",
+    "E621_MEDIA_POLICY",
     "PIXIV_MEDIA_POLICY",
     "AcquisitionExecutionSummary",
     "AcquisitionPlanPreview",
@@ -65,6 +68,7 @@ __all__ = [
     "ClaimComparison",
     "CredentialReference",
     "DanbooruMediaPolicy",
+    "E621MediaPolicy",
     "HTTPTransferEngine",
     "MediaRequestPolicy",
     "PixivMediaPolicy",

@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 from media_catalog.acquisition.planning import PlannedAcquisitionItem
-from media_catalog.acquisition.policies import PIXIV_MEDIA_POLICY
+from media_catalog.acquisition.policies import E621_MEDIA_POLICY, PIXIV_MEDIA_POLICY
 from media_catalog.acquisition.publication import verify_publish_and_persist
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
@@ -143,13 +143,14 @@ def test_inspects_publishes_and_persists_verified_asset_and_provenance(
 
     managed = tmp_path / "managed"
     managed.mkdir()
-    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database, AssetStorage.for_remote(
-        managed,
-        limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
-    ) as storage:
-        item, run_item_id, managed_id = _seed(
-            database, storage, item_factory=item_factory
-        )
+    with (
+        CatalogDatabase(tmp_path / "catalog.sqlite3") as database,
+        AssetStorage.for_remote(
+            managed,
+            limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
+        ) as storage,
+    ):
+        item, run_item_id, managed_id = _seed(database, storage, item_factory=item_factory)
         result = verify_publish_and_persist(
             database,
             storage,
@@ -173,12 +174,79 @@ def test_inspects_publishes_and_persists_verified_asset_and_provenance(
         assert asset["verified_md5"] == expected_md5
         assert asset["storage_kind"] == "managed"
         assert asset["detected_mime_type"] == "image/png"
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM asset_fingerprints WHERE asset_id = ?", (result.asset_id,)
-        ).fetchone()[0] == 3
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM asset_fingerprints WHERE asset_id = ?", (result.asset_id,)
+            ).fetchone()[0]
+            == 3
+        )
         source = database.connection.execute("SELECT * FROM occurrence_sources").fetchone()
         assert source["relative_path"] == f"request:{'c' * 64}"
         assert "private" not in str(dict(source))
+
+
+def test_derivative_publication_does_not_compare_original_claims(tmp_path: Path) -> None:
+    payload = _png()
+
+    def item_factory(occurrence_id: int) -> PlannedAcquisitionItem:
+        original = _planned_item(
+            occurrence_id,
+            md5="0" * 32,
+            size=999,
+            mime_type="image/jpeg",
+            width=1,
+            height=1,
+        )
+        return PlannedAcquisitionItem(
+            original.item_key,
+            original.media_occurrence_id,
+            "sample",
+            "https://static1.e621.net/sample/ab/sample.jpg",
+            original.material_digest,
+            E621_MEDIA_POLICY.identity,
+            original.source_raw_observation_id,
+            original.eligibility,
+            original.exclusion_reason,
+            original.satisfied_asset_id,
+            original.declared_sha256,
+            original.declared_md5,
+            original.declared_file_size,
+            original.declared_mime_type,
+            original.declared_width,
+            original.declared_height,
+        )
+
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    with (
+        CatalogDatabase(tmp_path / "catalog.sqlite3") as database,
+        AssetStorage.for_remote(
+            managed,
+            limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
+        ) as storage,
+    ):
+        item, run_item_id, managed_id = _seed(database, storage, item_factory=item_factory)
+        result = verify_publish_and_persist(
+            database,
+            storage,
+            item=item,
+            staged=_stage(storage, payload, label="remote:e621-sample.jpg"),
+            run_item_id=run_item_id,
+            acquisition_attempt_id=None,
+            managed_root_id=managed_id,
+            request_identity="c" * 64,
+            max_quarantine_bytes=1000,
+            clock=lambda: NOW,
+        )
+
+        assert result.outcome == "downloaded"
+        assert result.comparisons == ()
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_quarantine"
+            ).fetchone()[0]
+            == 0
+        )
 
 
 def test_exact_hash_mismatch_is_quarantined_and_never_linked(tmp_path: Path) -> None:
@@ -189,13 +257,14 @@ def test_exact_hash_mismatch_is_quarantined_and_never_linked(tmp_path: Path) -> 
 
     managed = tmp_path / "managed"
     managed.mkdir()
-    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database, AssetStorage.for_remote(
-        managed,
-        limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
-    ) as storage:
-        item, run_item_id, managed_id = _seed(
-            database, storage, item_factory=item_factory
-        )
+    with (
+        CatalogDatabase(tmp_path / "catalog.sqlite3") as database,
+        AssetStorage.for_remote(
+            managed,
+            limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
+        ) as storage,
+    ):
+        item, run_item_id, managed_id = _seed(database, storage, item_factory=item_factory)
         result = verify_publish_and_persist(
             database,
             storage,
@@ -212,9 +281,9 @@ def test_exact_hash_mismatch_is_quarantined_and_never_linked(tmp_path: Path) -> 
         assert result.outcome == "hash_mismatch"
         assert result.asset_id is None
         assert database.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM occurrence_assets"
-        ).fetchone()[0] == 0
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM occurrence_assets").fetchone()[0] == 0
+        )
         comparison = database.connection.execute(
             "SELECT * FROM media_acquisition_verifications WHERE claim_kind = 'md5'"
         ).fetchone()
@@ -232,10 +301,13 @@ def test_quarantine_budget_retains_metadata_only_and_exact_only_can_publish(
     payload = b"not-a-supported-image-format"
     managed = tmp_path / "managed"
     managed.mkdir()
-    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database, AssetStorage.for_remote(
-        managed,
-        limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
-    ) as storage:
+    with (
+        CatalogDatabase(tmp_path / "catalog.sqlite3") as database,
+        AssetStorage.for_remote(
+            managed,
+            limits=InspectionLimits(max_bytes=1000, max_pixels=1000, max_frames=10),
+        ) as storage,
+    ):
         item, run_item_id, managed_id = _seed(database, storage)
         result = verify_publish_and_persist(
             database,

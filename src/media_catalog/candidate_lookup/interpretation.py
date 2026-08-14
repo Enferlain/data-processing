@@ -98,9 +98,7 @@ class LookupInterpreter:
                         "Provider artist search returned a non-authoritative attribution lead."
                     ),
                 )
-            return InterpretedResult(
-                "attribution", stable_digest, attribution_entity_id=entity_id
-            )
+            return InterpretedResult("attribution", stable_digest, attribution_entity_id=entity_id)
         if result.result_kind != "post" or result.native_id is None:
             return InterpretedResult(
                 "inconclusive", stable_digest, explanation="Lookup returned no typed match target."
@@ -117,12 +115,17 @@ class LookupInterpreter:
         characteristic: str | None = None
         subject_id, target_id = sorted((seed_post_id, normalized_post_id))
         if strategy is LookupStrategy.SOURCE_POST_URL:
-            source = result.data.get("source")
+            source_values = result.data.get("sources")
+            if isinstance(source_values, (list, tuple)):
+                sources = tuple(value for value in source_values if isinstance(value, str))
+            else:
+                source = result.data.get("source")
+                sources = (source,) if isinstance(source, str) else ()
             seed_row = self.connection.execute(
                 "SELECT canonical_url FROM posts WHERE post_id = ?", (seed_post_id,)
             ).fetchone()
             seed_url = seed_row[0] if seed_row is not None else None
-            if isinstance(source, str) and _same_x_post(source, seed_url):
+            if any(_same_post_reference(source, seed_url) for source in sources):
                 relation = "sourced_from"
                 subject_id, target_id = normalized_post_id, seed_post_id
                 strength = "strong"
@@ -202,11 +205,12 @@ class LookupInterpreter:
         return int(row[0])
 
     def _attribution_id(self, result: NormalizedLookupResult) -> int:
+        provider_id = result.data.get("attribution_native_id", result.native_id)
         row = self.connection.execute(
             """SELECT ae.attribution_entity_id FROM attribution_entities ae
                JOIN platforms platform USING(platform_id)
                WHERE platform.platform_key = ? AND ae.provider_attribution_id = ?""",
-            (result.data.get("platform"), result.native_id),
+            (result.data.get("platform"), provider_id),
         ).fetchone()
         if row is None:
             raise ValueError("normalized lookup attribution was not persisted")
@@ -244,10 +248,12 @@ class LookupInterpreter:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (key, subject_id, target_id, relation, SCORING_VERSION, observed_at, observed_at),
             )
-            candidate_id = int(self.connection.execute(
-                "SELECT post_candidate_id FROM post_match_candidates WHERE candidate_key = ?",
-                (key,),
-            ).fetchone()[0])
+            candidate_id = int(
+                self.connection.execute(
+                    "SELECT post_candidate_id FROM post_match_candidates WHERE candidate_key = ?",
+                    (key,),
+                ).fetchone()[0]
+            )
         else:
             candidate_id = int(existing["post_candidate_id"])
             if relation == "sourced_from" and existing["relation_kind"] == "same_work":
@@ -292,9 +298,12 @@ class LookupInterpreter:
                 ),
             ),
         )
-        evidence_id = int(self.connection.execute(
-            "SELECT evidence_id FROM match_evidence WHERE evidence_digest = ?", (evidence_digest,)
-        ).fetchone()[0])
+        evidence_id = int(
+            self.connection.execute(
+                "SELECT evidence_id FROM match_evidence WHERE evidence_digest = ?",
+                (evidence_digest,),
+            ).fetchone()[0]
+        )
         self.connection.execute(
             """INSERT INTO post_candidate_evidence (post_candidate_id, evidence_id)
                VALUES (?, ?) ON CONFLICT DO NOTHING""",
@@ -379,16 +388,24 @@ class LookupInterpreter:
                     resolved_id,
                 ),
             )
-            reference_id = int(self.connection.execute(
-                """SELECT platform_reference_id FROM platform_references
+            reference_id = int(
+                self.connection.execute(
+                    """SELECT platform_reference_id FROM platform_references
                    WHERE platform_id = ? AND instance_host = ? AND object_kind = 'account'
                      AND identifier_kind = 'stable_id' AND native_identifier = ?
                      AND recognizer_version = ?""",
-                (platform_id, reference.instance_host, reference.native_id, RECOGNIZER_VERSION),
-            ).fetchone()[0])
+                    (platform_id, reference.instance_host, reference.native_id, RECOGNIZER_VERSION),
+                ).fetchone()[0]
+            )
             key = _digest(
-                "account", seed_account_id, "same_identity", platform_id,
-                reference.instance_host, "account", "stable_id", reference.native_id,
+                "account",
+                seed_account_id,
+                "same_identity",
+                platform_id,
+                reference.instance_host,
+                "account",
+                "stable_id",
+                reference.native_id,
             )
             self.connection.execute(
                 """INSERT INTO account_match_candidates (
@@ -406,10 +423,13 @@ class LookupInterpreter:
                     observed_at,
                 ),
             )
-            candidate_id = int(self.connection.execute(
-                "SELECT account_candidate_id FROM account_match_candidates WHERE candidate_key = ?",
-                (key,),
-            ).fetchone()[0])
+            candidate_id = int(
+                self.connection.execute(
+                    "SELECT account_candidate_id FROM account_match_candidates "
+                    "WHERE candidate_key = ?",
+                    (key,),
+                ).fetchone()[0]
+            )
             evidence_digest = _digest(
                 INTERPRETER_VERSION,
                 key,
@@ -437,10 +457,12 @@ class LookupInterpreter:
                     ),
                 ),
             )
-            evidence_id = int(self.connection.execute(
-                "SELECT evidence_id FROM match_evidence WHERE evidence_digest = ?",
-                (evidence_digest,),
-            ).fetchone()[0])
+            evidence_id = int(
+                self.connection.execute(
+                    "SELECT evidence_id FROM match_evidence WHERE evidence_digest = ?",
+                    (evidence_digest,),
+                ).fetchone()[0]
+            )
             self.connection.execute(
                 """INSERT INTO account_candidate_evidence (account_candidate_id, evidence_id)
                    VALUES (?, ?) ON CONFLICT DO NOTHING""",
@@ -471,7 +493,13 @@ class LookupInterpreter:
         return None
 
 
-def _same_x_post(left: str, right: object) -> bool:
+def _same_post_reference(left: str, right: object) -> bool:
+    """Match exact recognized post identities across any supported platform.
+
+    Source evidence commonly crosses providers (for example, an e621 or
+    Danbooru post citing Pixiv), so this deliberately is not restricted to X.
+    """
+
     if not isinstance(right, str):
         return False
     left_ref = recognize_url(left).reference
@@ -479,7 +507,7 @@ def _same_x_post(left: str, right: object) -> bool:
     return bool(
         left_ref
         and right_ref
-        and left_ref.platform == right_ref.platform == "x"
         and left_ref.object_kind == right_ref.object_kind == "post"
+        and left_ref.platform == right_ref.platform
         and left_ref.native_id == right_ref.native_id
     )

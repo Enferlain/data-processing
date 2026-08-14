@@ -1,6 +1,6 @@
 # Project roadmap
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 ## Goal
 
@@ -42,12 +42,11 @@ deliberately deferred.
 
 ## Current state
 
-The `add-artist-library-expansion` milestone is complete and archived. The active
-`add-e621-metadata-adapter` OpenSpec change under Bead `data-processing-7cy` is extending that
-workflow with first-class e621 metadata, attribution lookup, artist-library enumeration, and
-verified media acquisition. Implementation is paused at 15/30 tasks after completing the native
-adapter, neutral persistence, metadata synchronization, CLI, resume, budget, and privacy work.
-Candidate lookup is the next section.
+The `add-artist-library-expansion` milestone is complete and archived. The implementation portion of
+the active `add-e621-metadata-adapter` OpenSpec change under Bead `data-processing-7cy` is complete
+through metadata synchronization, lookup, library expansion, target-scoped browsing, and verified
+media acquisition. Its disabled live smoke tests and full quality gates are also complete. The
+OpenSpec change remains active and unarchived only for final review handoff and archive steps.
 
 Live task state can be checked with:
 
@@ -117,6 +116,29 @@ changes.
 
 See the archived [metadata adapter](openspec/changes/archive/2026-08-10-add-pixiv-danbooru-metadata-adapters/)
 and [media browsing](openspec/changes/archive/2026-08-11-add-media-occurrence-browsing/) changes.
+
+### e621 metadata, lookup, expansion, and acquisition — Implemented
+
+- The native e621 adapter handles post, tag, alias, artist, and bounded artist-tag listing
+  operations with a descriptive User-Agent, optional external Basic auth, a one-second pacing floor,
+  a 320-record page ceiling, typed outcomes, and raw-plus-normalized provenance.
+- Dynamic tag categories, alias histories, artist attribution, uploader roles, relationships, and
+  independent original/sample/preview availability remain distinct facts; unknown native categories
+  stay recoverable instead of being silently mapped to general.
+- Bounded lookup supports source URL, external post ID, declared/verified MD5, exact artist name,
+  and approved alias strategies. Fuzzy/unrestricted text search is excluded and results never
+  auto-confirm identity or authorship.
+- A stable retained artist tag can seed explicit library expansion. Offline estimates use only an
+  unambiguous current provider tag count; otherwise the estimate is unknown. Enumeration resumes
+  by opaque `b<ID>` keysets, does not recurse or inherit liked/bookmarked state, and exposes
+  target-scoped occurrence selectors for explicit acquisition.
+- Explicit acquisition accepts only returned e621 original/sample/preview URLs on `static1` through
+  `static9`, validates redirects, separates original claims from derivative verification, and uses
+  staging, quarantine, and verified CAS publication.
+
+Tags, aliases, and uploaders remain evidence rather than automatic identity/authorship. Generic
+filtered counts and cross-database alias mapping are not available; Gelbooru remains future work.
+Metadata and expansion never fetch media, and live e621 smoke tests remain disabled by default.
 
 ### Bounded candidate lookup — Complete
 
@@ -190,23 +212,17 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Active milestone: first-class e621 support
+## Current milestone: e621 final verification and handoff
 
-- Add a native e621 adapter under its documented descriptive User-Agent, authentication, pacing,
-  page-size, keyset-pagination, availability, and privacy contracts.
-- Preserve nested post/media facts, categorized tags, approved aliases, artist attribution,
-  sources, relationships, uploader roles, and raw observations without inventing unavailable URLs.
-- Extend bounded candidate lookup, artist-library expansion, target-scoped browsing, and explicit
-  verified acquisition while keeping attribution separate from accounts and review conclusions.
-- Keep Gelbooru separate until credentialed fixtures establish its undocumented response schema
-  and an explicit personal-use policy decision permits bounded automation.
+- Complete the implementation-review handoff, rerun any affected gates, and archive the OpenSpec
+  change only after every review finding is resolved.
 
 ## Planned after the active milestone
 
 ### Broader provider coverage
 
 - Add providers when they serve a concrete workflow and have a documented, bounded interaction
-  policy. Likely candidates include e621, Gelbooru, and Mastodon-compatible sources such as Baraag.
+  policy. Likely candidates include Gelbooru and Mastodon-compatible sources such as Baraag.
 - Prefer native metadata adapters for first-class providers.
 - Consider a pinned gallery-dl subprocess bridge for unsupported sources or extraction assistance,
   but require all resulting files to pass the catalog's verification and CAS contract.

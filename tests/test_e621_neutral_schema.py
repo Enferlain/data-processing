@@ -10,7 +10,7 @@ import media_catalog.database as database_module
 from media_catalog.adapters import NormalizedItem, NormalizedPage, load_fixture_suite
 from media_catalog.adapters.e621 import E621, E621Adapter
 from media_catalog.database import CatalogDatabase, SchemaVersionError, available_migrations
-from media_catalog.records import RawRecord
+from media_catalog.records import RawRecord, TagObservationRecord
 from media_catalog.remote_queries import (
     RemoteQueryService,
     list_post_tags,
@@ -292,3 +292,41 @@ def test_e621_post_metadata_observation_keeps_changed_score_history(tmp_path: Pa
             "ORDER BY post_metadata_observation_id"
         ).fetchall()
         assert [row[0] for row in scores] == [18, 19]
+
+
+def test_standalone_tag_name_cannot_change_provider_identity(tmp_path: Path) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            writer.upsert_tag_record(
+                TagObservationRecord(
+                    "e621",
+                    "artist",
+                    "stable_artist",
+                    "stable_artist",
+                    NOW,
+                    "provider-tag-v1",
+                    provider_tag_id="7001",
+                    native_category="artist",
+                    native_category_code=1,
+                )
+            )
+            with pytest.raises(ValueError, match="another provider tag id"):
+                writer.upsert_tag_record(
+                    TagObservationRecord(
+                        "e621",
+                        "artist",
+                        "stable_artist",
+                        "stable_artist",
+                        NOW,
+                        "provider-tag-v1",
+                        provider_tag_id="7002",
+                        native_category="artist",
+                        native_category_code=1,
+                    )
+                )
+
+        row = database.connection.execute(
+            "SELECT provider_tag_id FROM tags WHERE name = 'stable_artist'"
+        ).fetchone()
+        assert row[0] == "7001"
