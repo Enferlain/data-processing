@@ -40,6 +40,7 @@ def list_remote_runs(
         database,
         """SELECT rr.remote_run_id, p.platform_key AS platform, rr.instance_host,
                   rr.operation, rr.target, rr.adapter_version, rr.schema_version,
+                  rr.transport_key, rr.transport_version,
                   rr.resumed_from_run_id, rr.status, rr.request_budget, rr.page_budget,
                   rr.record_budget, rr.time_budget_seconds, rr.request_count, rr.page_count,
                   rr.record_count, rr.termination_outcome, rr.budget_boundary, rr.retry_after,
@@ -60,6 +61,7 @@ def get_remote_run(
             connection,
             """SELECT rr.remote_run_id, p.platform_key AS platform, rr.instance_host,
                   rr.operation, rr.target, rr.adapter_version, rr.schema_version,
+                  rr.transport_key, rr.transport_version,
                   rr.resumed_from_run_id, rr.status, rr.request_count, rr.page_count,
                   rr.record_count, rr.termination_outcome, rr.budget_boundary, rr.retry_after,
                   rr.diagnostic_summary, rr.started_at, rr.finished_at
@@ -75,14 +77,15 @@ def get_remote_run(
                   status_code, outcome, retry_after, rate_limit_state,
                   response_adapter_version, response_schema_version, object_kind, native_id,
                   media_type, response_size, request_started_at, response_observed_at,
-                  request_finished_at
+                  request_finished_at, transport_key, transport_version
            FROM remote_requests WHERE remote_run_id = ? ORDER BY attempt_number""",
             (remote_run_id,),
         )
         runs[0]["checkpoints"] = _rows_on(
             connection,
             """SELECT remote_checkpoint_id, operation, target, continuation_adapter,
-                  continuation_version, last_page_identity, page_count, committed_at
+                  continuation_version, last_page_identity, page_count, committed_at,
+                  transport_key, transport_version
            FROM remote_checkpoints WHERE remote_run_id = ?
            ORDER BY remote_checkpoint_id""",
             (remote_run_id,),

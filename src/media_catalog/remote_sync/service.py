@@ -13,6 +13,8 @@ from media_catalog.adapters import (
     AdapterOutcome,
     Continuation,
     ResponseEnvelope,
+    adapter_transport_identity,
+    validate_transport_pair,
 )
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import (
@@ -106,6 +108,7 @@ class MetadataSyncService:
     ) -> None:
         self.database = database
         self.adapter = adapter
+        self.transport_key, self.transport_version = adapter_transport_identity(adapter)
         self.writer = CatalogWriter(database)
         self.page_writer = NormalizedPageWriter(self.writer)
         self.minimum_interval_seconds = minimum_interval_seconds
@@ -144,6 +147,8 @@ class MetadataSyncService:
                     resumed_from_run_id=resume_from_run_id,
                     origin_kind=origin.kind if origin is not None else None,
                     origin_reference=origin.reference if origin is not None else None,
+                    transport_key=self.transport_key,
+                    transport_version=self.transport_version,
                 )
             )
             if origin is not None:
@@ -261,6 +266,8 @@ class MetadataSyncService:
                         last_page_identity=response.request_identity,
                         page_count=budget.pages,
                         committed_at=self.clock(),
+                        transport_key=self.transport_key,
+                        transport_version=self.transport_version,
                     )
                 )
 
@@ -271,6 +278,11 @@ class MetadataSyncService:
         response: ResponseEnvelope,
         target: str,
     ) -> int:
+        transport_key, transport_version = validate_transport_pair(
+            response.transport_key, response.transport_version
+        )
+        if (transport_key, transport_version) != (self.transport_key, self.transport_version):
+            raise ValueError("response transport identity is incompatible with this adapter")
         outcome = _response_outcome(response.status_code)
         with self.database.transaction():
             request_id = self.writer.record_remote_request(
@@ -291,6 +303,8 @@ class MetadataSyncService:
                     response_size=len(response.payload),
                     response_observed_at=response.observed_at,
                     request_finished_at=response.observed_at,
+                    transport_key=transport_key,
+                    transport_version=transport_version,
                 )
             )
             return self.writer.store_raw(
@@ -306,6 +320,8 @@ class MetadataSyncService:
                     adapter_version=response.adapter_version,
                     schema_version=response.schema_version,
                     status=str(response.status_code),
+                    transport_key=transport_key,
+                    transport_version=transport_version,
                 ),
                 remote_run_id=run_id,
                 remote_request_id=request_id,
@@ -322,7 +338,10 @@ class MetadataSyncService:
             return None
         row = self.database.connection.execute(
             """SELECT rr.platform_id, rr.operation, rr.target, rr.adapter_version,
-                      rr.schema_version, rr.status, rc.continuation_json
+                      rr.schema_version, rr.transport_key, rr.transport_version,
+                      rc.transport_key AS checkpoint_transport_key,
+                      rc.transport_version AS checkpoint_transport_version,
+                      rr.status, rc.continuation_json
                FROM remote_runs rr
                JOIN remote_checkpoints rc ON rc.remote_run_id = rr.remote_run_id
                WHERE rr.remote_run_id = ?
@@ -338,6 +357,10 @@ class MetadataSyncService:
             and row["target"] == target
             and row["adapter_version"] == self.adapter.adapter_version
             and row["schema_version"] == self.adapter.schema_version
+            and (row["transport_key"], row["transport_version"])
+            == (self.transport_key, self.transport_version)
+            and (row["checkpoint_transport_key"], row["checkpoint_transport_version"])
+            == (self.transport_key, self.transport_version)
         )
         if not compatible:
             raise ValueError("resume checkpoint is incompatible with this adapter request")

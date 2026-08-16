@@ -24,6 +24,10 @@ from .contracts import (
     NormalizedLookupResult,
     NormalizedPage,
     ResponseEnvelope,
+    TransportIdentityAdapter,
+    TransportPair,
+    adapter_transport_identity,
+    validate_transport_pair,
 )
 from .fixtures import FixtureCase, FixtureManifest, FixtureSuite, load_fixture_suite
 
@@ -54,5 +58,9 @@ __all__ = [
     "NormalizedLookupResult",
     "NormalizedPage",
     "ResponseEnvelope",
+    "TransportIdentityAdapter",
+    "TransportPair",
+    "adapter_transport_identity",
     "load_fixture_suite",
+    "validate_transport_pair",
 ]

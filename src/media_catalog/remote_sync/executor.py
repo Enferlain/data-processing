@@ -17,6 +17,7 @@ from media_catalog.adapters import (
     AdapterRequest,
     LookupAdapter,
     ResponseEnvelope,
+    adapter_transport_identity,
 )
 
 from .budget import BudgetExhausted, BudgetTracker, SyncLimits
@@ -89,11 +90,18 @@ class BoundedRemoteExecutor:
         self.operation = operation
         self.target = target
         self.initial_continuation = continuation
+        self.transport_key, self.transport_version = adapter_transport_identity(adapter)
         self.retain_response = retain_response
         self.commit_page = commit_page
         self.continue_pages = continue_pages or _continue_metadata_pages
         self.request_factory = request_factory or (
-            lambda current: AdapterRequest(self.operation, self.target, current)
+            lambda current: AdapterRequest(
+                self.operation,
+                self.target,
+                current,
+                self.transport_key,
+                self.transport_version,
+            )
         )
         if fetch_page is None or normalize_page is None:
             if not isinstance(adapter, Adapter):

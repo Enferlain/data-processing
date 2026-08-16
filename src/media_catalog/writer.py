@@ -307,11 +307,17 @@ class CatalogWriter:
         platform_id = self.platform_id(record.platform) if record.platform is not None else None
         if remote_request_id is not None:
             request = self.connection.execute(
-                "SELECT remote_run_id FROM remote_requests WHERE remote_request_id = ?",
+                """SELECT remote_run_id, transport_key, transport_version
+                   FROM remote_requests WHERE remote_request_id = ?""",
                 (remote_request_id,),
             ).fetchone()
             if request is None or int(request[0]) != remote_run_id:
                 raise ValueError("remote request does not belong to the supplied run")
+            if (request["transport_key"], request["transport_version"]) != (
+                record.transport_key,
+                record.transport_version,
+            ):
+                raise ValueError("raw observation transport identity does not match its request")
         digest = hashlib.sha256(record.payload).hexdigest()
         self.connection.execute(
             """INSERT INTO raw_payloads (sha256, media_type, payload, byte_size)
@@ -335,14 +341,17 @@ class CatalogWriter:
             remote_request_id,
             record.adapter_version,
             record.schema_version,
+            record.transport_key,
+            record.transport_version,
         )
         if remote_request_id is not None:
             self.connection.execute(
                 """INSERT OR IGNORE INTO raw_observations (
                        raw_payload_id, import_run_id, platform_id, object_kind, native_id,
                        media_type, source_schema, status, observed_at, remote_run_id,
-                       remote_request_id, adapter_version, schema_version
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       remote_request_id, adapter_version, schema_version,
+                       transport_key, transport_version
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 values,
             )
             row = self.connection.execute(
@@ -355,8 +364,9 @@ class CatalogWriter:
                 """INSERT INTO raw_observations (
                        raw_payload_id, import_run_id, platform_id, object_kind, native_id,
                        media_type, source_schema, status, observed_at, remote_run_id,
-                       remote_request_id, adapter_version, schema_version
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       remote_request_id, adapter_version, schema_version,
+                       transport_key, transport_version
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(import_run_id, object_kind, native_id, raw_payload_id) DO NOTHING""",
                 values,
             )
@@ -385,8 +395,8 @@ class CatalogWriter:
                    platform_id, instance_host, operation, target, adapter_version,
                    schema_version, resumed_from_run_id, request_budget, page_budget,
                    record_budget, time_budget_seconds, started_at, origin_kind,
-                   origin_reference
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   origin_reference, transport_key, transport_version
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 platform_id,
                 record.instance_host,
@@ -402,6 +412,8 @@ class CatalogWriter:
                 record.started_at,
                 record.origin_kind,
                 record.origin_reference,
+                record.transport_key,
+                record.transport_version,
             ),
         )
         return _inserted_id(cursor)
@@ -458,14 +470,31 @@ class CatalogWriter:
             raise ValueError("remote run is missing or already finished")
 
     def record_remote_request(self, record: RemoteRequestRecord) -> int:
+        run = self.connection.execute(
+            "SELECT transport_key, transport_version FROM remote_runs WHERE remote_run_id = ?",
+            (record.remote_run_id,),
+        ).fetchone()
+        if run is None:
+            raise ValueError("remote run is missing")
+        if (run["transport_key"], run["transport_version"]) != (
+            record.transport_key,
+            record.transport_version,
+        ):
+            raise ValueError("remote request transport identity does not match its run")
         existing = self.connection.execute(
-            """SELECT remote_request_id, request_identity FROM remote_requests
+            """SELECT remote_request_id, request_identity, transport_key, transport_version
+               FROM remote_requests
                WHERE remote_run_id = ? AND attempt_number = ?""",
             (record.remote_run_id, record.attempt_number),
         ).fetchone()
         if existing is not None:
             if existing["request_identity"] != record.request_identity:
                 raise ValueError("remote attempt number belongs to another request identity")
+            if (existing["transport_key"], existing["transport_version"]) != (
+                record.transport_key,
+                record.transport_version,
+            ):
+                raise ValueError("remote attempt transport identity does not match")
             return int(existing["remote_request_id"])
         cursor = self.connection.execute(
             """INSERT INTO remote_requests (
@@ -473,8 +502,8 @@ class CatalogWriter:
                    status_code, outcome, retry_after, rate_limit_state,
                    response_adapter_version, response_schema_version, object_kind, native_id,
                    media_type, response_size, request_started_at, response_observed_at,
-                   request_finished_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   request_finished_at, transport_key, transport_version
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 record.remote_run_id,
                 record.attempt_number,
@@ -494,24 +523,39 @@ class CatalogWriter:
                 record.request_started_at,
                 record.response_observed_at,
                 record.request_finished_at,
+                record.transport_key,
+                record.transport_version,
             ),
         )
         return _inserted_id(cursor)
 
     def save_remote_checkpoint(self, record: RemoteCheckpointRecord) -> int:
+        run = self.connection.execute(
+            "SELECT transport_key, transport_version FROM remote_runs WHERE remote_run_id = ?",
+            (record.remote_run_id,),
+        ).fetchone()
+        if run is None:
+            raise ValueError("remote run is missing")
+        if (run["transport_key"], run["transport_version"]) != (
+            record.transport_key,
+            record.transport_version,
+        ):
+            raise ValueError("checkpoint transport identity does not match its run")
         self.connection.execute(
             """INSERT INTO remote_checkpoints (
                    remote_run_id, operation, target, continuation_adapter,
                    continuation_version, continuation_json, last_page_identity,
-                   page_count, committed_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   page_count, committed_at, transport_key, transport_version
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(remote_run_id, operation, target) DO UPDATE SET
                    continuation_adapter = excluded.continuation_adapter,
                    continuation_version = excluded.continuation_version,
                    continuation_json = excluded.continuation_json,
                    last_page_identity = excluded.last_page_identity,
                    page_count = excluded.page_count,
-                   committed_at = excluded.committed_at""",
+                   committed_at = excluded.committed_at,
+                   transport_key = excluded.transport_key,
+                   transport_version = excluded.transport_version""",
             (
                 record.remote_run_id,
                 record.operation,
@@ -522,6 +566,8 @@ class CatalogWriter:
                 record.last_page_identity,
                 record.page_count,
                 record.committed_at,
+                record.transport_key,
+                record.transport_version,
             ),
         )
         return int(

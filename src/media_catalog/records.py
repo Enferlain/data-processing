@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from media_catalog.adapters.contracts import validate_transport_pair
+
 PLATFORM_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 INSTANCE_PATTERN = re.compile(
     r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$"
@@ -413,6 +415,8 @@ class RawRecord:
     platform: str | None = None
     adapter_version: str | None = None
     schema_version: str | None = None
+    transport_key: str | None = None
+    transport_version: str | None = None
 
     def __post_init__(self) -> None:
         if not self.payload:
@@ -423,6 +427,11 @@ class RawRecord:
             _validate_nonempty(self.adapter_version, "raw adapter version", max_length=200)
         if self.schema_version is not None:
             _validate_nonempty(self.schema_version, "raw schema version", max_length=200)
+        transport_key, transport_version = validate_transport_pair(
+            self.transport_key, self.transport_version
+        )
+        object.__setattr__(self, "transport_key", transport_key)
+        object.__setattr__(self, "transport_version", transport_version)
         object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
 
 
@@ -542,6 +551,8 @@ class RemoteRunRecord:
     resumed_from_run_id: int | None = None
     origin_kind: str | None = None
     origin_reference: str | None = None
+    transport_key: str | None = None
+    transport_version: str | None = None
 
     def __post_init__(self) -> None:
         validate_platform(self.platform)
@@ -567,6 +578,11 @@ class RemoteRunRecord:
             validate_library_origin_kind(self.origin_kind)
         if self.origin_reference is not None:
             object.__setattr__(self, "origin_reference", validate_hash(self.origin_reference, 64))
+        transport_key, transport_version = validate_transport_pair(
+            self.transport_key, self.transport_version
+        )
+        object.__setattr__(self, "transport_key", transport_key)
+        object.__setattr__(self, "transport_version", transport_version)
         object.__setattr__(self, "started_at", normalize_timestamp(self.started_at))
 
 
@@ -590,6 +606,8 @@ class RemoteRequestRecord:
     response_size: int | None = None
     response_observed_at: str | None = None
     request_finished_at: str | None = None
+    transport_key: str | None = None
+    transport_version: str | None = None
 
     def __post_init__(self) -> None:
         _validate_positive_id(self.remote_run_id, "remote run id")
@@ -612,6 +630,11 @@ class RemoteRequestRecord:
             value = getattr(self, name)
             if value is not None:
                 _validate_nonempty(value, name.replace("_", " "), max_length=500)
+        transport_key, transport_version = validate_transport_pair(
+            self.transport_key, self.transport_version
+        )
+        object.__setattr__(self, "transport_key", transport_key)
+        object.__setattr__(self, "transport_version", transport_version)
         object.__setattr__(self, "request_started_at", normalize_timestamp(self.request_started_at))
         for name in ("retry_after", "response_observed_at", "request_finished_at"):
             value = getattr(self, name)
@@ -630,6 +653,8 @@ class RemoteCheckpointRecord:
     committed_at: str
     last_page_identity: str | None = None
     page_count: int = 0
+    transport_key: str | None = None
+    transport_version: str | None = None
 
     def __post_init__(self) -> None:
         _validate_positive_id(self.remote_run_id, "remote run id")
@@ -644,6 +669,11 @@ class RemoteCheckpointRecord:
             validate_secret_free_identity(self.last_page_identity)
         if self.page_count < 0:
             raise ValueError("checkpoint page count must not be negative")
+        transport_key, transport_version = validate_transport_pair(
+            self.transport_key, self.transport_version
+        )
+        object.__setattr__(self, "transport_key", transport_key)
+        object.__setattr__(self, "transport_version", transport_version)
         object.__setattr__(self, "committed_at", normalize_timestamp(self.committed_at))
 
 

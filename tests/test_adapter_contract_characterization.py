@@ -1,7 +1,7 @@
 """Characterization of the shared provider-neutral adapter boundary.
 
-OpenSpec change ``add-e621-metadata-adapter`` task 1.2 asks for characterization
-of the existing Danbooru/AIBooru behavior at the shared adapter boundary before a
+OpenSpec changes that add provider adapters require characterization of the
+existing Danbooru/AIBooru/e621 behavior at the shared adapter boundary before a
 new parallel provider is added.  These tests lock the neutral contract surface
 (``fetch`` -> ``ResponseEnvelope`` -> ``normalize`` -> ``NormalizedPage``,
 secret-free identities, typed outcomes, keyset continuations, and no media
@@ -27,6 +27,7 @@ from media_catalog.adapters import (
     load_fixture_suite,
 )
 from media_catalog.adapters.danbooru import AIBOORU, DANBOORU, DanbooruAdapter
+from media_catalog.adapters.e621 import E621, E621Adapter
 
 FIXTURES = Path(__file__).parent / "fixtures" / "metadata_adapters"
 NOW = "2026-08-12T00:00:00Z"
@@ -45,6 +46,19 @@ def _adapter(instance=DANBOORU, handler=None) -> DanbooruAdapter:
 
     return DanbooruAdapter(
         instance,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        clock=lambda: NOW,
+    )
+
+
+def _e621_adapter(handler=None) -> E621Adapter:
+    if handler is None:
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, json={"message": "unused"})
+
+    return E621Adapter(
+        E621,
         client=httpx.Client(transport=httpx.MockTransport(handler)),
         clock=lambda: NOW,
     )
@@ -132,3 +146,48 @@ def test_danbooru_metadata_fetch_does_not_contact_media_hosts() -> None:
     adapter = _adapter(handler=handler)
     adapter.normalize(adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "3001")))
     assert requested_hosts == ["danbooru.donmai.us"]
+
+
+def test_e621_satisfies_the_same_versioned_adapter_boundary() -> None:
+    adapter = _e621_adapter()
+    assert isinstance(adapter, Adapter)
+    assert adapter.provider_key == "e621"
+    assert adapter.instance_key == E621.platform_key
+    assert adapter.adapter_version and adapter.schema_version
+
+
+def test_e621_listing_continuation_remains_target_scoped_and_opaque() -> None:
+    page = _e621_adapter().normalize(_case("e621.json", "listing_first").response)
+    assert page.continuation is not None
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=[])
+
+    _e621_adapter(handler).fetch(
+        AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "artist_a",
+            continuation=page.continuation,
+        )
+    )
+    assert requests[0].url.host == "e621.net"
+    assert requests[0].url.params["tags"] == "artist_a"
+    assert requests[0].url.params["page"] == "b5101"
+
+
+def test_e621_metadata_normalization_never_contacts_returned_media_hosts() -> None:
+    case = _case("e621.json", "normal_post")
+    body = json.loads(case.response.payload)
+    requested_hosts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_hosts.append(request.url.host)
+        return httpx.Response(200, json=body)
+
+    adapter = _e621_adapter(handler)
+    page = adapter.normalize(adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "5001")))
+    occurrence = next(item for item in page.items if item.object_kind == "media_occurrence")
+    assert occurrence.data["remote_url"].startswith("https://static1.e621.net/")
+    assert requested_hosts == ["e621.net"]

@@ -723,6 +723,58 @@ def _nonempty(value: str, name: str) -> str:
     return value
 
 
+TransportPair = tuple[str | None, str | None]
+_TRANSPORT_SECRET_MARKERS = (
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "password",
+    "secret",
+    "token",
+)
+
+
+def _transport_value(value: object, name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be text")
+    normalized = _nonempty(value, name)
+    if len(normalized) > 200 or any(ord(char) < 32 for char in normalized):
+        raise ValueError(f"{name} must be bounded text without control characters")
+    lowered = normalized.casefold()
+    if "://" in lowered or any(marker in lowered for marker in _TRANSPORT_SECRET_MARKERS):
+        raise ValueError(f"{name} must be a non-secret transport identifier")
+    if any(char in normalized for char in "?&="):
+        raise ValueError(f"{name} must not contain rendered query material")
+    return normalized
+
+
+def validate_transport_pair(
+    transport_key: str | None, transport_version: str | None
+) -> TransportPair:
+    """Validate an optional, non-secret transport identity pair."""
+
+    if (transport_key is None) != (transport_version is None):
+        raise ValueError("transport key and transport version must be supplied together")
+    if transport_key is None:
+        return None, None
+    return (
+        _transport_value(transport_key, "transport key"),
+        _transport_value(transport_version, "transport version"),
+    )
+
+
+def adapter_transport_identity(adapter: object) -> TransportPair:
+    """Read optional transport attributes without requiring them on existing adapters."""
+
+    return validate_transport_pair(
+        getattr(adapter, "transport_key", None),
+        getattr(adapter, "transport_version", None),
+    )
+
+
 def _timestamp(value: str) -> str:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
@@ -794,9 +846,16 @@ class AdapterRequest:
     operation: AdapterOperation
     target: str
     continuation: Continuation | None = None
+    transport_key: str | None = None
+    transport_version: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "target", _nonempty(self.target, "adapter target"))
+        transport_key, transport_version = validate_transport_pair(
+            self.transport_key, self.transport_version
+        )
+        object.__setattr__(self, "transport_key", transport_key)
+        object.__setattr__(self, "transport_version", transport_version)
 
 
 @dataclass(frozen=True, slots=True)
@@ -820,6 +879,8 @@ class ResponseEnvelope:
     # a page is normalized.  Existing providers leave this unset for backwards
     # compatibility with fixtures and callers that construct envelopes directly.
     request_target: str | None = None
+    transport_key: str | None = None
+    transport_version: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "provider", _nonempty(self.provider, "provider"))
@@ -840,6 +901,11 @@ class ResponseEnvelope:
             if len(target) > 500 or any(ord(char) < 32 for char in target):
                 raise ValueError("request target must be bounded text without control characters")
             object.__setattr__(self, "request_target", target)
+        transport_key, transport_version = validate_transport_pair(
+            self.transport_key, self.transport_version
+        )
+        object.__setattr__(self, "transport_key", transport_key)
+        object.__setattr__(self, "transport_version", transport_version)
         if self.lookup_strategy is not None:
             object.__setattr__(self, "lookup_strategy", LookupStrategy(self.lookup_strategy))
             if not isinstance(self.lookup_query_digest, str) or not re.fullmatch(
@@ -920,6 +986,14 @@ class Adapter(Protocol):
     def fetch(self, request: AdapterRequest) -> ResponseEnvelope: ...
 
     def normalize(self, response: ResponseEnvelope) -> NormalizedPage: ...
+
+
+@runtime_checkable
+class TransportIdentityAdapter(Protocol):
+    """Optional adapter surface for explicit transport provenance."""
+
+    transport_key: str
+    transport_version: str
 
 
 @runtime_checkable
