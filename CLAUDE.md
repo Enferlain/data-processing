@@ -2,7 +2,60 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
+## Sub agent usage
+
+Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions. If there are no instructions, ask the user.
+
+## Python Quality Gates
+
+Use the project environment through `uv`.
+
+### Tests
+
+```bash
+# Full suite
+uv run pytest
+
+# Focused file
+uv run pytest tests/test_example.py
+```
+
+### Linting and formatting
+
+```bash
+# Required repository lint gate
+uv run ruff check .
+
+# Apply safe lint fixes
+uv run ruff check . --fix
+
+# Format files changed by the current task
+uv run ruff format path/to/file.py tests/test_file.py
+
+# Verify formatting for changed files
+uv run ruff format --check path/to/file.py tests/test_file.py
+```
+
+Ruff targets Python 3.13, enforces absolute imports across parent-package boundaries, and excludes
+the vendored `src/xarchive/vendor` subtree. Preserve the repository's 100-character line length and
+import-sorting rules rather than copying formatting assumptions from adjacent projects.
+
+### Type checking
+
+```bash
+# Required blocking first-party source gate
+uv run ty check src
+
+# Focused package or file; use the normal exit status for work in that scope
+uv run ty check src/media_catalog
+uv run ty check src/media_catalog/records.py
+```
+
+ty targets Python 3.13 and excludes vendored xarchive code. The repository-wide command is a
+required quality gate. Do not add blanket ignores or lower rule severities to make a task appear
+green.
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -46,6 +99,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
    # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
+   bd dolt push
    git push
    git status
    ```
