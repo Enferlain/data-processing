@@ -14,6 +14,11 @@ Rules:
 
 ### Changed
 
+- **Tag, attribution, and external-reference writes moved behind an internal persistence
+  component** — tag, tag-alias, post metadata/pool/flag, attribution, and external reference/link
+  write methods now live in `media_catalog.persistence.metadata.MetadataWrites` together with the
+  attribution-name and reference-URL helpers only they use, delegated identically by
+  `CatalogWriter`.
 - **Remote synchronization writes moved behind an internal persistence component** — raw
   observation storage and the remote run, request, and checkpoint write methods now live in
   `media_catalog.persistence.remote.RemoteWrites`, delegated identically by `CatalogWriter` with
