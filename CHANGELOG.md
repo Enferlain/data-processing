@@ -10,6 +10,16 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-01]
+
+### Changed
+
+- **Managed-storage and adoption writes moved behind an internal persistence component** — the
+  eight root, asset-location, occurrence-source, fingerprint, and adoption write methods now live
+  in `media_catalog.persistence.storage.StorageWrites`, with `CatalogWriter` keeping identical
+  public signatures as explicit delegations on the caller's shared transaction; the root-upsert
+  compatibility alias is preserved.
+
 ## [2026-09-30]
 
 ### Added

@@ -8,6 +8,8 @@ import pytest
 import media_catalog.persistence
 from media_catalog.database import CatalogDatabase
 from media_catalog.persistence import support
+from media_catalog.records import AccountRecord, AdoptionRunRecord, ManagedRootRecord
+from media_catalog.writer import CatalogWriter
 
 
 def test_support_helpers_share_the_caller_connection(tmp_path: Path) -> None:
@@ -60,3 +62,36 @@ def test_persistence_package_never_commits_or_opens_connections() -> None:
         assert ".executescript(" not in text, source.name
         assert "sqlite3.connect(" not in text, source.name
         assert "BEGIN" not in text, source.name
+
+
+def test_delegated_storage_writes_share_the_caller_transaction(tmp_path: Path) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+
+        with pytest.raises(RuntimeError, match="force rollback"), database.transaction():
+            writer.upsert_account(
+                AccountRecord(
+                    platform="pixiv",
+                    native_id="123",
+                    observed_at="2026-08-16T00:00:00Z",
+                )
+            )
+            root_id = writer.register_managed_root(
+                ManagedRootRecord(
+                    root_kind="managed",
+                    root_identity="dev:ino",
+                    display_label="managed",
+                )
+            )
+            writer.begin_adoption_run(
+                AdoptionRunRecord(
+                    managed_root_id=root_id,
+                    managed_root_identity="dev:ino",
+                    algorithm_version="adopt-v1",
+                    started_at="2026-08-16T00:00:00Z",
+                )
+            )
+            raise RuntimeError("force rollback")
+
+        assert database.connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
+        assert database.connection.execute("SELECT COUNT(*) FROM adoption_runs").fetchone()[0] == 0
