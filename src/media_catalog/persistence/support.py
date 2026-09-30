@@ -11,6 +11,15 @@ def caller_connection(database: CatalogDatabase) -> sqlite3.Connection:
     return database.connection
 
 
+def platform_id(connection: sqlite3.Connection, platform: str) -> int:
+    row = connection.execute(
+        "SELECT platform_id FROM platforms WHERE platform_key = ?", (platform,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"unknown catalog platform: {platform}")
+    return int(row[0])
+
+
 def now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 

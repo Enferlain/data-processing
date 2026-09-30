@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 from dataclasses import asdict
 
 from media_catalog.database import CatalogDatabase
 from media_catalog.persistence.acquisition import AcquisitionWrites
+from media_catalog.persistence.library import LibraryWrites
+from media_catalog.persistence.lookup import LookupWrites
 from media_catalog.persistence.storage import StorageWrites
 from media_catalog.persistence.support import (
     WriteResult,
+    platform_id,
 )
 from media_catalog.persistence.support import (
     inserted_id as _inserted_id,
@@ -58,9 +60,6 @@ from media_catalog.records import (
     normalize_timestamp,
     validate_budget_boundary,
     validate_event_type,
-    validate_lookup_budget_boundary,
-    validate_lookup_outcome,
-    validate_lookup_run_status,
     validate_remote_outcome,
     validate_remote_run_status,
     validate_role,
@@ -81,14 +80,11 @@ class CatalogWriter:
         self.connection = database.connection
         self._storage = StorageWrites(database)
         self._acquisition = AcquisitionWrites(database)
+        self._lookup = LookupWrites(database)
+        self._library = LibraryWrites(database)
 
     def platform_id(self, platform: str) -> int:
-        row = self.connection.execute(
-            "SELECT platform_id FROM platforms WHERE platform_key = ?", (platform,)
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"unknown catalog platform: {platform}")
-        return int(row[0])
+        return platform_id(self.connection, platform)
 
     def begin_discovery(
         self,
@@ -1834,36 +1830,7 @@ class CatalogWriter:
         return self._acquisition.record_acquisition_quarantine(record)
 
     def begin_candidate_lookup(self, record: CandidateLookupRunRecord) -> int:
-        cursor = self.connection.execute(
-            """INSERT INTO candidate_lookup_runs (
-                   platform_id, instance_host, strategy, strategy_version, adapter_version,
-                   schema_version, seed_account_id, seed_post_id, seed_revision, plan_digest,
-                   query_kind, material_digest, private_query_json, predecessor_run_id,
-                   request_limit, page_limit, result_limit, time_limit_seconds, started_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                self.platform_id(record.platform),
-                record.instance_host,
-                record.strategy,
-                record.strategy_version,
-                record.adapter_version,
-                record.schema_version,
-                record.seed_account_id,
-                record.seed_post_id,
-                record.seed_revision,
-                record.plan_digest,
-                record.query_kind,
-                record.material_digest,
-                record.private_query_json,
-                record.predecessor_run_id,
-                record.request_limit,
-                record.page_limit,
-                record.result_limit,
-                record.time_limit_seconds,
-                record.started_at,
-            ),
-        )
-        return _inserted_id(cursor)
+        return self._lookup.begin_candidate_lookup(record)
 
     def finish_candidate_lookup(
         self,
@@ -1879,343 +1846,36 @@ class CatalogWriter:
         retry_after: str | None = None,
         diagnostic: str | None = None,
     ) -> None:
-        validate_lookup_run_status(status)
-        validate_lookup_outcome(outcome)
-        if status == "running":
-            raise ValueError("finished lookup run cannot remain running")
-        if budget_boundary is not None:
-            validate_lookup_budget_boundary(budget_boundary)
-        for value, label in (
-            (request_count, "request count"),
-            (page_count, "page count"),
-            (result_count, "result count"),
-        ):
-            if value < 0:
-                raise ValueError(f"{label} must not be negative")
-        finished_at = normalize_timestamp(finished_at)
-        retry_after = normalize_timestamp(retry_after) if retry_after else None
-        diagnostic = diagnostic[:1000] if diagnostic else None
-        values = (
-            status,
-            outcome,
-            budget_boundary,
-            request_count,
-            page_count,
-            result_count,
-            retry_after,
-            diagnostic,
-            finished_at,
+        self._lookup.finish_candidate_lookup(
+            run_id,
+            status=status,
+            outcome=outcome,
+            request_count=request_count,
+            page_count=page_count,
+            result_count=result_count,
+            finished_at=finished_at,
+            budget_boundary=budget_boundary,
+            retry_after=retry_after,
+            diagnostic=diagnostic,
         )
-        cursor = self.connection.execute(
-            """UPDATE candidate_lookup_runs SET status = ?, termination_outcome = ?,
-                   budget_boundary = ?, request_count = ?, page_count = ?, result_count = ?,
-                   retry_after = ?, diagnostic_summary = ?, finished_at = ?
-               WHERE candidate_lookup_run_id = ? AND status = 'running'""",
-            (*values, run_id),
-        )
-        if cursor.rowcount == 1:
-            return
-        row = self.connection.execute(
-            """SELECT status, termination_outcome, budget_boundary, request_count, page_count,
-                      result_count, retry_after, diagnostic_summary, finished_at
-               FROM candidate_lookup_runs WHERE candidate_lookup_run_id = ?""",
-            (run_id,),
-        ).fetchone()
-        if row is None or tuple(row) != values:
-            raise ValueError("lookup run is missing or already finished differently")
 
     def record_candidate_lookup_request(self, record: CandidateLookupRequestRecord) -> int:
-        row = self.connection.execute(
-            """SELECT * FROM candidate_lookup_requests
-               WHERE candidate_lookup_run_id = ? AND attempt_number = ?""",
-            (record.candidate_lookup_run_id, record.attempt_number),
-        ).fetchone()
-        columns = (
-            "request_identity",
-            "state",
-            "outcome",
-            "status_code",
-            "retry_after",
-            "response_size",
-            "raw_observation_id",
-            "candidate_lookup_checkpoint_id",
-            "started_at",
-            "observed_at",
-            "finished_at",
-        )
-        values = tuple(getattr(record, name) for name in columns)
-        if row is None:
-            cursor = self.connection.execute(
-                """INSERT INTO candidate_lookup_requests (
-                       candidate_lookup_run_id, attempt_number, request_identity, state, outcome,
-                       status_code, retry_after, response_size, raw_observation_id,
-                       candidate_lookup_checkpoint_id, started_at, observed_at, finished_at
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (record.candidate_lookup_run_id, record.attempt_number, *values),
-            )
-            return _inserted_id(cursor)
-        existing = tuple(row[name] for name in columns)
-        if row["state"] != "running":
-            if existing != values:
-                raise ValueError("terminal lookup request is immutable")
-            return int(row["candidate_lookup_request_id"])
-        if record.state == "running" and existing != values:
-            raise ValueError("running lookup request can only become terminal")
-        if existing != values:
-            self.connection.execute(
-                """UPDATE candidate_lookup_requests SET request_identity = ?, state = ?,
-                       outcome = ?, status_code = ?, retry_after = ?, response_size = ?,
-                       raw_observation_id = ?, candidate_lookup_checkpoint_id = ?, started_at = ?,
-                       observed_at = ?, finished_at = ?
-                   WHERE candidate_lookup_request_id = ? AND state = 'running'""",
-                (*values, row["candidate_lookup_request_id"]),
-            )
-        return int(row["candidate_lookup_request_id"])
+        return self._lookup.record_candidate_lookup_request(record)
 
     def save_candidate_lookup_checkpoint(self, record: CandidateLookupCheckpointRecord) -> int:
-        self.connection.execute(
-            """INSERT INTO candidate_lookup_checkpoints (
-                   candidate_lookup_run_id, continuation_adapter, continuation_version,
-                   continuation_json, last_page_identity, page_count, result_count, committed_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(candidate_lookup_run_id) DO UPDATE SET
-                   continuation_adapter = excluded.continuation_adapter,
-                   continuation_version = excluded.continuation_version,
-                   continuation_json = excluded.continuation_json,
-                   last_page_identity = excluded.last_page_identity,
-                   page_count = excluded.page_count, result_count = excluded.result_count,
-                   committed_at = excluded.committed_at""",
-            (
-                record.candidate_lookup_run_id,
-                record.continuation_adapter,
-                record.continuation_version,
-                record.continuation_json,
-                record.last_page_identity,
-                record.page_count,
-                record.result_count,
-                record.committed_at,
-            ),
-        )
-        return int(
-            self.connection.execute(
-                "SELECT candidate_lookup_checkpoint_id FROM candidate_lookup_checkpoints "
-                "WHERE candidate_lookup_run_id = ?",
-                (record.candidate_lookup_run_id,),
-            ).fetchone()[0]
-        )
+        return self._lookup.save_candidate_lookup_checkpoint(record)
 
     def record_candidate_lookup_result(self, record: CandidateLookupResultRecord) -> int:
-        columns = (
-            "result_kind",
-            "result_digest",
-            "page_number",
-            "result_order",
-            "normalized_post_id",
-            "attribution_entity_id",
-            "platform_reference_id",
-            "post_candidate_id",
-            "account_candidate_id",
-            "match_evidence_id",
-            "raw_observation_id",
-            "normalized_name",
-            "match_mode",
-            "explanation",
-            "observed_at",
-        )
-        values = tuple(getattr(record, name) for name in columns)
-        self.connection.execute(
-            """INSERT INTO candidate_lookup_results (
-                   candidate_lookup_run_id, result_kind, result_digest, page_number, result_order,
-                   normalized_post_id, attribution_entity_id, platform_reference_id,
-                   post_candidate_id, account_candidate_id, match_evidence_id,
-                   raw_observation_id, normalized_name, match_mode, explanation, observed_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(candidate_lookup_run_id, result_digest) DO NOTHING""",
-            (record.candidate_lookup_run_id, *values),
-        )
-        row = self.connection.execute(
-            """SELECT * FROM candidate_lookup_results
-               WHERE candidate_lookup_run_id = ? AND result_digest = ?""",
-            (record.candidate_lookup_run_id, record.result_digest),
-        ).fetchone()
-        stable_columns = (
-            "result_kind",
-            "normalized_post_id",
-            "attribution_entity_id",
-            "platform_reference_id",
-            "post_candidate_id",
-            "account_candidate_id",
-            "match_evidence_id",
-            "normalized_name",
-            "match_mode",
-        )
-        if row is None or tuple(row[name] for name in stable_columns) != tuple(
-            getattr(record, name) for name in stable_columns
-        ):
-            raise ValueError("lookup result already exists with a different target")
-        return int(row["candidate_lookup_result_id"])
+        return self._lookup.record_candidate_lookup_result(record)
 
     def record_library_expansion_plan(self, record: LibraryExpansionPlanRecord) -> int:
-        self.connection.execute(
-            """INSERT INTO library_expansion_plans (
-                   platform_id, instance_host, target_kind, target_account_id,
-                   target_attribution_id, seed_account_id, seed_post_id, seed_revision,
-                   authority_mode, authority_reference, selection_note, capability_key,
-                   capability_version, target_native_id, target_revision, adapter_version,
-                   schema_version, source_revision, request_limit, page_limit, record_limit,
-                   time_limit_seconds, estimate_state, estimate_count, estimate_observed_at,
-                   estimate_source, exclusions_json, plan_digest, material_digest, created_at
-               )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?)
-               ON CONFLICT(plan_digest) DO NOTHING""",
-            (
-                self.platform_id(record.platform),
-                record.instance_host,
-                record.target_kind,
-                record.target_account_id,
-                record.target_attribution_id,
-                record.seed_account_id,
-                record.seed_post_id,
-                record.seed_revision,
-                record.authority_mode,
-                record.authority_reference,
-                record.selection_note,
-                record.capability_key,
-                record.capability_version,
-                record.target_native_id,
-                record.target_revision,
-                record.adapter_version,
-                record.schema_version,
-                record.source_revision,
-                record.request_limit,
-                record.page_limit,
-                record.record_limit,
-                record.time_limit_seconds,
-                record.estimate_state,
-                record.estimate_count,
-                record.estimate_observed_at,
-                record.estimate_source,
-                record.exclusions_json,
-                record.plan_digest,
-                record.material_digest,
-                record.created_at,
-            ),
-        )
-        row = self.connection.execute(
-            "SELECT * FROM library_expansion_plans WHERE plan_digest = ?",
-            (record.plan_digest,),
-        ).fetchone()
-        if row is None:
-            raise sqlite3.DatabaseError("library expansion plan was not recorded")
-        expected = {
-            "platform_id": self.platform_id(record.platform),
-            "instance_host": record.instance_host,
-            "target_kind": record.target_kind,
-            "target_account_id": record.target_account_id,
-            "target_attribution_id": record.target_attribution_id,
-            "seed_account_id": record.seed_account_id,
-            "seed_post_id": record.seed_post_id,
-            "seed_revision": record.seed_revision,
-            "authority_mode": record.authority_mode,
-            "authority_reference": record.authority_reference,
-            "selection_note": record.selection_note,
-            "capability_key": record.capability_key,
-            "capability_version": record.capability_version,
-            "target_native_id": record.target_native_id,
-            "target_revision": record.target_revision,
-            "adapter_version": record.adapter_version,
-            "schema_version": record.schema_version,
-            "source_revision": record.source_revision,
-            "request_limit": record.request_limit,
-            "page_limit": record.page_limit,
-            "record_limit": record.record_limit,
-            "time_limit_seconds": record.time_limit_seconds,
-            "estimate_state": record.estimate_state,
-            "estimate_count": record.estimate_count,
-            "estimate_observed_at": record.estimate_observed_at,
-            "estimate_source": record.estimate_source,
-            "exclusions_json": record.exclusions_json,
-            "material_digest": record.material_digest,
-            "created_at": record.created_at,
-        }
-        if any(row[name] != value for name, value in expected.items()):
-            raise ValueError("library expansion plan digest already has different material")
-        return int(row["library_expansion_plan_id"])
+        return self._library.record_library_expansion_plan(record)
 
     def record_library_expansion_probe(self, record: LibraryExpansionProbeRecord) -> int:
-        cursor = self.connection.execute(
-            """INSERT INTO library_expansion_probes (
-                   library_expansion_plan_id, capability_key, capability_version,
-                   adapter_version, schema_version, request_limit, time_limit_seconds,
-                   outcome, status_code, count_value, retry_after, request_identity,
-                   raw_observation_id, diagnostic_summary, requested_at, observed_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                record.library_expansion_plan_id,
-                record.capability_key,
-                record.capability_version,
-                record.adapter_version,
-                record.schema_version,
-                record.request_limit,
-                record.time_limit_seconds,
-                record.outcome,
-                record.status_code,
-                record.count_value,
-                record.retry_after,
-                record.request_identity,
-                record.raw_observation_id,
-                record.diagnostic_summary,
-                record.requested_at,
-                record.observed_at,
-            ),
-        )
-        return _inserted_id(cursor)
+        return self._library.record_library_expansion_probe(record)
 
     def record_library_expansion_execution(self, record: LibraryExpansionExecutionRecord) -> int:
-        cursor = self.connection.execute(
-            """INSERT INTO library_expansion_executions (
-                   library_expansion_plan_id, remote_run_id, predecessor_execution_id,
-                   execution_kind, created_at
-               ) VALUES (?, ?, ?, ?, ?)""",
-            (
-                record.library_expansion_plan_id,
-                record.remote_run_id,
-                record.predecessor_execution_id,
-                record.execution_kind,
-                record.created_at,
-            ),
-        )
-        return _inserted_id(cursor)
+        return self._library.record_library_expansion_execution(record)
 
     def record_library_expansion_post(self, record: LibraryExpansionPostRecord) -> int:
-        self.connection.execute(
-            """INSERT INTO library_expansion_posts (
-                   library_expansion_execution_id, post_id, raw_observation_id,
-                   details_required, observed_at
-               ) VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(library_expansion_execution_id, post_id) DO NOTHING""",
-            (
-                record.library_expansion_execution_id,
-                record.post_id,
-                record.raw_observation_id,
-                int(record.details_required),
-                record.observed_at,
-            ),
-        )
-        row = self.connection.execute(
-            """SELECT * FROM library_expansion_posts
-               WHERE library_expansion_execution_id = ? AND post_id = ?""",
-            (record.library_expansion_execution_id, record.post_id),
-        ).fetchone()
-        if row is None:
-            raise sqlite3.DatabaseError("library expansion post association was not recorded")
-        expected = (
-            record.raw_observation_id,
-            int(record.details_required),
-            record.observed_at,
-        )
-        actual = (row["raw_observation_id"], row["details_required"], row["observed_at"])
-        if actual != expected:
-            raise ValueError("library expansion post already has different provenance")
-        return int(row[0])
+        return self._library.record_library_expansion_post(record)

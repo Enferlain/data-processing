@@ -14,6 +14,11 @@ Rules:
 
 ### Changed
 
+- **Candidate-lookup and library-expansion writes moved behind internal persistence components** —
+  the five lookup run/request/checkpoint/result methods and four library plan/probe/execution/post
+  methods now live in `media_catalog.persistence.lookup.LookupWrites` and
+  `...library.LibraryWrites`, with `CatalogWriter` delegating identically; the platform-identity
+  lookup became a shared support helper the facade and components both use.
 - **Acquisition writes moved behind an internal persistence component** — the nine acquisition
   plan, run, run-item, attempt, partial, verification, and quarantine write methods now live in
   `media_catalog.persistence.acquisition.AcquisitionWrites` with identical public signatures
