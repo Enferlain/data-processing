@@ -14,6 +14,10 @@ Rules:
 
 ### Changed
 
+- **Acquisition writes moved behind an internal persistence component** — the nine acquisition
+  plan, run, run-item, attempt, partial, verification, and quarantine write methods now live in
+  `media_catalog.persistence.acquisition.AcquisitionWrites` with identical public signatures
+  delegated by `CatalogWriter` on the caller's shared transaction.
 - **Managed-storage and adoption writes moved behind an internal persistence component** — the
   eight root, asset-location, occurrence-source, fingerprint, and adoption write methods now live
   in `media_catalog.persistence.storage.StorageWrites`, with `CatalogWriter` keeping identical

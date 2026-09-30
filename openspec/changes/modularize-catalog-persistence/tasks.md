@@ -18,7 +18,7 @@
 
 - [x] 3.1 Add the internal `media_catalog.persistence` package and shared connection/result helpers without changing transaction ownership.
 - [x] 3.2 Extract adoption and managed-storage SQL writes behind explicit `CatalogWriter` delegation.
-- [ ] 3.3 Extract acquisition SQL writes behind explicit `CatalogWriter` delegation.
+- [x] 3.3 Extract acquisition SQL writes behind explicit `CatalogWriter` delegation.
 - [ ] 3.4 Extract candidate-lookup and library-expansion SQL writes behind explicit `CatalogWriter` delegation.
 - [ ] 3.5 Extract remote-run, request, checkpoint, and raw-observation SQL writes behind explicit `CatalogWriter` delegation.
 - [ ] 3.6 Extract tag, attribution, post-fact, and external-reference SQL writes behind explicit `CatalogWriter` delegation.
