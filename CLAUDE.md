@@ -48,12 +48,18 @@ uv run ty check src
 
 # Focused package or file; use the normal exit status for work in that scope
 uv run ty check src/media_catalog
-uv run ty check src/media_catalog/records.py
+uv run ty check src/media_catalog/cli.py
 ```
 
 ty targets Python 3.13 and excludes vendored xarchive code. The repository-wide command is a
 required quality gate. Do not add blanket ignores or lower rule severities to make a task appear
 green.
+
+## Changelog
+
+Update `CHANGELOG.md` after every completed unit of work, including internal refactors and
+documentation changes. Add entries under today's date using the file's existing "Added",
+"Changed", "Removed", and "Fixed" subtitles and follow its concision rules.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
@@ -110,22 +116,3 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
-
-
-## Build & Test
-
-_Add your build and test commands here_
-
-```bash
-# Example:
-# npm install
-# npm test
-```
-
-## Architecture Overview
-
-_Add a brief overview of your project architecture_
-
-## Conventions & Patterns
-
-_Add your project-specific conventions here_

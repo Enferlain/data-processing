@@ -10,6 +10,21 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-09-30]
+
+### Changed
+
+- **Catalog record types are organized into domain modules behind the existing import surface** —
+  `media_catalog.records` is now a package with discovery, core catalog, remote-sync, metadata,
+  storage/adoption, acquisition, candidate-lookup, and library-expansion families re-exported
+  compatibly, so existing imports, constructors, validation, and public names are unchanged.
+- **The persistence compatibility suite pins the record surface more completely** — characterization
+  coverage now also locks record fields and defaults, frozen/slots behavior, annotation resolution,
+  per-family validation, and defining module paths, alongside the existing constructor, name, and
+  writer-signature digests and the cross-domain rollback test.
+- **Agent instruction files corrected** — quality-gate examples in CLAUDE.md and AGENTS.md now
+  reference the `media_catalog/records` package instead of the removed single-module path.
+
 ## [2026-08-13]
 
 ### Added
