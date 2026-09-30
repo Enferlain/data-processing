@@ -14,6 +14,10 @@ Rules:
 
 ### Changed
 
+- **Remote synchronization writes moved behind an internal persistence component** — raw
+  observation storage and the remote run, request, and checkpoint write methods now live in
+  `media_catalog.persistence.remote.RemoteWrites`, delegated identically by `CatalogWriter` with
+  transport-identity checks preserved.
 - **Candidate-lookup and library-expansion writes moved behind internal persistence components** —
   the five lookup run/request/checkpoint/result methods and four library plan/probe/execution/post
   methods now live in `media_catalog.persistence.lookup.LookupWrites` and

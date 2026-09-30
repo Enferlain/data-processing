@@ -20,7 +20,7 @@
 - [x] 3.2 Extract adoption and managed-storage SQL writes behind explicit `CatalogWriter` delegation.
 - [x] 3.3 Extract acquisition SQL writes behind explicit `CatalogWriter` delegation.
 - [x] 3.4 Extract candidate-lookup and library-expansion SQL writes behind explicit `CatalogWriter` delegation.
-- [ ] 3.5 Extract remote-run, request, checkpoint, and raw-observation SQL writes behind explicit `CatalogWriter` delegation.
+- [x] 3.5 Extract remote-run, request, checkpoint, and raw-observation SQL writes behind explicit `CatalogWriter` delegation.
 - [ ] 3.6 Extract tag, attribution, post-fact, and external-reference SQL writes behind explicit `CatalogWriter` delegation.
 - [ ] 3.7 Extract discovery, account, post, observation, relation, media, and asset-link SQL writes behind explicit `CatalogWriter` delegation.
 - [ ] 3.8 Remove only helpers proven unused after extraction and keep `writer.py` as the stable public facade.
