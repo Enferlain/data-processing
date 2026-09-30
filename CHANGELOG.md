@@ -12,6 +12,14 @@ Rules:
 
 ## [2026-09-30]
 
+### Added
+
+- **Catalog persistence gains an internal shared-support package** — `media_catalog.persistence`
+  now provides the connection, timestamp, inserted-id, and write-result helpers that extracted
+  writer components will share; `writer.py` imports them while keeping its public surface
+  unchanged, and a guard test forbids any component from committing, executing scripts, or
+  opening its own connection.
+
 ### Changed
 
 - **Catalog record types are organized into domain modules behind the existing import surface** —

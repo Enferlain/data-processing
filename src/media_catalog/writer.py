@@ -3,10 +3,18 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
 
 from media_catalog.database import CatalogDatabase
+from media_catalog.persistence.support import (
+    WriteResult,
+)
+from media_catalog.persistence.support import (
+    inserted_id as _inserted_id,
+)
+from media_catalog.persistence.support import (
+    now as _now,
+)
 from media_catalog.records import (
     AccountRecord,
     AcquisitionAttemptRecord,
@@ -62,28 +70,12 @@ from media_catalog.records import (
 )
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _inserted_id(cursor: sqlite3.Cursor) -> int:
-    if cursor.lastrowid is None:
-        raise sqlite3.DatabaseError("insert did not produce a row identifier")
-    return cursor.lastrowid
-
-
 def _reference_url(platform: str, object_kind: str, native_id: str) -> str:
     if platform == "pixiv" and object_kind == "post":
         return f"https://www.pixiv.net/artworks/{native_id}"
     if platform == "pixiv" and object_kind == "account":
         return f"https://www.pixiv.net/users/{native_id}"
     return f"urn:{platform}:{object_kind}:{native_id}"
-
-
-@dataclass(frozen=True, slots=True)
-class WriteResult:
-    id: int
-    outcome: str
 
 
 class CatalogWriter:
