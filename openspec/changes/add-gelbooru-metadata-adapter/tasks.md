@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add a credential-safe fixture capture utility for explicit Gelbooru DAPI JSON and single-post HTML requests that enforces response-size and time limits, records transport/parser versions, strips credential-bearing request material, and never requests media bytes.
 - [x] 1.2 Capture and redact DAPI and HTML metadata fixtures for Gelbooru posts `12370900`, `11605534`, `10720246`, `10791439`, and `10791440`, preserving enough structure to cover the exact and user-labelled variation examples in `docs/plans/test_list.md`.
-- [ ] 1.3 Add minimal fixtures for DAPI tag responses and for missing credentials, 401, 403 or challenge, 404/unavailable, 429 or provider retry information when observed, 5xx, oversized bodies, and malformed JSON/HTML without committing credentials, private request URLs, or media bytes.
+- [x] 1.3 Add minimal fixtures for DAPI tag responses and for missing credentials, 401, 403 or challenge, 404/unavailable, 429 or provider retry information when observed, 5xx, oversized bodies, and malformed JSON/HTML without committing credentials, private request URLs, or media bytes.
 - [ ] 1.4 Document the reviewed fixture contract: request shapes, response envelopes, field presence and types, pagination behavior, native tag-category evidence, returned media variants, status mapping, conservative pacing, retry headers, redaction decisions, and every unresolved provider assumption.
 - [x] 1.5 Add characterization tests for the existing Danbooru, AIBooru, and e621 adapter/sync seams that Gelbooru integration will share, so provider-neutral refactoring cannot silently change their requests, continuations, normalized records, or public results.
 

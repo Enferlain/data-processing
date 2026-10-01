@@ -11,7 +11,7 @@
    "no credential-bearing URLs retained",
    "response bodies otherwise as captured without media bytes"
   ],
-  "source": "live Gelbooru DAPI captures reviewed and redacted 2026-10-01"
+  "source": "live Gelbooru DAPI captures and probes reviewed and redacted 2026-10-01; 403/5xx/oversized/malformed envelopes are documentation-derived synthetic cases (gallery-dl and Grabber conventions); no rate-limit response observed yet"
  },
  "cases": [
   {
@@ -382,6 +382,182 @@
      "preview",
      "sample"
     ]
+   }
+  },
+  {
+   "name": "tag_metadata",
+   "operation": "fetch_tag",
+   "target": "hiroki_(yyqw7151)",
+   "request_identity": "gelbooru:dapi_json:tag:hiroki_(yyqw7151)",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=UTF-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 100,
+      "offset": 0,
+      "count": 1
+     },
+     "tag": [
+      {
+       "id": 858554,
+       "name": "hiroki_(yyqw7151)",
+       "count": 3558,
+       "type": 1,
+       "ambiguous": 0
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "tag_ids": [
+     "858554"
+    ],
+    "names": [
+     "hiroki_(yyqw7151)"
+    ],
+    "post_counts": [
+     3558
+    ],
+    "native_types": [
+     1
+    ],
+    "ambiguous": [
+     false
+    ]
+   }
+  },
+  {
+   "name": "post_not_found",
+   "operation": "fetch_post",
+   "target": "999999999",
+   "request_identity": "gelbooru:dapi_json:post:999999999",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=UTF-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 0
+     }
+    }
+   },
+   "expected": {
+    "outcome": "unavailable",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "authentication_required",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 401,
+    "headers": {
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": ""
+   },
+   "expected": {
+    "outcome": "authentication_required",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "authorization_denied",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 403,
+    "headers": {
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": ""
+   },
+   "expected": {
+    "outcome": "authorization_denied",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "transient_provider",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 503,
+    "headers": {
+     "content-type": "application/json; charset=UTF-8"
+    },
+    "body": {
+     "error": "Service temporarily unavailable"
+    }
+   },
+   "expected": {
+    "outcome": "transient_provider",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "error_envelope",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=UTF-8"
+    },
+    "body": {
+     "error": "You do not have permission to access this resource"
+    }
+   },
+   "expected": {
+    "outcome": "malformed_response",
+    "envelope": "error",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "response_oversized",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "payload exceeded the transport byte limit in transit"
+   },
+   "expected": {
+    "outcome": "response_too_large",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "malformed_json",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=UTF-8"
+    },
+    "body": "{\"post\": [{\"id\":"
+   },
+   "expected": {
+    "outcome": "malformed_response",
+    "post_ids": []
    }
   }
  ]

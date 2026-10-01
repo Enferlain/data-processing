@@ -13,7 +13,7 @@
    "tag list reduced to representative entries per category",
    "no media bytes requested"
   ],
-  "source": "live Gelbooru post pages reviewed and redacted 2026-10-01"
+  "source": "live Gelbooru post pages reviewed and redacted 2026-10-01; not-found/challenge/malformed HTML cases are synthetic minimal marker-less pages for fail-closed parser tests"
  },
  "cases": [
   {
@@ -148,6 +148,57 @@
      "general",
      "metadata"
     ]
+   }
+  },
+  {
+   "name": "html_not_found",
+   "operation": "fetch_post",
+   "target": "999999999",
+   "request_identity": "gelbooru:html_post:post:999999999",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><head><title>Gelbooru</title></head><body></body></html>"
+   },
+   "expected": {
+    "outcome": "unavailable",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "html_challenge",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:html_post:post:12370900",
+   "response": {
+    "status_code": 403,
+    "headers": {
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><head><title>Attention Required</title></head><body>Access denied pending browser verification.</body></html>"
+   },
+   "expected": {
+    "outcome": "authorization_denied",
+    "post_ids": []
+   }
+  },
+  {
+   "name": "html_malformed",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:html_post:post:12370900",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<div id="
+   },
+   "expected": {
+    "outcome": "malformed_response",
+    "post_ids": []
    }
   }
  ]

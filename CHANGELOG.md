@@ -14,6 +14,11 @@ Rules:
 
 ### Added
 
+- **Gelbooru error and tag fixtures pin typed outcomes** — observed shapes (numeric-type tag
+  records, count-zero not-found envelopes, anonymous 401 with empty body) plus
+  documentation-derived synthetic 403/5xx/oversized/malformed envelopes cover every typed DAPI
+  and HTML failure mode except rate limiting, which stays deferred until actually observed; the
+  rate-limit gap is recorded in the fixture manifest.
 - **Reviewed Gelbooru fixtures pin the documented post examples** — live credentialed DAPI and
   anonymous HTML captures of the five planned posts (including the text/clean variation pair and
   the distinct third image) are committed as redacted contract fixtures with derived expected

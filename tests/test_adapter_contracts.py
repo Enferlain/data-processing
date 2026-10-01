@@ -134,6 +134,14 @@ def test_redacted_fixture_suites_cover_required_contract_cases() -> None:
         "variation_distinct_10720246",
         "variation_pair_10791439",
         "variation_pair_10791440",
+        "tag_metadata",
+        "post_not_found",
+        "authentication_required",
+        "authorization_denied",
+        "transient_provider",
+        "error_envelope",
+        "response_oversized",
+        "malformed_json",
     }
     assert gelbooru.manifest.provider == "gelbooru"
     e621 = load_fixture_suite(FIXTURES / "e621.json")
