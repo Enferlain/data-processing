@@ -29,5 +29,5 @@
 
 - [x] 4.1 Run focused domain tests after each extraction and verify SQLite rollback, idempotency, ID preservation, and error compatibility.
 - [x] 4.2 Update architecture-facing documentation and the changelog with the new internal ownership boundaries and compatibility policy.
-- [ ] 4.3 Run changed-file formatting, repository Ruff, `ty`, full pytest, `git diff --check`, and strict OpenSpec validation.
-- [ ] 4.4 Request bounded review for the record split and each writer extraction section, address actionable findings, and confirm the final facade remains behavior-compatible.
+- [x] 4.3 Run changed-file formatting, repository Ruff, `ty`, full pytest, `git diff --check`, and strict OpenSpec validation.
+- [x] 4.4 Request bounded review for the record split and each writer extraction section, address actionable findings, and confirm the final facade remains behavior-compatible.
