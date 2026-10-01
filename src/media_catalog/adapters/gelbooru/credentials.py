@@ -36,3 +36,11 @@ class GelbooruCredentials:
         if not user_id or not api_key:
             raise ValueError(f"configure both {instance.user_id_env} and {instance.api_key_env}")
         return cls(user_id, api_key)
+
+    def secret_values(self) -> tuple[str, str]:
+        """Credential values for sanitization passes; never rendered directly."""
+        return (self.user_id, self.api_key)
+
+    def authenticated_query(self, params: Mapping[str, str]) -> dict[str, str]:
+        """Join credential-free DAPI parameters with credentials at the final HTTP boundary."""
+        return {**params, "user_id": self.user_id, "api_key": self.api_key}

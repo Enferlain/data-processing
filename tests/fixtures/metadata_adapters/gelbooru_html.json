@@ -1,0 +1,154 @@
+{
+ "manifest": {
+  "format_version": 1,
+  "provider": "gelbooru",
+  "instance": "gelbooru",
+  "captured_at": "2026-10-01T20:18:04.354834Z",
+  "adapter_version": "gelbooru-native-v1",
+  "schema_version": "gelbooru-html-v1",
+  "redactions": [
+   "inline scripts removed",
+   "per-session anti-csrf token values removed",
+   "page reduced to title, media-reference, tag, and statistics marker regions",
+   "tag list reduced to representative entries per category",
+   "no media bytes requested"
+  ],
+  "source": "live Gelbooru post pages reviewed and redacted 2026-10-01"
+ },
+ "cases": [
+  {
+   "name": "html_post_12370900",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:html_post:post:12370900",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=utf-8"
+    },
+    "body": "<title>hiroki (yyqw7151), original, highres, 1girl, ass, barefoot, black eyes, black hair, blue one-piece swimsuit, from behind, from below, looking at viewer, one-piece swimsuit, school swimsuit, short hair, simple background, soles, solo, standing, standing on one leg, swimsuit, toes, white background - Image View -  | Gelbooru - Anime Art & Hentai Gallery - Free to Explore</title>\n<meta property=\"og:image\" content=\"https://img4.gelbooru.com//images/fe/f8/fef8d5889c2fe425dd50cfade909cec9.jpg\" />\n<ul class=\"tag-list\" id=\"tag-list\" style=\"margin: 0px 10px 0px 10px;\"><li class=\"tag-type-artist\"><a href=\"index.php?page=post&amp;s=list&amp;tags=hiroki_%28yyqw7151%29\">hiroki (yyqw7151)</a> <span style='color: #a0a0a0;'>3558</span></li><li class=\"tag-type-copyright\"><a href=\"index.php?page=post&amp;s=list&amp;tags=original\">original</a> <span style='color: #a0a0a0;'>1726681</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=highres\">highres</a> <span style='color: #a0a0a0;'>9302878</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1girl\">1girl</a> <span style='color: #a0a0a0;'>9789436</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=ass\">ass</a> <span style='color: #a0a0a0;'>1287268</span></li><li>Posted: 2025-07-30 10:16:34<br /> Uploader: <a href=\"index.php?page=account&amp;s=profile&amp;id=6498\">danbooru</a><br /></li><li>Size: 1150x1750<br /></li><li style=\"line-break: anywhere;\">Source: <a href=\"https://twitter.com/yyqw7151/status/1950567258528547071\" rel=\"nofollow\">twitter.com/yyqw7151/status/1950567258528547071</a><br /></li><li>Rating: Sensitive<br /></li><li>Score: <span id=\"psc12370900\">16</span> \n\t\t\t\t\t(vote <a href=\"#\" onclick=\"Javascript:post_vote('12370900', 'up'); return false;\">Up</a>)\n\t\t\t\t\t</li></ul>\n<img width=\"850\" height=\"1293\" id=\"image\" class=\"fit-width\" src=\"https://img4.gelbooru.com//samples/fe/f8/sample_fef8d5889c2fe425dd50cfade909cec9.jpg\">"
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "12370900"
+    ],
+    "uploader": "danbooru",
+    "tag_categories": [
+     "artist",
+     "copyright",
+     "general",
+     "metadata"
+    ]
+   }
+  },
+  {
+   "name": "html_post_11605534",
+   "operation": "fetch_post",
+   "target": "11605534",
+   "request_identity": "gelbooru:html_post:post:11605534",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=utf-8"
+    },
+    "body": "<title>butterchalk, kagemori michiru, ogami shirou, brand new animal, commentary, english commentary, highres, 1boy, 1girl, animal ears, animal penis, bestiality, blue hair, completely nude, dog penis, flat chest, furry, furry with furry, hetero, knotted penis, knotting, loli, medium hair, nipples, nude, open mouth, penis, pussy, raccoon ears, raccoon girl, raccoon tail, sex, simple background, spread legs, standing, tail, uncensored, vaginal, white background, white fur, wolf boy, wolf tail, zoophilia - Image View -  | Gelbooru - Anime Art & Hentai Gallery - Free to Explore</title>\n<meta property=\"og:image\" content=\"https://img4.gelbooru.com//images/7c/d3/7cd330523b8e34b97c40e02c7e87d98c.png\" />\n<ul class=\"tag-list\" id=\"tag-list\" style=\"margin: 0px 10px 0px 10px;\"><li class=\"tag-type-artist\"><a href=\"index.php?page=post&amp;s=list&amp;tags=butterchalk\">butterchalk</a> <span style='color: #a0a0a0;'>793</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=kagemori_michiru\">kagemori michiru</a> <span style='color: #a0a0a0;'>1489</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=ogami_shirou\">ogami shirou</a> <span style='color: #a0a0a0;'>270</span></li><li class=\"tag-type-copyright\"><a href=\"index.php?page=post&amp;s=list&amp;tags=brand_new_animal\">brand new animal</a> <span style='color: #a0a0a0;'>1766</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=commentary\">commentary</a> <span style='color: #a0a0a0;'>1434919</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=english_commentary\">english commentary</a> <span style='color: #a0a0a0;'>590025</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1boy\">1boy</a> <span style='color: #a0a0a0;'>2519579</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1girl\">1girl</a> <span style='color: #a0a0a0;'>9789436</span></li><li>Posted: 2025-03-14 17:15:44<br /> Uploader: <a href=\"index.php?page=account&amp;s=profile&amp;id=6498\">danbooru</a><br /></li><li>Size: 1153x1333<br /></li><li style=\"line-break: anywhere;\">Source: <a href=\"https://baraag.net/@Butterchalk/114162817218658720\" rel=\"nofollow\">baraag.net/@Butterchalk/114162817218658720</a><br /></li><li>Rating: Explicit<br /></li><li>Score: <span id=\"psc11605534\">381</span> \n\t\t\t\t\t(vote <a href=\"#\" onclick=\"Javascript:post_vote('11605534', 'up'); return false;\">Up</a>)\n\t\t\t\t\t</li></ul>\n<img width=\"850\" height=\"983\" id=\"image\" class=\"fit-width\" src=\"https://img4.gelbooru.com//samples/7c/d3/sample_7cd330523b8e34b97c40e02c7e87d98c.jpg\">"
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "11605534"
+    ],
+    "uploader": "danbooru",
+    "tag_categories": [
+     "artist",
+     "character",
+     "copyright",
+     "general",
+     "metadata"
+    ]
+   }
+  },
+  {
+   "name": "html_variation_distinct_10720246",
+   "operation": "fetch_post",
+   "target": "10720246",
+   "request_identity": "gelbooru:html_post:post:10720246",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=utf-8"
+    },
+    "body": "<title>nyantcha, koholasaurus (genshin impact), mualani (genshin impact), genshin impact, commentary, english commentary, highres, 1boy, 1girl, anal, animal penis, ass, bestiality, braid, breasts, cum, cum in ass, cum in pussy, dark-skinned female, dark skin, double penetration, english text, extra penises, hairband, hetero, long hair, low twin braids, monster, penis, pussy, red eyes, sex, speech bubble, tan, tanline, twin braids, vaginal, zoophilia - Image View -  | Gelbooru - Anime Art & Hentai Gallery - Free to Explore</title>\n<meta property=\"og:image\" content=\"https://img4.gelbooru.com//images/07/2b/072b69605a05873a2443626b7600ed69.jpg\" />\n<ul class=\"tag-list\" id=\"tag-list\" style=\"margin: 0px 10px 0px 10px;\"><li class=\"tag-type-artist\"><a href=\"index.php?page=post&amp;s=list&amp;tags=nyantcha\">nyantcha</a> <span style='color: #a0a0a0;'>3277</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=koholasaurus_%28genshin_impact%29\">koholasaurus (genshin impact)</a> <span style='color: #a0a0a0;'>60</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=mualani_%28genshin_impact%29\">mualani (genshin impact)</a> <span style='color: #a0a0a0;'>1722</span></li><li class=\"tag-type-copyright\"><a href=\"index.php?page=post&amp;s=list&amp;tags=genshin_impact\">genshin impact</a> <span style='color: #a0a0a0;'>326840</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=commentary\">commentary</a> <span style='color: #a0a0a0;'>1434919</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=english_commentary\">english commentary</a> <span style='color: #a0a0a0;'>590025</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1boy\">1boy</a> <span style='color: #a0a0a0;'>2519579</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1girl\">1girl</a> <span style='color: #a0a0a0;'>9789436</span></li><li>Posted: 2024-09-21 21:00:12<br /> Uploader: <a href=\"index.php?page=account&amp;s=profile&amp;id=6498\">danbooru</a><br /></li><li>Size: 1401x2048<br /></li><li style=\"line-break: anywhere;\">Source: <a href=\"https://twitter.com/thiccwithaq/status/1837662117949800671\" rel=\"nofollow\">twitter.com/thiccwithaq/status/1837662117949800671</a><br /></li><li>Rating: Explicit<br /></li><li>Score: <span id=\"psc10720246\">505</span> \n\t\t\t\t\t(vote <a href=\"#\" onclick=\"Javascript:post_vote('10720246', 'up'); return false;\">Up</a>)\n\t\t\t\t\t</li></ul>\n<img width=\"850\" height=\"1243\" id=\"image\" class=\"fit-width\" src=\"https://img4.gelbooru.com//samples/07/2b/sample_072b69605a05873a2443626b7600ed69.jpg\">"
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "10720246"
+    ],
+    "uploader": "danbooru",
+    "tag_categories": [
+     "artist",
+     "character",
+     "copyright",
+     "general",
+     "metadata"
+    ]
+   }
+  },
+  {
+   "name": "html_variation_pair_10791439",
+   "operation": "fetch_post",
+   "target": "10791439",
+   "request_identity": "gelbooru:html_post:post:10791439",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=utf-8"
+    },
+    "body": "<title>nyantcha, koholasaurus (genshin impact), mualani (genshin impact), genshin impact, commentary, english commentary, highres, 1boy, 1girl, anal, animal penis, ass, bestiality, braid, breasts, cum, cum in ass, cum in pussy, dark-skinned female, dark skin, double penetration, english text, extra penises, hairband, hetero, long hair, low twin braids, monster, penis, pussy, red eyes, sex, speech bubble, tan, tanline, twin braids, vaginal, zoophilia - Image View -  | Gelbooru - Anime Art & Hentai Gallery - Free to Explore</title>\n<meta property=\"og:image\" content=\"https://img4.gelbooru.com//images/98/ea/98ea87fa54cf81ed0201d5e5bb2be8da.png\" />\n<ul class=\"tag-list\" id=\"tag-list\" style=\"margin: 0px 10px 0px 10px;\"><li class=\"tag-type-artist\"><a href=\"index.php?page=post&amp;s=list&amp;tags=nyantcha\">nyantcha</a> <span style='color: #a0a0a0;'>3277</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=koholasaurus_%28genshin_impact%29\">koholasaurus (genshin impact)</a> <span style='color: #a0a0a0;'>60</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=mualani_%28genshin_impact%29\">mualani (genshin impact)</a> <span style='color: #a0a0a0;'>1722</span></li><li class=\"tag-type-copyright\"><a href=\"index.php?page=post&amp;s=list&amp;tags=genshin_impact\">genshin impact</a> <span style='color: #a0a0a0;'>326840</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=commentary\">commentary</a> <span style='color: #a0a0a0;'>1434919</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=english_commentary\">english commentary</a> <span style='color: #a0a0a0;'>590025</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1boy\">1boy</a> <span style='color: #a0a0a0;'>2519579</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1girl\">1girl</a> <span style='color: #a0a0a0;'>9789436</span></li><li>Posted: 2024-10-05 17:42:50<br /> Uploader: <a href=\"index.php?page=account&amp;s=profile&amp;id=73050\">Shadnic</a><br /></li><li>Size: 1471x2151<br /></li><li>Rating: Explicit<br /></li><li>Score: <span id=\"psc10791439\">387</span> \n\t\t\t\t\t(vote <a href=\"#\" onclick=\"Javascript:post_vote('10791439', 'up'); return false;\">Up</a>)\n\t\t\t\t\t</li></ul>\n<img width=\"850\" height=\"1243\" id=\"image\" class=\"fit-width\" src=\"https://img4.gelbooru.com//samples/98/ea/sample_98ea87fa54cf81ed0201d5e5bb2be8da.jpg\">"
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "10791439"
+    ],
+    "uploader": "Shadnic",
+    "tag_categories": [
+     "artist",
+     "character",
+     "copyright",
+     "general",
+     "metadata"
+    ]
+   }
+  },
+  {
+   "name": "html_variation_pair_10791440",
+   "operation": "fetch_post",
+   "target": "10791440",
+   "request_identity": "gelbooru:html_post:post:10791440",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "text/html; charset=utf-8"
+    },
+    "body": "<title>nyantcha, koholasaurus (genshin impact), mualani (genshin impact), genshin impact, commentary, english commentary, highres, 1boy, 1girl, anal, animal penis, ass, bestiality, braid, breasts, dark-skinned female, dark skin, double penetration, english text, extra penises, gaping, gaping anus, hairband, hetero, long hair, low twin braids, monster, penis, pussy, red eyes, sex, speech bubble, tan, tanline, twin braids, vaginal, zoophilia - Image View -  | Gelbooru - Anime Art & Hentai Gallery - Free to Explore</title>\n<meta property=\"og:image\" content=\"https://img4.gelbooru.com//images/e2/d7/e2d76eee6c5333e8d6ad7d115316cfd8.png\" />\n<ul class=\"tag-list\" id=\"tag-list\" style=\"margin: 0px 10px 0px 10px;\"><li class=\"tag-type-artist\"><a href=\"index.php?page=post&amp;s=list&amp;tags=nyantcha\">nyantcha</a> <span style='color: #a0a0a0;'>3277</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=koholasaurus_%28genshin_impact%29\">koholasaurus (genshin impact)</a> <span style='color: #a0a0a0;'>60</span></li><li class=\"tag-type-character\"><a href=\"index.php?page=post&amp;s=list&amp;tags=mualani_%28genshin_impact%29\">mualani (genshin impact)</a> <span style='color: #a0a0a0;'>1722</span></li><li class=\"tag-type-copyright\"><a href=\"index.php?page=post&amp;s=list&amp;tags=genshin_impact\">genshin impact</a> <span style='color: #a0a0a0;'>326840</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=commentary\">commentary</a> <span style='color: #a0a0a0;'>1434919</span></li><li class=\"tag-type-metadata\"><a href=\"index.php?page=post&amp;s=list&amp;tags=english_commentary\">english commentary</a> <span style='color: #a0a0a0;'>590025</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1boy\">1boy</a> <span style='color: #a0a0a0;'>2519579</span></li><li class=\"tag-type-general\"><a href=\"index.php?page=post&amp;s=list&amp;tags=1girl\">1girl</a> <span style='color: #a0a0a0;'>9789436</span></li><li>Posted: 2024-10-05 17:44:31<br /> Uploader: <a href=\"index.php?page=account&amp;s=profile&amp;id=73050\">Shadnic</a><br /></li><li>Size: 1471x2151<br /></li><li>Rating: Explicit<br /></li><li>Score: <span id=\"psc10791440\">461</span> \n\t\t\t\t\t(vote <a href=\"#\" onclick=\"Javascript:post_vote('10791440', 'up'); return false;\">Up</a>)\n\t\t\t\t\t</li></ul>\n<img width=\"850\" height=\"1243\" id=\"image\" class=\"fit-width\" src=\"https://img4.gelbooru.com//samples/e2/d7/sample_e2d76eee6c5333e8d6ad7d115316cfd8.jpg\">"
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "10791440"
+    ],
+    "uploader": "Shadnic",
+    "tag_categories": [
+     "artist",
+     "character",
+     "copyright",
+     "general",
+     "metadata"
+    ]
+   }
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 ## 1. Research and Fixture Gate
 
 - [x] 1.1 Add a credential-safe fixture capture utility for explicit Gelbooru DAPI JSON and single-post HTML requests that enforces response-size and time limits, records transport/parser versions, strips credential-bearing request material, and never requests media bytes.
-- [ ] 1.2 Capture and redact DAPI and HTML metadata fixtures for Gelbooru posts `12370900`, `11605534`, `10720246`, `10791439`, and `10791440`, preserving enough structure to cover the exact and user-labelled variation examples in `docs/plans/test_list.md`.
+- [x] 1.2 Capture and redact DAPI and HTML metadata fixtures for Gelbooru posts `12370900`, `11605534`, `10720246`, `10791439`, and `10791440`, preserving enough structure to cover the exact and user-labelled variation examples in `docs/plans/test_list.md`.
 - [ ] 1.3 Add minimal fixtures for DAPI tag responses and for missing credentials, 401, 403 or challenge, 404/unavailable, 429 or provider retry information when observed, 5xx, oversized bodies, and malformed JSON/HTML without committing credentials, private request URLs, or media bytes.
 - [ ] 1.4 Document the reviewed fixture contract: request shapes, response envelopes, field presence and types, pagination behavior, native tag-category evidence, returned media variants, status mapping, conservative pacing, retry headers, redaction decisions, and every unresolved provider assumption.
 - [x] 1.5 Add characterization tests for the existing Danbooru, AIBooru, and e621 adapter/sync seams that Gelbooru integration will share, so provider-neutral refactoring cannot silently change their requests, continuations, normalized records, or public results.
@@ -11,7 +11,7 @@
 - [x] 2.1 Add a dedicated Gelbooru provider package with immutable provider, adapter, schema, DAPI transport, HTML parser, and continuation versions; canonical HTTPS endpoints; a maximum DAPI page size of 100; finite body limits; and a conservative configurable pacing floor justified by the fixture review.
 - [x] 2.2 Implement external `GELBOORU_USER_ID` and `GELBOORU_API_KEY` resolution as an all-or-nothing credential pair with redacted representations and failure before network access when configuration is absent or partial.
 - [x] 2.3 Extend provider request, raw-provenance, and resume material with an explicit transport key/version while preserving the stable behavior and stored identities of existing providers.
-- [ ] 2.4 Ensure query-parameter credentials are injected only at the final DAPI HTTP boundary and sanitize transport exceptions, durable request attempts, raw-observation metadata, diagnostics, human output, and JSON output against credential values and rendered authenticated URLs.
+- [x] 2.4 Ensure query-parameter credentials are injected only at the final DAPI HTTP boundary and sanitize transport exceptions, durable request attempts, raw-observation metadata, diagnostics, human output, and JSON output against credential values and rendered authenticated URLs.
 - [ ] 2.5 Audit the existing neutral schema and Gelbooru platform seed against proven fixtures; add only the smallest provider-neutral migration needed for a demonstrated gap, with fresh-schema, upgrade, rollback, foreign-key, trigger, ID-preservation, doctor, and immutability tests.
 
 ## 3. Credentialed JSON-DAPI Adapter

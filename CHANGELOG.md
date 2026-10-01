@@ -14,6 +14,15 @@ Rules:
 
 ### Added
 
+- **Reviewed Gelbooru fixtures pin the documented post examples** — live credentialed DAPI and
+  anonymous HTML captures of the five planned posts (including the text/clean variation pair and
+  the distinct third image) are committed as redacted contract fixtures with derived expected
+  summaries, stripped inline scripts and session token values, marker-region HTML reduction, and
+  tests asserting the variation relationships from the example plan.
+- **Gelbooru credential material is scrubbed by a shared redaction boundary** — DAPI credentials
+  now join query parameters only through a single final-boundary helper, and a reusable scrubber
+  removes credential values and credential-bearing URLs from transport exceptions and any durable
+  record, diagnostic, or output surface, pinned by sentinel-based tests.
 - **Focused compatibility tests pin catalog writer idempotency and errors** — repeat upserts across
   account, post, media, observation, link-observation, and asset writes now assert the
   inserted/existing/updated outcomes with stable row identifiers, and the exact texts of platform,

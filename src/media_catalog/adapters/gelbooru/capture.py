@@ -18,6 +18,7 @@ from media_catalog.adapters.gelbooru.config import (
     GelbooruTransport,
 )
 from media_catalog.adapters.gelbooru.credentials import GelbooruCredentials
+from media_catalog.adapters.gelbooru.redaction import sanitize_exception
 
 _ALLOWED_MEDIA_TYPES = {
     "application/json",
@@ -47,6 +48,14 @@ class GelbooruCaptureRedirectError(GelbooruCaptureError):
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _transport_message(
+    prefix: str, error: BaseException, credentials: GelbooruCredentials | None
+) -> str:
+    secrets = () if credentials is None else credentials.secret_values()
+    detail = sanitize_exception(error, secrets)
+    return f"{prefix}: {detail}" if detail else prefix
 
 
 def validate_post_id(post_id: int | str) -> str:
@@ -168,15 +177,16 @@ def capture_gelbooru_post(
     if resolved is GelbooruTransport.DAPI_JSON:
         if credentials is None:
             raise ValueError("both Gelbooru user ID and API key are required")
-        params = {
-            "page": "dapi",
-            "s": "post",
-            "q": "index",
-            "json": "1",
-            "id": validated_id,
-            "api_key": credentials.api_key,
-            "user_id": credentials.user_id,
-        }
+        # Credential values join the query only here, at the final DAPI HTTP boundary.
+        params = credentials.authenticated_query(
+            {
+                "page": "dapi",
+                "s": "post",
+                "q": "index",
+                "json": "1",
+                "id": validated_id,
+            }
+        )
     elif resolved is GelbooruTransport.HTML_POST:
         if credentials is not None:
             raise ValueError("HTML transport does not accept credentials")
@@ -226,10 +236,14 @@ def capture_gelbooru_post(
             response.close()
     except GelbooruCaptureError:
         raise
-    except httpx.TimeoutException:
-        raise GelbooruCaptureTimeoutError("Request timed out") from None
-    except httpx.RequestError:
-        raise GelbooruCaptureError("HTTP request failed") from None
+    except httpx.TimeoutException as error:
+        raise GelbooruCaptureTimeoutError(
+            _transport_message("Request timed out", error, credentials)
+        ) from None
+    except httpx.RequestError as error:
+        raise GelbooruCaptureError(
+            _transport_message("HTTP request failed", error, credentials)
+        ) from None
 
     payload = b"".join(chunks)
     # Numeric user IDs are ordinary provider data and may legitimately occur in a post response.

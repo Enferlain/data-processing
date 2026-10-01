@@ -1,0 +1,388 @@
+{
+ "manifest": {
+  "format_version": 1,
+  "provider": "gelbooru",
+  "instance": "gelbooru",
+  "captured_at": "2026-10-01T20:18:04.354834Z",
+  "adapter_version": "gelbooru-native-v1",
+  "schema_version": "gelbooru-dapi-json-v1",
+  "redactions": [
+   "credential values removed from all retained request material",
+   "no credential-bearing URLs retained",
+   "response bodies otherwise as captured without media bytes"
+  ],
+  "source": "live Gelbooru DAPI captures reviewed and redacted 2026-10-01"
+ },
+ "cases": [
+  {
+   "name": "post_12370900",
+   "operation": "fetch_post",
+   "target": "12370900",
+   "request_identity": "gelbooru:dapi_json:post:12370900",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 1
+     },
+     "post": [
+      {
+       "id": 12370900,
+       "created_at": "Wed Jul 30 10:16:34 -0500 2025",
+       "score": 16,
+       "width": 1150,
+       "height": 1750,
+       "md5": "fef8d5889c2fe425dd50cfade909cec9",
+       "directory": "fe/f8",
+       "image": "fef8d5889c2fe425dd50cfade909cec9.jpg",
+       "rating": "sensitive",
+       "source": "https://twitter.com/yyqw7151/status/1950567258528547071",
+       "change": 1753888594,
+       "owner": "danbooru",
+       "creator_id": 6498,
+       "parent_id": 0,
+       "sample": 1,
+       "preview_height": 350,
+       "preview_width": 230,
+       "tags": "1girl ass barefoot black_eyes black_hair blue_one-piece_swimsuit from_behind from_below highres hiroki_(yyqw7151) looking_at_viewer one-piece_swimsuit original school_swimsuit short_hair simple_background soles solo standing standing_on_one_leg swimsuit toes white_background",
+       "title": "",
+       "has_notes": "false",
+       "has_comments": "false",
+       "file_url": "https://img4.gelbooru.com/images/fe/f8/fef8d5889c2fe425dd50cfade909cec9.jpg",
+       "preview_url": "https://img4.gelbooru.com/thumbnails/fe/f8/thumbnail_fef8d5889c2fe425dd50cfade909cec9.jpg",
+       "sample_url": "https://img4.gelbooru.com/samples/fe/f8/sample_fef8d5889c2fe425dd50cfade909cec9.jpg",
+       "sample_height": 1293,
+       "sample_width": 850,
+       "status": "active",
+       "post_locked": 0,
+       "has_children": "false"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "12370900"
+    ],
+    "declared_md5": "fef8d5889c2fe425dd50cfade909cec9",
+    "width": 1150,
+    "height": 1750,
+    "rating": "sensitive",
+    "score": 16,
+    "status": "active",
+    "source": "https://twitter.com/yyqw7151/status/1950567258528547071",
+    "owner": "danbooru",
+    "creator_id": 6498,
+    "created_at": "Wed Jul 30 10:16:34 -0500 2025",
+    "tag_count": 23,
+    "variants": [
+     "file",
+     "preview",
+     "sample"
+    ]
+   }
+  },
+  {
+   "name": "post_11605534",
+   "operation": "fetch_post",
+   "target": "11605534",
+   "request_identity": "gelbooru:dapi_json:post:11605534",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 1
+     },
+     "post": [
+      {
+       "id": 11605534,
+       "created_at": "Fri Mar 14 17:15:44 -0500 2025",
+       "score": 381,
+       "width": 1153,
+       "height": 1333,
+       "md5": "7cd330523b8e34b97c40e02c7e87d98c",
+       "directory": "7c/d3",
+       "image": "7cd330523b8e34b97c40e02c7e87d98c.png",
+       "rating": "explicit",
+       "source": "https://baraag.net/@Butterchalk/114162817218658720",
+       "change": 1779393839,
+       "owner": "danbooru",
+       "creator_id": 6498,
+       "parent_id": 0,
+       "sample": 1,
+       "preview_height": 350,
+       "preview_width": 302,
+       "tags": "1boy 1girl animal_ears animal_penis bestiality blue_hair brand_new_animal butterchalk commentary completely_nude dog_penis english_commentary flat_chest furry furry_with_furry hetero highres kagemori_michiru knotted_penis knotting loli medium_hair nipples nude ogami_shirou open_mouth penis pussy raccoon_ears raccoon_girl raccoon_tail sex simple_background spread_legs standing tail uncensored vaginal white_background white_fur wolf_boy wolf_tail zoophilia",
+       "title": "",
+       "has_notes": "false",
+       "has_comments": "true",
+       "file_url": "https://img4.gelbooru.com/images/7c/d3/7cd330523b8e34b97c40e02c7e87d98c.png",
+       "preview_url": "https://img4.gelbooru.com/thumbnails/7c/d3/thumbnail_7cd330523b8e34b97c40e02c7e87d98c.jpg",
+       "sample_url": "https://img4.gelbooru.com/samples/7c/d3/sample_7cd330523b8e34b97c40e02c7e87d98c.jpg",
+       "sample_height": 983,
+       "sample_width": 850,
+       "status": "active",
+       "post_locked": 0,
+       "has_children": "false"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "11605534"
+    ],
+    "declared_md5": "7cd330523b8e34b97c40e02c7e87d98c",
+    "width": 1153,
+    "height": 1333,
+    "rating": "explicit",
+    "score": 381,
+    "status": "active",
+    "source": "https://baraag.net/@Butterchalk/114162817218658720",
+    "owner": "danbooru",
+    "creator_id": 6498,
+    "created_at": "Fri Mar 14 17:15:44 -0500 2025",
+    "tag_count": 43,
+    "variants": [
+     "file",
+     "preview",
+     "sample"
+    ]
+   }
+  },
+  {
+   "name": "variation_distinct_10720246",
+   "operation": "fetch_post",
+   "target": "10720246",
+   "request_identity": "gelbooru:dapi_json:post:10720246",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 1
+     },
+     "post": [
+      {
+       "id": 10720246,
+       "created_at": "Sat Sep 21 21:00:12 -0500 2024",
+       "score": 505,
+       "width": 1401,
+       "height": 2048,
+       "md5": "072b69605a05873a2443626b7600ed69",
+       "directory": "07/2b",
+       "image": "072b69605a05873a2443626b7600ed69.jpg",
+       "rating": "explicit",
+       "source": "https://twitter.com/thiccwithaq/status/1837662117949800671",
+       "change": 1779390512,
+       "owner": "danbooru",
+       "creator_id": 6498,
+       "parent_id": 0,
+       "sample": 1,
+       "preview_height": 350,
+       "preview_width": 239,
+       "tags": "1boy 1girl anal animal_penis ass bestiality braid breasts commentary cum cum_in_ass cum_in_pussy dark-skinned_female dark_skin double_penetration english_commentary english_text extra_penises genshin_impact hairband hetero highres koholasaurus_(genshin_impact) long_hair low_twin_braids monster mualani_(genshin_impact) nyantcha penis pussy red_eyes sex speech_bubble tan tanline twin_braids vaginal zoophilia",
+       "title": "",
+       "has_notes": "false",
+       "has_comments": "true",
+       "file_url": "https://img4.gelbooru.com/images/07/2b/072b69605a05873a2443626b7600ed69.jpg",
+       "preview_url": "https://img4.gelbooru.com/thumbnails/07/2b/thumbnail_072b69605a05873a2443626b7600ed69.jpg",
+       "sample_url": "https://img4.gelbooru.com/samples/07/2b/sample_072b69605a05873a2443626b7600ed69.jpg",
+       "sample_height": 1243,
+       "sample_width": 850,
+       "status": "active",
+       "post_locked": 0,
+       "has_children": "false"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "10720246"
+    ],
+    "declared_md5": "072b69605a05873a2443626b7600ed69",
+    "width": 1401,
+    "height": 2048,
+    "rating": "explicit",
+    "score": 505,
+    "status": "active",
+    "source": "https://twitter.com/thiccwithaq/status/1837662117949800671",
+    "owner": "danbooru",
+    "creator_id": 6498,
+    "created_at": "Sat Sep 21 21:00:12 -0500 2024",
+    "tag_count": 38,
+    "variants": [
+     "file",
+     "preview",
+     "sample"
+    ]
+   }
+  },
+  {
+   "name": "variation_pair_10791439",
+   "operation": "fetch_post",
+   "target": "10791439",
+   "request_identity": "gelbooru:dapi_json:post:10791439",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 1
+     },
+     "post": [
+      {
+       "id": 10791439,
+       "created_at": "Sat Oct 05 17:42:50 -0500 2024",
+       "score": 387,
+       "width": 1471,
+       "height": 2151,
+       "md5": "98ea87fa54cf81ed0201d5e5bb2be8da",
+       "directory": "98/ea",
+       "image": "98ea87fa54cf81ed0201d5e5bb2be8da.png",
+       "rating": "explicit",
+       "source": "",
+       "change": 1779393980,
+       "owner": "shadnic",
+       "creator_id": 73050,
+       "parent_id": 0,
+       "sample": 1,
+       "preview_height": 350,
+       "preview_width": 239,
+       "tags": "1boy 1girl anal animal_penis ass bestiality braid breasts commentary cum cum_in_ass cum_in_pussy dark-skinned_female dark_skin double_penetration english_commentary english_text extra_penises genshin_impact hairband hetero highres koholasaurus_(genshin_impact) long_hair low_twin_braids monster mualani_(genshin_impact) nyantcha penis pussy red_eyes sex speech_bubble tan tanline twin_braids vaginal zoophilia",
+       "title": "",
+       "has_notes": "false",
+       "has_comments": "true",
+       "file_url": "https://img4.gelbooru.com/images/98/ea/98ea87fa54cf81ed0201d5e5bb2be8da.png",
+       "preview_url": "https://img4.gelbooru.com/thumbnails/98/ea/thumbnail_98ea87fa54cf81ed0201d5e5bb2be8da.jpg",
+       "sample_url": "https://img4.gelbooru.com/samples/98/ea/sample_98ea87fa54cf81ed0201d5e5bb2be8da.jpg",
+       "sample_height": 1243,
+       "sample_width": 850,
+       "status": "active",
+       "post_locked": 0,
+       "has_children": "false"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "10791439"
+    ],
+    "declared_md5": "98ea87fa54cf81ed0201d5e5bb2be8da",
+    "width": 1471,
+    "height": 2151,
+    "rating": "explicit",
+    "score": 387,
+    "status": "active",
+    "source": "",
+    "owner": "shadnic",
+    "creator_id": 73050,
+    "created_at": "Sat Oct 05 17:42:50 -0500 2024",
+    "tag_count": 38,
+    "variants": [
+     "file",
+     "preview",
+     "sample"
+    ]
+   }
+  },
+  {
+   "name": "variation_pair_10791440",
+   "operation": "fetch_post",
+   "target": "10791440",
+   "request_identity": "gelbooru:dapi_json:post:10791440",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 1
+     },
+     "post": [
+      {
+       "id": 10791440,
+       "created_at": "Sat Oct 05 17:44:31 -0500 2024",
+       "score": 461,
+       "width": 1471,
+       "height": 2151,
+       "md5": "e2d76eee6c5333e8d6ad7d115316cfd8",
+       "directory": "e2/d7",
+       "image": "e2d76eee6c5333e8d6ad7d115316cfd8.png",
+       "rating": "explicit",
+       "source": "",
+       "change": 1779393966,
+       "owner": "shadnic",
+       "creator_id": 73050,
+       "parent_id": 0,
+       "sample": 1,
+       "preview_height": 350,
+       "preview_width": 239,
+       "tags": "1boy 1girl anal animal_penis ass bestiality braid breasts commentary dark-skinned_female dark_skin double_penetration english_commentary english_text extra_penises gaping gaping_anus genshin_impact hairband hetero highres koholasaurus_(genshin_impact) long_hair low_twin_braids monster mualani_(genshin_impact) nyantcha penis pussy red_eyes sex speech_bubble tan tanline twin_braids vaginal zoophilia",
+       "title": "",
+       "has_notes": "false",
+       "has_comments": "false",
+       "file_url": "https://img4.gelbooru.com/images/e2/d7/e2d76eee6c5333e8d6ad7d115316cfd8.png",
+       "preview_url": "https://img4.gelbooru.com/thumbnails/e2/d7/thumbnail_e2d76eee6c5333e8d6ad7d115316cfd8.jpg",
+       "sample_url": "https://img4.gelbooru.com/samples/e2/d7/sample_e2d76eee6c5333e8d6ad7d115316cfd8.jpg",
+       "sample_height": 1243,
+       "sample_width": 850,
+       "status": "active",
+       "post_locked": 0,
+       "has_children": "false"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "10791440"
+    ],
+    "declared_md5": "e2d76eee6c5333e8d6ad7d115316cfd8",
+    "width": 1471,
+    "height": 2151,
+    "rating": "explicit",
+    "score": 461,
+    "status": "active",
+    "source": "",
+    "owner": "shadnic",
+    "creator_id": 73050,
+    "created_at": "Sat Oct 05 17:44:31 -0500 2024",
+    "tag_count": 37,
+    "variants": [
+     "file",
+     "preview",
+     "sample"
+    ]
+   }
+  }
+ ]
+}

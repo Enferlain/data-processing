@@ -28,6 +28,14 @@ from media_catalog.adapters.gelbooru.config import (
     GelbooruTransport,
 )
 from media_catalog.adapters.gelbooru.credentials import GelbooruCredentials
+from media_catalog.adapters.gelbooru.redaction import (
+    REDACTED,
+    sanitize_exception,
+    sanitize_mapping,
+    sanitize_message,
+    sanitize_text,
+    sanitize_url,
+)
 
 __all__ = [
     "ADAPTER_VERSION",
@@ -41,6 +49,7 @@ __all__ = [
     "MAX_RESPONSE_BYTES",
     "MINIMUM_INTERVAL_SECONDS",
     "PROVIDER_KEY",
+    "REDACTED",
     "REQUEST_TIMEOUT_SECONDS",
     "GelbooruCaptureError",
     "GelbooruCaptureOversizedError",
@@ -53,5 +62,10 @@ __all__ = [
     "capture_gelbooru_dapi_post",
     "capture_gelbooru_html_post",
     "capture_gelbooru_post",
+    "sanitize_exception",
+    "sanitize_mapping",
+    "sanitize_message",
+    "sanitize_text",
+    "sanitize_url",
     "validate_post_id",
 ]

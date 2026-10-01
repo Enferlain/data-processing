@@ -127,6 +127,15 @@ def test_redacted_fixture_suites_cover_required_contract_cases() -> None:
         "compatible_post",
         "incompatible_shape",
     }
+    gelbooru = load_fixture_suite(FIXTURES / "gelbooru.json")
+    assert {case.name for case in gelbooru.cases} == {
+        "post_12370900",
+        "post_11605534",
+        "variation_distinct_10720246",
+        "variation_pair_10791439",
+        "variation_pair_10791440",
+    }
+    assert gelbooru.manifest.provider == "gelbooru"
     e621 = load_fixture_suite(FIXTURES / "e621.json")
     assert {case.name for case in e621.cases} >= {
         "normal_post",
