@@ -117,7 +117,7 @@ changes.
 See the archived [metadata adapter](openspec/changes/archive/2026-08-10-add-pixiv-danbooru-metadata-adapters/)
 and [media browsing](openspec/changes/archive/2026-08-11-add-media-occurrence-browsing/) changes.
 
-### e621 metadata, lookup, expansion, and acquisition — Implemented
+### e621 metadata, lookup, expansion, and acquisition — Complete
 
 - The native e621 adapter handles post, tag, alias, artist, and bounded artist-tag listing
   operations with a descriptive User-Agent, optional external Basic auth, a one-second pacing floor,
@@ -212,17 +212,21 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Current milestone: e621 final verification and handoff
+## Current milestone: Gelbooru metadata adapter
 
-- Complete the implementation-review handoff, rerun any affected gates, and archive the OpenSpec
-  change only after every review finding is resolved.
+Complete the active `add-gelbooru-metadata-adapter` change. The offline foundation (fixture
+capture utility, transport/config policy, external credential plumbing, provenance and resume
+migration) is in place; remaining work continues against captured fixtures, and the live DAPI and
+HTML capture tasks run only after explicit operator authorization with external
+`GELBOORU_USER_ID`/`GELBOORU_API_KEY` credentials. No media downloads, broad crawling, or implicit
+identity conclusions are in scope.
 
 ## Planned after the active milestone
 
 ### Broader provider coverage
 
 - Add providers when they serve a concrete workflow and have a documented, bounded interaction
-  policy. Likely candidates include Gelbooru and Mastodon-compatible sources such as Baraag.
+  policy. Likely candidates include Mastodon-compatible sources such as Baraag.
 - Prefer native metadata adapters for first-class providers.
 - Consider a pinned gallery-dl subprocess bridge for unsupported sources or extraction assistance,
   but require all resulting files to pass the catalog's verification and CAS contract.

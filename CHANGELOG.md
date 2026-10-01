@@ -22,6 +22,10 @@ Rules:
 
 ### Changed
 
+- **The roadmap tracks the active Gelbooru milestone** — the completed e621 verification handoff
+  milestone is retired with e621 capabilities marked complete, and the current milestone now names
+  the bounded Gelbooru metadata adapter together with its explicit live-capture authorization
+  gate.
 - **Discovery and core-catalog writes moved behind internal persistence components** — the three
   discovery run/link-observation methods and the seven account, post, participant, observation,
   relation, media-occurrence, and asset-link methods now live in
