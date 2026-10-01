@@ -64,11 +64,18 @@ def test_persistence_package_never_commits_or_opens_connections() -> None:
         assert "BEGIN" not in text, source.name
 
 
-def test_delegated_storage_writes_share_the_caller_transaction(tmp_path: Path) -> None:
+def test_delegated_component_writes_share_the_caller_transaction(tmp_path: Path) -> None:
     with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
         writer = CatalogWriter(database)
 
         with pytest.raises(RuntimeError, match="force rollback"), database.transaction():
+            writer.begin_discovery(
+                extractor_version="extract-v1",
+                canonicalizer_version="canon-v1",
+                recognizer_version="recognize-v1",
+                scoring_version="score-v1",
+                started_at="2026-08-16T00:00:00Z",
+            )
             writer.upsert_account(
                 AccountRecord(
                     platform="pixiv",
@@ -93,5 +100,6 @@ def test_delegated_storage_writes_share_the_caller_transaction(tmp_path: Path) -
             )
             raise RuntimeError("force rollback")
 
+        assert database.connection.execute("SELECT COUNT(*) FROM discovery_runs").fetchone()[0] == 0
         assert database.connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
         assert database.connection.execute("SELECT COUNT(*) FROM adoption_runs").fetchone()[0] == 0

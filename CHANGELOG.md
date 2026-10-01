@@ -14,6 +14,11 @@ Rules:
 
 ### Changed
 
+- **Discovery and core-catalog writes moved behind internal persistence components** — the three
+  discovery run/link-observation methods and the seven account, post, participant, observation,
+  relation, media-occurrence, and asset-link methods now live in
+  `media_catalog.persistence.discovery.DiscoveryWrites` and `...catalog.CatalogWrites`, with
+  `CatalogWriter` delegating identically on the caller's shared transaction.
 - **Tag, attribution, and external-reference writes moved behind an internal persistence
   component** — tag, tag-alias, post metadata/pool/flag, attribution, and external reference/link
   write methods now live in `media_catalog.persistence.metadata.MetadataWrites` together with the
