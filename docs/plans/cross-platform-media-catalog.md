@@ -194,6 +194,11 @@ src/media_catalog/
 The exact name may change before implementation, but all source adapters should target one core
 contract and one catalog database.
 
+The implemented package later evolved beyond this sketch: record definitions live in family modules
+re-exported by the `media_catalog.records` package, and all SQL writes live in
+`media_catalog.persistence` domain components behind the `media_catalog.writer.CatalogWriter`
+facade, which preserves each caller's transaction ownership.
+
 ## 6. Research sources and limitations
 
 ### Local reference: `tag-workspace`

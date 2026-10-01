@@ -10,7 +10,15 @@ import pytest
 
 import media_catalog.records as records
 from media_catalog.database import CatalogDatabase
-from media_catalog.records import AccountRecord, ManagedRootRecord
+from media_catalog.records import (
+    AccountRecord,
+    AssetRecord,
+    LinkOccurrence,
+    ManagedRootRecord,
+    MediaOccurrenceRecord,
+    PostRecord,
+    RawRecord,
+)
 from media_catalog.writer import CatalogWriter
 
 RECORD_SIGNATURE_DIGEST = "38a4a629d5ae850f2c8cc21d957a3e647f69e9d7a5191caa5e979320e50ae2c4"
@@ -246,3 +254,129 @@ def test_writer_domains_share_the_caller_transaction(tmp_path: Path) -> None:
 
         assert database.connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
         assert database.connection.execute("SELECT COUNT(*) FROM managed_roots").fetchone()[0] == 0
+
+
+def test_writer_upserts_are_idempotent_with_stable_ids(tmp_path: Path) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            account = writer.upsert_account(
+                AccountRecord("x", "7", "2026-08-16T00:00:00Z", handle="first")
+            )
+            account_repeat = writer.upsert_account(
+                AccountRecord("x", "7", "2026-08-16T00:00:00Z", handle="first")
+            )
+            account_refreshed = writer.upsert_account(
+                AccountRecord("x", "7", "2026-08-17T00:00:00Z", handle="second")
+            )
+            assert (account.outcome, account_repeat.outcome, account_refreshed.outcome) == (
+                "inserted",
+                "existing",
+                "updated",
+            )
+            assert account.id == account_repeat.id == account_refreshed.id
+
+            post = writer.upsert_post(PostRecord("x", "42", "2026-08-16T00:00:00Z", text="one"))
+            post_repeat = writer.upsert_post(
+                PostRecord("x", "42", "2026-08-16T00:00:00Z", text="one")
+            )
+            post_refreshed = writer.upsert_post(
+                PostRecord("x", "42", "2026-08-17T00:00:00Z", text="two")
+            )
+            assert (post.outcome, post_repeat.outcome, post_refreshed.outcome) == (
+                "inserted",
+                "existing",
+                "updated",
+            )
+            assert post.id == post_repeat.id == post_refreshed.id
+
+            media = writer.upsert_media(
+                post.id,
+                MediaOccurrenceRecord("0", 0, "image", observed_at="2026-08-16T00:00:00Z"),
+            )
+            media_repeat = writer.upsert_media(
+                post.id,
+                MediaOccurrenceRecord("0", 0, "image", observed_at="2026-08-16T00:00:00Z"),
+            )
+            assert (media.outcome, media_repeat.outcome) == ("inserted", "existing")
+            assert media.id == media_repeat.id
+
+            observation = writer.add_observation(
+                post.id, "liked", "fixture", "like:42", "2026-08-16T00:00:00Z"
+            )
+            observation_repeat = writer.add_observation(
+                post.id, "liked", "fixture", "like:42", "2026-08-16T00:00:00Z"
+            )
+            assert (observation.outcome, observation_repeat.outcome) == ("inserted", "existing")
+            assert observation.id == observation_repeat.id
+
+            asset = AssetRecord(
+                "a" * 64, "b" * 32, None, 1, "legacy_reference", None, None, "fixture"
+            )
+            assert writer.link_asset(media.id, asset) == writer.link_asset(media.id, asset)
+            assert database.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 1
+
+            run_id = writer.begin_discovery(
+                extractor_version="extract-v1",
+                canonicalizer_version="canon-v1",
+                recognizer_version="recognize-v1",
+                scoring_version="score-v1",
+                started_at="2026-08-16T00:00:00Z",
+            )
+            link_occurrence = LinkOccurrence(
+                "post",
+                post.id,
+                "account.profile",
+                "https://example.test/a",
+                "2026-08-16T00:00:00Z",
+            )
+            link_kwargs = {
+                "canonical_url": "https://example.test/a",
+                "canonicalization_version": "canon-v1",
+                "resolution_state": "unresolved",
+                "resolution_reason": None,
+                "extractor_version": "extract-v1",
+                "occurrence_digest": "0" * 64,
+                "original_query": "",
+                "original_fragment": "",
+                "reference": None,
+            }
+            first_link = writer.store_link_observation(run_id, link_occurrence, **link_kwargs)
+            repeat_link = writer.store_link_observation(run_id, link_occurrence, **link_kwargs)
+            assert (first_link[0].outcome, repeat_link[0].outcome) == ("inserted", "existing")
+            assert first_link[0].id == repeat_link[0].id
+            assert first_link[1] is repeat_link[1] is None
+
+
+def test_writer_error_messages_are_unchanged(tmp_path: Path) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+
+        with pytest.raises(ValueError, match="unknown catalog platform: nosuch"):
+            writer.platform_id("nosuch")
+        with pytest.raises(ValueError, match="invalid terminal discovery status: paused"):
+            writer.finish_discovery(
+                1, status="paused", finished_at="2026-08-16T00:00:00Z", counts={}
+            )
+        with pytest.raises(
+            ValueError, match="observation source kind and event key must not be empty"
+        ):
+            writer.add_observation(1, "liked", "", "", "2026-08-16T00:00:00Z")
+        with pytest.raises(
+            ValueError, match="raw observation cannot belong to import and remote runs"
+        ):
+            writer.store_raw(
+                RawRecord(b"{}", "application/json", "post", "42", "2026-08-16T00:00:00Z"),
+                import_run_id=1,
+                remote_run_id=1,
+            )
+        with pytest.raises(ValueError, match="remote run is missing or already finished"):
+            writer.finish_remote_run(
+                999999,
+                status="complete",
+                outcome="success",
+                request_count=0,
+                page_count=0,
+                record_count=0,
+                finished_at="2026-08-16T00:00:00Z",
+            )

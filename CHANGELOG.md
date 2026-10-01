@@ -12,6 +12,14 @@ Rules:
 
 ## [2026-10-01]
 
+### Added
+
+- **Focused compatibility tests pin catalog writer idempotency and errors** — repeat upserts across
+  account, post, media, observation, link-observation, and asset writes now assert the
+  inserted/existing/updated outcomes with stable row identifiers, and the exact texts of platform,
+  discovery, observation, raw-observation, and remote-run validation errors are asserted through
+  the facade.
+
 ### Changed
 
 - **Discovery and core-catalog writes moved behind internal persistence components** — the three

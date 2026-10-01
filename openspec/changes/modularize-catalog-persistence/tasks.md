@@ -23,11 +23,11 @@
 - [x] 3.5 Extract remote-run, request, checkpoint, and raw-observation SQL writes behind explicit `CatalogWriter` delegation.
 - [x] 3.6 Extract tag, attribution, post-fact, and external-reference SQL writes behind explicit `CatalogWriter` delegation.
 - [x] 3.7 Extract discovery, account, post, observation, relation, media, and asset-link SQL writes behind explicit `CatalogWriter` delegation.
-- [ ] 3.8 Remove only helpers proven unused after extraction and keep `writer.py` as the stable public facade.
+- [x] 3.8 Remove only helpers proven unused after extraction and keep `writer.py` as the stable public facade.
 
 ## 4. Verification and Documentation
 
-- [ ] 4.1 Run focused domain tests after each extraction and verify SQLite rollback, idempotency, ID preservation, and error compatibility.
-- [ ] 4.2 Update architecture-facing documentation and the changelog with the new internal ownership boundaries and compatibility policy.
+- [x] 4.1 Run focused domain tests after each extraction and verify SQLite rollback, idempotency, ID preservation, and error compatibility.
+- [x] 4.2 Update architecture-facing documentation and the changelog with the new internal ownership boundaries and compatibility policy.
 - [ ] 4.3 Run changed-file formatting, repository Ruff, `ty`, full pytest, `git diff --check`, and strict OpenSpec validation.
 - [ ] 4.4 Request bounded review for the record split and each writer extraction section, address actionable findings, and confirm the final facade remains behavior-compatible.
