@@ -14,6 +14,11 @@ Rules:
 
 ### Added
 
+- **The reviewed Gelbooru fixture contract is documented** — a provider contract record now covers
+  observed request and response shapes, post/tag field types, envelope variants, page-number
+  pagination semantics, tag-category evidence, media variants, status-to-outcome mapping, pacing
+  and redaction decisions, and every unresolved provider assumption, split by provenance
+  (observed, reference-corroborated, synthetic, deferred).
 - **Gelbooru error and tag fixtures pin typed outcomes** — observed shapes (numeric-type tag
   records, count-zero not-found envelopes, anonymous 401 with empty body) plus
   documentation-derived synthetic 403/5xx/oversized/malformed envelopes cover every typed DAPI
