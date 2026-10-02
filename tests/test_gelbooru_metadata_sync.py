@@ -485,3 +485,162 @@ def test_sync_creates_no_liked_or_bookmarked_activity(tmp_path: Path) -> None:
         # Metadata synchronization never materializes user activity: the
         # observations table (likes/bookmarks imports) stays empty.
         assert database.connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# Task 5.4: current-projection policy for partial/disagreeing observations
+# ---------------------------------------------------------------------------
+
+LATER = "2026-10-02T12:00:00Z"
+
+
+def _later_html_service(
+    database: CatalogDatabase,
+    body: str,
+) -> MetadataSyncService:
+    adapter = GelbooruHtmlAdapter(
+        GELBOORU,
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    headers={"content-type": "text/html; charset=UTF-8"},
+                    content=body.encode(),
+                )
+            )
+        ),
+        clock=lambda: LATER,
+    )
+    return MetadataSyncService(
+        database,
+        adapter,
+        minimum_interval_seconds=0.0,
+        maximum_retries=0,
+        monotonic=lambda: 0.0,
+        sleep=lambda _seconds: None,
+        clock=lambda: LATER,
+    )
+
+
+def test_sync_later_html_observation_never_erases_dapi_only_facts(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        _dapi_service(database, _dapi_post_handler()).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        # The later HTML observation omits the original URL, the declared MD5,
+        # and any post status; none of those DAPI-proven facts may be erased.
+        _later_html_service(database, _html_body("html_post_12370900")).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+        media = database.connection.execute(
+            "SELECT remote_url, declared_md5, width, height FROM media_occurrences"
+        ).fetchone()
+        assert media["remote_url"] is not None  # DAPI original URL survives
+        assert media["declared_md5"] == "fef8d5889c2fe425dd50cfade909cec9"
+        assert (media["width"], media["height"]) == (1150, 1750)
+
+        post = database.connection.execute("SELECT rating, status FROM posts").fetchone()
+        assert post["status"] is not None  # HTML's null status does not erase
+        # Both observations remain auditable through separate raw records.
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 2
+        )
+
+
+def test_sync_later_dapi_observation_fills_html_gaps(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        _html_service(database, _html_post_handler()).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        html_media = database.connection.execute(
+            "SELECT remote_url, declared_md5 FROM media_occurrences"
+        ).fetchone()
+        assert html_media["remote_url"] is None  # HTML never reveals the original
+
+        _later_html_service_is_dapi = _dapi_service(database, _dapi_post_handler())
+        _later_html_service_is_dapi.synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        dapi_media = database.connection.execute(
+            "SELECT remote_url, declared_md5 FROM media_occurrences"
+        ).fetchone()
+        # A later DAPI observation adds the facts the HTML view lacked.
+        assert dapi_media["remote_url"] is not None
+        assert dapi_media["declared_md5"] == "fef8d5889c2fe425dd50cfade909cec9"
+
+
+def test_sync_disagreeing_rating_newer_observation_wins_and_stays_auditable(
+    tmp_path: Path,
+) -> None:
+    import re as re_module
+
+    disagreeing = re_module.sub(
+        r"Rating:\s*\w+", "Rating: explicit", _html_body("html_post_12370900")
+    )
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        _dapi_service(database, _dapi_post_handler()).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        _later_html_service(database, disagreeing).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+        rating = database.connection.execute("SELECT rating FROM posts").fetchone()["rating"]
+        # Mutable disagreement: the newer observation wins the current
+        # projection while both raw payloads keep the audit trail.
+        assert rating == "explicit"
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 2
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 5.5: metadata-only boundaries — no assets, no acquisition, provider MD5
+# ---------------------------------------------------------------------------
+
+
+def test_sync_keeps_media_metadata_only_without_assets_or_acquisition(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        _dapi_service(database, _dapi_post_handler()).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+        media = database.connection.execute(
+            "SELECT variants_json, declared_md5 FROM media_occurrences"
+        ).fetchone()
+        variants = json.loads(media["variants_json"])["variants"]
+        roles = {variant["role"] for variant in variants}
+        # Returned media URLs stay browseable metadata-only variants.
+        assert {"original", "preview"} <= roles
+        assert all(variant["url"].startswith("https://") for variant in variants)
+        # Declared MD5 is a provider assertion, never a locally verified hash.
+        assert media["declared_md5"] == "fef8d5889c2fe425dd50cfade909cec9"
+
+        for table in (
+            "assets",
+            "occurrence_assets",
+            "media_acquisition_plans",
+            "media_acquisition_runs",
+            "media_acquisition_attempts",
+        ):
+            count = database.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            assert count == 0, table

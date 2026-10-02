@@ -52,6 +52,12 @@ Rules:
   invented), and metadata runs writing zero liked/bookmarked activity observations; the shared
   page writer's fallback for a post tag without a category changed from `general` to `unknown` so
   a provider that stays silent is never recorded as claiming the tag is general.
+- **The Gelbooru current-projection and metadata-only policies are pinned** — a later HTML
+  observation never erases DAPI-proven facts (original URL, declared MD5, dimensions, post
+  status all survive omission), a later DAPI observation fills the gaps an HTML-only view
+  lacked, a disagreeing rating resolves to the newer observation while both raw payloads keep
+  the audit trail, and returned media URLs stay browseable metadata-only variants with declared
+  MD5 as a provider assertion and zero asset or acquisition rows after synchronization.
 
 ### Changed
 

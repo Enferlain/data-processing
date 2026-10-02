@@ -34,8 +34,8 @@
 - [x] 5.1 Wire Gelbooru normalized pages through the shared response-first remote executor and page writer so raw response retention precedes normalization and normalized records, origins, budgets, and checkpoints commit atomically.
 - [x] 5.2 Persist DAPI and HTML observations under the same Gelbooru numeric post identity while retaining separate raw observations, transport/parser versions, request attempts, timestamps, and provider assertions.
 - [x] 5.3 Preserve uncategorized DAPI tags as native spelling with neutral `unknown`, map HTML categories only where fixtures prove them, keep uploader distinct from artist/creator attribution, and create no liked or bookmarked activity.
-- [ ] 5.4 Define and test the current-projection policy for partial or disagreeing DAPI and HTML observations so omission never erases retained history and mutable disagreements remain auditable through raw provenance.
-- [ ] 5.5 Verify that normalized returned media URLs remain browseable metadata-only variants, declared MD5 remains a provider assertion until local verification, and synchronization creates no assets or acquisition attempts.
+- [x] 5.4 Define and test the current-projection policy for partial or disagreeing DAPI and HTML observations so omission never erases retained history and mutable disagreements remain auditable through raw provenance.
+- [x] 5.5 Verify that normalized returned media URLs remain browseable metadata-only variants, declared MD5 remains a provider assertion until local verification, and synchronization creates no assets or acquisition attempts.
 
 ## 6. CLI and Offline Inspection
 
