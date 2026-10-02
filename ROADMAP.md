@@ -43,15 +43,13 @@ deliberately deferred.
 ## Current state
 
 The `add-artist-library-expansion` milestone is complete and archived. The `add-e621-metadata-adapter`
-OpenSpec change under Bead `data-processing-7cy` is complete through metadata synchronization, lookup,
-library expansion, target-scoped browsing, and verified media acquisition. Its disabled live smoke tests
-and full quality gates are also complete. The OpenSpec change remains active and unarchived only for
-final review handoff and archive steps.
+OpenSpec change under Bead `data-processing-7cy` is complete and its remaining archive step is tracked
+separately.
 
-The `add-gelbooru-metadata-adapter` OpenSpec change under Bead `data-processing-fql` is complete
-through metadata synchronization, acceptance matrix, regression, and policy tests. Its disabled
-live smoke tests require explicit operator authorization. The implementation is complete; remaining
-work is documentation finalization, quality-gate verification, and change archiving.
+The `add-gelbooru-metadata-adapter` OpenSpec change under Bead `data-processing-fql` is complete and
+archived (2026-10-02): all 37 tasks implemented, two review passes addressed, delta specs synced into
+the main `gelbooru-metadata-adapter` capability spec plus additions to `media-catalog-core` and
+`remote-metadata-sync`, and all quality gates green.
 
 Live task state can be checked with:
 
@@ -164,8 +162,8 @@ Metadata and expansion never fetch media, and live e621 smoke tests remain disab
 - Live smoke tests are disabled by default and require explicit operator authorization
   (`GELBOORU_LIVE_SMOKE=acknowledged`). Credentials do not grant permission for broad crawling.
 
-See the active
-[add-gelbooru-metadata-adapter OpenSpec](openspec/changes/add-gelbooru-metadata-adapter/).
+See the archived
+[add-gelbooru-metadata-adapter change](openspec/changes/archive/2026-10-02-add-gelbooru-metadata-adapter/).
 
 ### Bounded candidate lookup — Complete
 
@@ -239,12 +237,12 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Current milestone: OpenSpec validation and archive
+## Current milestone: none active
 
-Complete strict OpenSpec validation, bounded review of each implementation section, and archive
-the `add-gelbooru-metadata-adapter` change after addressing any actionable findings. The Gelbooru
-metadata adapter implementation is complete through acceptance, regression, and policy tests; the
-remaining work is documentation finalization, quality-gate verification, and change archiving.
+The Gelbooru metadata adapter milestone is complete and archived. Pick the next milestone from
+**Planned after the active milestone** when a concrete workflow justifies it — the leading candidate
+per the pipeline gap analysis is a cohesive workflow that carries a reviewed target through
+metadata sync, browsing, and acquisition without manual identifier translation between commands.
 
 ## Planned after the active milestone
 

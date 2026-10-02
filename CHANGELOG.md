@@ -16,6 +16,13 @@ Rules:
 
 ### Added
 
+- **The Gelbooru OpenSpec change is archived with specs synced** — the 10 delta requirements were
+  merged into the main specs (new `gelbooru-metadata-adapter` capability spec with its seven
+  requirements, one persistence-neutrality requirement into `media-catalog-core`, and transport-
+  identity plus ephemeral-query-credential requirements into `remote-metadata-sync`), strict spec
+  validation passes for all 14 capabilities, and the change moved to
+  `openspec/changes/archive/2026-10-02-add-gelbooru-metadata-adapter/`.
+
 - **Gelbooru DAPI continuations are fully scope-validated (task 3.4)** — listing continuations now
   carry every enumeration dimension — operation, listing target, query scope (unfiltered only, so a
   continuation claiming a tag query fails closed), sort (`id-desc`, the only pid-stable DAPI order),
