@@ -164,6 +164,12 @@ class GelbooruHtmlAdapter:
                 "provider record is unavailable",
                 status_code=404,
             )
+        if response.status_code == 429:
+            raise AdapterFailure(
+                AdapterOutcome.RATE_LIMITED,
+                "provider rate limit reached",
+                status_code=429,
+            )
         if response.status_code >= 500:
             raise AdapterFailure(
                 AdapterOutcome.TRANSIENT_PROVIDER,

@@ -14,6 +14,7 @@ OpenSpec task 7.5 for change ``add-gelbooru-metadata-adapter``.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -85,9 +86,9 @@ def _make_html_adapter() -> GelbooruHtmlAdapter:
     not _live_smoke_enabled(),
     reason=_LIVE_SMOKE_REASON,
 )
-def test_live_dapi_post_smoke(tmp_path: str) -> None:
+def test_live_dapi_post_smoke(tmp_path: Path) -> None:
     """7.5: Live DAPI smoke test — one post, hard limits, no media contact."""
-    path = tmp_path + "/catalog.sqlite3" if not tmp_path.endswith(".sqlite3") else tmp_path
+    path = tmp_path / "catalog.sqlite3"
     adapter = _make_dapi_adapter()
     with CatalogDatabase(path) as database:
         service = MetadataSyncService(
@@ -113,9 +114,9 @@ def test_live_dapi_post_smoke(tmp_path: str) -> None:
     not _live_smoke_enabled(),
     reason=_LIVE_SMOKE_REASON,
 )
-def test_live_html_post_smoke(tmp_path: str) -> None:
+def test_live_html_post_smoke(tmp_path: Path) -> None:
     """7.5: Live HTML smoke test — one post, hard limits, no credentials."""
-    path = tmp_path + "/catalog.sqlite3" if not tmp_path.endswith(".sqlite3") else tmp_path
+    path = tmp_path / "catalog.sqlite3"
     adapter = _make_html_adapter()
     with CatalogDatabase(path) as database:
         service = MetadataSyncService(

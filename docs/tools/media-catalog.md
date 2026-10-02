@@ -243,17 +243,21 @@ and does not mutate the base query dict. Transport exceptions are sanitized via 
 which scrubs credential values from error messages. The HTML adapter operates without credentials,
 cookies, or browser automation.
 
-**Typed failures:** Gelbooru operations produce typed outcomes: `success`, `unavailable`,
-`authentication_required`, `authorization_denied`, `rate_limited`, `transient_provider`,
-`response_too_large`, `malformed_response`, and `budget_exhausted`. Challenge pages (missing
-tag-list and Posted:/Uploader: markers) yield `authorization_denied`. Oversized response bodies
-raise `response_too_large`. Malformed JSON or HTML without identity markers raises
+**Typed failures:** Gelbooru operations produce typed outcomes. DAPI transport can produce all
+outcomes: `success`, `unavailable`, `authentication_required`, `authorization_denied`,
+`rate_limited`, `transient_provider`, `response_too_large`, `malformed_response`, and
+`budget_exhausted`. HTML transport produces: `success`, `unavailable`, `authorization_denied`,
+`rate_limited`, `transient_provider`, `response_too_large`, and `malformed_response`. Challenge
+pages (missing tag-list and Posted:/Uploader: markers) yield `authorization_denied`. Oversized
+response bodies raise `response_too_large`. Malformed JSON or HTML without identity markers raises
 `malformed_response`.
 
 **Resume limits:** Listing operations (`gelbooru-dapi-list`) store an opaque `pid` continuation
 checkpoint. Resume is validated before network access: transport mismatch, incompatible continuation
-format, or incompatible request scope all raise `ValueError` without contacting Gelbooru. Resume is
-only supported from a committed checkpoint — complete runs cannot be re-opened.
+format, or incompatible operation/target all raise `ValueError` without contacting Gelbooru. Resume is
+only supported from a committed checkpoint — complete runs cannot be re-opened. Query, sort,
+direction, and boundary scoping are not yet enforced at resume time (see task 3.4 of the active
+OpenSpec change).
 
 **Troubleshooting:** If DAPI returns `authentication_required` or `authorization_denied`, verify
 both `GELBOORU_USER_ID` and `GELBOORU_API_KEY` are set and valid. If HTML returns

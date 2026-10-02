@@ -458,3 +458,14 @@ class TestTransportHardening:
         with pytest.raises(AdapterFailure) as exc_info:
             adapter.fetch(request)
         assert exc_info.value.outcome == AdapterOutcome.TRANSIENT_PROVIDER
+
+    def test_rate_limited_429_produces_rate_limited_outcome(self) -> None:
+        """HTTP 429 from the HTML transport yields rate_limited, not unavailable."""
+        client = _make_client([_mock_response(429, b"<html></html>")])
+        adapter = GelbooruHtmlAdapter(client=client)
+        request = AdapterRequest(AdapterOperation.FETCH_POST, "12370900")
+
+        envelope = adapter.fetch(request)
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.normalize(envelope)
+        assert exc_info.value.outcome == AdapterOutcome.RATE_LIMITED

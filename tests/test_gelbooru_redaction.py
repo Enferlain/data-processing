@@ -152,9 +152,11 @@ def test_html_adapter_contacts_only_gelbooru_endpoint() -> None:
     """7.2: HTML fetch makes exactly one request to gelbooru.com with no
     credentials, cookies, or secondary requests."""
     contacted_hosts: list[str] = []
+    captured_urls: list[str] = []
 
     def tracking_handler(request: httpx.Request) -> httpx.Response:
         contacted_hosts.append(request.url.host)
+        captured_urls.append(str(request.url))
         return httpx.Response(
             200,
             headers={"content-type": "text/html; charset=UTF-8"},
@@ -171,3 +173,7 @@ def test_html_adapter_contacts_only_gelbooru_endpoint() -> None:
     assert envelope.status_code == 200
     assert all(host == "gelbooru.com" for host in contacted_hosts)
     assert len(contacted_hosts) == 1
+    # HTML transport must never include credential parameters in the URL.
+    for url in captured_urls:
+        assert "user_id" not in url
+        assert "api_key" not in url
