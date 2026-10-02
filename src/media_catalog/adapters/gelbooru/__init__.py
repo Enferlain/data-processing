@@ -1,5 +1,6 @@
 """Native Gelbooru metadata adapter policy, credentials, and capture utility."""
 
+from media_catalog.adapters.gelbooru.adapter import GelbooruAdapter
 from media_catalog.adapters.gelbooru.capture import (
     GelbooruCaptureError,
     GelbooruCaptureOversizedError,
@@ -51,6 +52,7 @@ __all__ = [
     "PROVIDER_KEY",
     "REDACTED",
     "REQUEST_TIMEOUT_SECONDS",
+    "GelbooruAdapter",
     "GelbooruCaptureError",
     "GelbooruCaptureOversizedError",
     "GelbooruCaptureRedirectError",

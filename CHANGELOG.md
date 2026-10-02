@@ -80,6 +80,29 @@ Rules:
   public signatures as explicit delegations on the caller's shared transaction; the root-upsert
   compatibility alias is preserved.
 
+## [2026-10-02]
+
+### Added
+
+- **The Gelbooru DAPI JSON adapter is implemented** — `GelbooruAdapter` renders explicit authenticated
+  requests for single-post fetch (`id=`), tag metadata (`name=`), and bounded post listings (`pid`/`limit`),
+  normalizes fixture-proven response shapes (list, dict, bare-array, missing-key empty, three error
+  envelope forms) into provider-neutral `NormalizedItem` pages covering posts, accounts, uploader
+  participants, unknown-category tags, media occurrences with original/sample/preview variants,
+  and source references; `_gelbooru_timestamp` handles both ctime-like and `YYYY-MM-DD HH:MM:SS`
+  timestamp formats observed in live captures.
+- **Gelbooru DAPI adapter tests verify request shapes, typed outcomes, and normalization** — 27
+  injected-transport tests pin exact rendered request parameters, the 100-entry page ceiling, status
+  code-to-outcome mapping (401/403/404/429/5xx/error-envelope/malformed), response-first raw
+  retention, continuation validation, listing continuation with pid increment, idempotent
+  normalization against fixture data, zero media-host requests, and all three DAPI response shapes.
+
+### Changed
+
+- **Gelbooru schema audit timestamp corrected** — live captures use ctime-like format with timezone
+  offset (`Wed Jul 30 10:16:34 -0500 2025`); the adapter normalizes to UTC ISO, and schema audit
+  and adapter test expectations now match the actual normalized timestamps.
+
 ## [2026-09-30]
 
 ### Added

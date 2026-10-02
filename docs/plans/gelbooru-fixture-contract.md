@@ -50,7 +50,7 @@ bytes from image hosts.
 
 All fields below were present on every captured post (five observations):
 
-`change` (int), `created_at` (str, `YYYY-MM-DD HH:MM:SS` UTC), `creator_id` (int, uploader),
+`change` (int), `created_at` (str, observed as ctime-like `Wed Jul 30 10:16:34 -0500 2025` with timezone offset; normalized to ISO UTC by adapter), `creator_id` (int, uploader),
 `directory` (str), `file_url` (str), `has_children` (0/1), `has_comments` (0/1), `has_notes`
 (0/1), `height` (int), `id` (int), `image` (str filename), `md5` (str), `owner` (str, uploader
 name), `parent_id` (int or null), `post_locked` (0/1), `preview_height`/`preview_width` (int),

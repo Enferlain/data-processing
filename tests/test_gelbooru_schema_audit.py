@@ -77,7 +77,7 @@ def test_fixture_proven_post_round_trips_through_the_neutral_schema(tmp_path: Pa
                     canonical_url=(
                         f"https://gelbooru.com/index.php?page=post&s=view&id={body['id']}"
                     ),
-                    created_at="2025-07-30T10:16:34Z",
+                    created_at="2025-07-30T15:16:34Z",
                     rating=body["rating"],
                 ),
                 raw_observation_id=raw_id,
@@ -118,7 +118,7 @@ def test_fixture_proven_post_round_trips_through_the_neutral_schema(tmp_path: Pa
                     canonical_url=(
                         f"https://gelbooru.com/index.php?page=post&s=view&id={body['id']}"
                     ),
-                    created_at="2025-07-30T10:16:34Z",
+                    created_at="2025-07-30T15:16:34Z",
                     rating=body["rating"],
                 ),
                 raw_observation_id=raw_id,
@@ -140,7 +140,7 @@ def test_fixture_proven_post_round_trips_through_the_neutral_schema(tmp_path: Pa
                WHERE posts.post_id = ?""",
             (post.id,),
         ).fetchone()
-        assert tuple(post_row) == ("gelbooru", body["rating"], "2025-07-30T10:16:34Z")
+        assert tuple(post_row) == ("gelbooru", body["rating"], "2025-07-30T15:16:34Z")
 
         media_row = database.connection.execute(
             """SELECT declared_md5, width, height, remote_url FROM media_occurrences

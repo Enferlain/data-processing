@@ -16,11 +16,11 @@
 
 ## 3. Credentialed JSON-DAPI Adapter
 
-- [ ] 3.1 Implement explicit DAPI request rendering for positive numeric post fetches, exact tag metadata supported by the fixture contract, and bounded post listings using `json=1`, `pid`, and a provider-capped `limit`, without undocumented alias, artist, pool, favorite, count, or deleted-stream endpoints.
-- [ ] 3.2 Implement typed DAPI response handling for success, missing or invalid credentials, authorization or challenge denial, unavailable records, rate limiting, transient provider failures, oversized bodies, and malformed or unsupported response shapes.
-- [ ] 3.3 Normalize fixture-proven DAPI post identity, timestamps, availability, source, uploader role, rating, score, declared MD5, dimensions, tag spellings/native category evidence, and returned media representations without deriving URLs or inferring authorship.
+- [x] 3.1 Implement explicit DAPI request rendering for positive numeric post fetches, exact tag metadata supported by the fixture contract, and bounded post listings using `json=1`, `pid`, and a provider-capped `limit`, without undocumented alias, artist, pool, favorite, count, or deleted-stream endpoints.
+- [x] 3.2 Implement typed DAPI response handling for success, missing or invalid credentials, authorization or challenge denial, unavailable records, rate limiting, transient provider failures, oversized bodies, and malformed or unsupported response shapes.
+- [x] 3.3 Normalize fixture-proven DAPI post identity, timestamps, availability, source, uploader role, rating, score, declared MD5, dimensions, tag spellings/native category evidence, and returned media representations without deriving URLs or inferring authorship.
 - [ ] 3.4 Implement target-, query-, sort-, transport-, direction-, boundary-, and version-scoped DAPI continuations; validate compatible resume before network access and pause before an unadmitted request, page, record, byte, or elapsed-time boundary.
-- [ ] 3.5 Add focused injected-transport tests for exact request shapes, the provider page ceiling, typed outcomes, response-first raw retention, continuation validation, committed-page resume, retry-attempt history, idempotent normalization, and zero media-host requests.
+- [x] 3.5 Add focused injected-transport tests for exact request shapes, the provider page ceiling, typed outcomes, response-first raw retention, continuation validation, committed-page resume, retry-attempt history, idempotent normalization, and zero media-host requests.
 
 ## 4. Anonymous Single-Post HTML Adapter
 
