@@ -717,3 +717,120 @@ class TestResponseShapeHandling:
         page = adapter.normalize(envelope)
         assert page.items == ()
         assert page.continuation is None
+
+
+# ── Review hardening: typed failures for malformed records and transports ─
+
+
+class TestReviewHardening:
+    """Malformed post records, continuations, and transport failures stay typed."""
+
+    def test_missing_created_at_fails_malformed(self) -> None:
+        """Post record without created_at → malformed_response, not KeyError."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        body = _dapi_post_body("12370900")
+        del body["post"][0]["created_at"]
+        response = _mock_response(200, json.dumps(body).encode())
+        client = _make_client([response])
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        envelope = adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "12370900"))
+
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.normalize(envelope)
+        assert exc_info.value.outcome == AdapterOutcome.MALFORMED_RESPONSE
+
+    def test_unparseable_created_at_fails_malformed(self) -> None:
+        """Post record with an unparseable created_at → malformed_response."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        body = _dapi_post_body("12370900")
+        body["post"][0]["created_at"] = "not-a-timestamp"
+        response = _mock_response(200, json.dumps(body).encode())
+        client = _make_client([response])
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        envelope = adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "12370900"))
+
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.normalize(envelope)
+        assert exc_info.value.outcome == AdapterOutcome.MALFORMED_RESPONSE
+
+    def test_non_string_created_at_fails_malformed(self) -> None:
+        """Post record with a null created_at → malformed_response."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        body = _dapi_post_body("12370900")
+        body["post"][0]["created_at"] = None
+        response = _mock_response(200, json.dumps(body).encode())
+        client = _make_client([response])
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        envelope = adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "12370900"))
+
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.normalize(envelope)
+        assert exc_info.value.outcome == AdapterOutcome.MALFORMED_RESPONSE
+
+    def test_malformed_continuation_limit_rejected(self) -> None:
+        """Non-numeric continuation limit → ValueError before network access."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        client = _make_client([])
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {"pid": "0", "limit": "abc"})
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+
+        with pytest.raises(ValueError, match="malformed Gelbooru continuation"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_out_of_range_continuation_rejected(self) -> None:
+        """Negative pid or non-positive limit → ValueError before network access."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        client = _make_client([])
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {"pid": "-1", "limit": "25"})
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+
+        with pytest.raises(ValueError, match="out of range"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_oversized_response_rejected(self) -> None:
+        """Response body above the transport byte limit → response_too_large."""
+        from media_catalog.adapters.gelbooru.config import MAX_RESPONSE_BYTES
+
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        response = _mock_response(200, b"x" * (MAX_RESPONSE_BYTES + 1))
+        client = _make_client([response])
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "12370900"))
+        assert exc_info.value.outcome == AdapterOutcome.RESPONSE_TOO_LARGE
+
+    def test_transport_exception_sanitized(self) -> None:
+        """httpx transport errors become transient_provider with credentials scrubbed."""
+        secret = "abcdef1234567890abcdef1234567890"
+        credentials = GelbooruCredentials("12345", secret)
+        client = _make_client(
+            [
+                httpx.ConnectError(
+                    "connection failed to "
+                    "https://gelbooru.com/index.php?user_id=12345&api_key=" + secret
+                )
+            ]
+        )
+
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "12370900"))
+        assert exc_info.value.outcome == AdapterOutcome.TRANSIENT_PROVIDER
+        assert secret not in str(exc_info.value)
+        assert "12345" not in str(exc_info.value)

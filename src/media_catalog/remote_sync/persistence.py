@@ -184,7 +184,9 @@ class NormalizedPageWriter:
                     post_id,
                     TagObservationRecord(
                         platform=platform,
-                        category=_text(data.get("category")) or "general",
+                        # A missing category means the provider did not say —
+                        # neutral "unknown", never an invented "general".
+                        category=_text(data.get("category")) or "unknown",
                         normalized_name=_required_text(data, "normalized_name"),
                         provider_spelling=_required_text(data, "spelling"),
                         observed_at=observed_at,

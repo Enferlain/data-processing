@@ -29,6 +29,7 @@ from media_catalog.adapters.gelbooru.config import (
     GelbooruTransport,
 )
 from media_catalog.adapters.gelbooru.credentials import GelbooruCredentials
+from media_catalog.adapters.gelbooru.html_adapter import GelbooruHtmlAdapter
 from media_catalog.adapters.gelbooru.redaction import (
     REDACTED,
     sanitize_exception,
@@ -59,6 +60,7 @@ __all__ = [
     "GelbooruCaptureResult",
     "GelbooruCaptureTimeoutError",
     "GelbooruCredentials",
+    "GelbooruHtmlAdapter",
     "GelbooruInstance",
     "GelbooruTransport",
     "capture_gelbooru_dapi_post",

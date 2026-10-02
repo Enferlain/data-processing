@@ -29,9 +29,11 @@ from media_catalog.adapters.gelbooru.config import (
     DAPI_TRANSPORT_VERSION,
     GELBOORU,
     MAX_PAGE_SIZE,
+    MAX_RESPONSE_BYTES,
     GelbooruInstance,
 )
 from media_catalog.adapters.gelbooru.credentials import GelbooruCredentials
+from media_catalog.adapters.gelbooru.redaction import sanitize_exception
 
 
 def _utc_now() -> str:
@@ -87,6 +89,10 @@ class GelbooruAdapter:
         return DAPI_TRANSPORT_VERSION
 
     @property
+    def minimum_interval_seconds(self) -> float:
+        return self.instance.minimum_interval_seconds
+
+    @property
     def transport_version(self) -> str:
         return DAPI_TRANSPORT_VERSION
 
@@ -114,11 +120,24 @@ class GelbooruAdapter:
             )
 
         headers = {"User-Agent": self.instance.user_agent, "Accept": "application/json"}
-        response = self._client.get(
-            endpoint,
-            params=params,
-            headers=headers,
-        )
+        try:
+            response = self._client.get(
+                endpoint,
+                params=params,
+                headers=headers,
+            )
+        except httpx.HTTPError as error:
+            secrets = self._credentials.secret_values() if self._credentials else ()
+            raise AdapterFailure(
+                AdapterOutcome.TRANSIENT_PROVIDER,
+                f"DAPI transport error: {sanitize_exception(error, secrets)}",
+            ) from error
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise AdapterFailure(
+                AdapterOutcome.RESPONSE_TOO_LARGE,
+                "DAPI response exceeded the transport byte limit",
+                status_code=response.status_code,
+            )
         return ResponseEnvelope(
             provider=self.provider_key,
             instance=self.instance_key,
@@ -211,8 +230,15 @@ class GelbooruAdapter:
         limit = MAX_PAGE_SIZE
         if continuation is not None:
             self._validate_continuation(continuation)
-            pid = str(continuation.value.get("pid", "0"))
-            limit = min(int(continuation.value.get("limit", MAX_PAGE_SIZE)), MAX_PAGE_SIZE)
+            try:
+                pid_num = int(str(continuation.value.get("pid", "0")))
+                limit_num = int(continuation.value.get("limit", MAX_PAGE_SIZE))
+            except (TypeError, ValueError):
+                raise ValueError("malformed Gelbooru continuation payload") from None
+            if pid_num < 0 or limit_num < 1:
+                raise ValueError("Gelbooru continuation pid/limit out of range")
+            pid = str(pid_num)
+            limit = min(limit_num, MAX_PAGE_SIZE)
         if self._credentials is None:
             raise ValueError("DAPI requests require credentials")
         params = self._credentials.authenticated_query(
@@ -406,6 +432,21 @@ class GelbooruAdapter:
         if status == "deleted":
             availability = "deleted"
 
+        created_at = post.get("created_at")
+        if not isinstance(created_at, str) or not created_at:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "DAPI post record has no created_at timestamp",
+            )
+        try:
+            created_iso = _gelbooru_timestamp(created_at)
+        except ValueError as error:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "DAPI post record has an unparseable created_at timestamp",
+            ) from error
+
+        score = post.get("score")
         items: list[NormalizedItem] = [
             NormalizedItem(
                 "post",
@@ -415,12 +456,17 @@ class GelbooruAdapter:
                     "canonical_url": (
                         f"{self.instance.base_url}/index.php?page=post&s=view&id={post_id}"
                     ),
-                    "created_at": _gelbooru_timestamp(post["created_at"]),
+                    "created_at": created_iso,
                     "rating": rating if rating else None,
                     "availability": availability,
                     "status": status,
                     "source": post.get("source") or None,
-                    "score": post.get("score"),
+                    # The page writer persists score facts only in mapping form.
+                    "score": (
+                        {"total": score}
+                        if isinstance(score, int) and not isinstance(score, bool)
+                        else None
+                    ),
                 },
             ),
         ]

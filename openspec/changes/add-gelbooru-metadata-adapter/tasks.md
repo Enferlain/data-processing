@@ -24,16 +24,16 @@
 
 ## 4. Anonymous Single-Post HTML Adapter
 
-- [ ] 4.1 Implement an explicit HTML transport that accepts one positive numeric post ID and performs exactly one bounded HTTPS request to the canonical Gelbooru post page, with no login, cookies, browser automation, scripts, listings, notes, sources, thumbnails, or media requests.
-- [ ] 4.2 Implement a small versioned HTML parser for only fixture-proven stable markers, including post identity and available source, uploader, rating, score, hash, dimensions, tag-category classes, and returned original/sample/preview references.
-- [ ] 4.3 Fail closed when identity markers are missing, markup is incompatible, a challenge page is returned, or field bounds are exceeded; retain the admitted raw HTML and report a typed outcome without switching to DAPI.
-- [ ] 4.4 Add focused tests proving one-response behavior, canonical request identity, bounded parsing, unavailable/challenge/malformed handling, category preservation, no secondary requests, no media access, and no credentials or cookies.
+- [x] 4.1 Implement an explicit HTML transport that accepts one positive numeric post ID and performs exactly one bounded HTTPS request to the canonical Gelbooru post page, with no login, cookies, browser automation, scripts, listings, notes, sources, thumbnails, or media requests.
+- [x] 4.2 Implement a small versioned HTML parser for only fixture-proven stable markers, including post identity and available source, uploader, rating, score, hash, dimensions, tag-category classes, and returned original/sample/preview references.
+- [x] 4.3 Fail closed when identity markers are missing, markup is incompatible, a challenge page is returned, or field bounds are exceeded; retain the admitted raw HTML and report a typed outcome without switching to DAPI.
+- [x] 4.4 Add focused tests proving one-response behavior, canonical request identity, bounded parsing, unavailable/challenge/malformed handling, category preservation, no secondary requests, no media access, and no credentials or cookies.
 
 ## 5. Normalized Persistence and Reconciliation
 
-- [ ] 5.1 Wire Gelbooru normalized pages through the shared response-first remote executor and page writer so raw response retention precedes normalization and normalized records, origins, budgets, and checkpoints commit atomically.
-- [ ] 5.2 Persist DAPI and HTML observations under the same Gelbooru numeric post identity while retaining separate raw observations, transport/parser versions, request attempts, timestamps, and provider assertions.
-- [ ] 5.3 Preserve uncategorized DAPI tags as native spelling with neutral `unknown`, map HTML categories only where fixtures prove them, keep uploader distinct from artist/creator attribution, and create no liked or bookmarked activity.
+- [x] 5.1 Wire Gelbooru normalized pages through the shared response-first remote executor and page writer so raw response retention precedes normalization and normalized records, origins, budgets, and checkpoints commit atomically.
+- [x] 5.2 Persist DAPI and HTML observations under the same Gelbooru numeric post identity while retaining separate raw observations, transport/parser versions, request attempts, timestamps, and provider assertions.
+- [x] 5.3 Preserve uncategorized DAPI tags as native spelling with neutral `unknown`, map HTML categories only where fixtures prove them, keep uploader distinct from artist/creator attribution, and create no liked or bookmarked activity.
 - [ ] 5.4 Define and test the current-projection policy for partial or disagreeing DAPI and HTML observations so omission never erases retained history and mutable disagreements remain auditable through raw provenance.
 - [ ] 5.5 Verify that normalized returned media URLs remain browseable metadata-only variants, declared MD5 remains a provider assertion until local verification, and synchronization creates no assets or acquisition attempts.
 

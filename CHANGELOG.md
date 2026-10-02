@@ -1,5 +1,7 @@
 # Changelog
 
+<!-- markdownlint-disable MD024 -->
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -9,6 +11,70 @@ Rules:
 - Use proper sub titles "Added", "Changed", "Removed" and "Fixed"
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
+
+## [2026-10-02]
+
+### Added
+
+- **The Gelbooru DAPI JSON adapter is implemented** — `GelbooruAdapter` renders explicit authenticated
+  requests for single-post fetch (`id=`), tag metadata (`name=`), and bounded post listings (`pid`/`limit`),
+  normalizes fixture-proven response shapes (list, dict, bare-array, missing-key empty, three error
+  envelope forms) into provider-neutral `NormalizedItem` pages covering posts, accounts, uploader
+  participants, unknown-category tags, media occurrences with original/sample/preview variants,
+  and source references; `_gelbooru_timestamp` handles both ctime-like and `YYYY-MM-DD HH:MM:SS`
+  timestamp formats observed in live captures.
+- **Gelbooru DAPI adapter tests verify request shapes, typed outcomes, and normalization** — 27
+  injected-transport tests pin exact rendered request parameters, the 100-entry page ceiling, status
+  code-to-outcome mapping (401/403/404/429/5xx/error-envelope/malformed), response-first raw
+  retention, continuation validation, listing continuation with pid increment, idempotent
+  normalization against fixture data, zero media-host requests, and all three DAPI response shapes.
+- **The Gelbooru anonymous HTML adapter is implemented** — `GelbooruHtmlAdapter` performs exactly one
+  unauthenticated GET to the canonical post page with no login, cookies, or media requests;
+  fail-closed parsing requires `<title>` and `<img id="image">` markers, detects challenge pages
+  via missing tag-list and statistics, and normalizes fixture-proven fields (title, source, uploader,
+  rating, score, declared hash, dimensions, tag-category classes, original/sample/preview references).
+- **Gelbooru HTML adapter tests verify bounded parsing and typed outcomes** — 22 tests cover
+  single-request behavior, canonical request identity, marker extraction, category preservation,
+  no secondary requests, no media access, no credentials or cookies, and fail-closed handling of
+  missing title, missing image, challenge pages, 404, 403, empty payloads, and non-UTF8 responses.
+- **Gelbooru metadata flows through the shared remote-sync stack** — both adapters now expose the
+  provider pacing floor for the bounded executor and emit score facts in the mapping form the page
+  writer persists; HTML tag categories map onto the neutral vocabulary (`metadata` → `meta`), and
+  a six-test synchronization suite drives real catalog persistence over injected transports to
+  prove raw-first retention before normalization, atomic page commits with checkpoint/resume for
+  `pid` listings, DAPI/HTML observations coexisting as separate transport-identified raw records
+  under one reconciled post identity, challenge denial without normalized writes, and rollback
+  that keeps the retained raw attempt when a page commit fails midway.
+- **Gelbooru tag-category and attribution policy is proven in persistence** — four more
+  synchronization tests pin uncategorized DAPI tags keeping their native spelling under neutral
+  `unknown`, HTML categories carrying only the fixture-proven neutral values, the uploader
+  participant staying distinct from artist/creator attribution (no attribution entities are
+  invented), and metadata runs writing zero liked/bookmarked activity observations; the shared
+  page writer's fallback for a post tag without a category changed from `general` to `unknown` so
+  a provider that stays silent is never recorded as claiming the tag is general.
+
+### Changed
+
+- **Gelbooru schema audit timestamp corrected** — live captures use ctime-like format with timezone
+  offset (`Wed Jul 30 10:16:34 -0500 2025`); the adapter normalizes to UTC ISO, and schema audit
+  and adapter test expectations now match the actual normalized timestamps.
+
+### Fixed
+
+- **Gelbooru adapters harden typed failures after a three-angle review** — DAPI post records with
+  missing or unparseable `created_at` now raise `malformed_response` instead of crashing with
+  `KeyError`/`ValueError`; malformed listing continuation payloads are rejected with a clear
+  `ValueError` before network access; oversized response bodies raise the new
+  `response_too_large` outcome (matching the pinned fixture contract) in both DAPI and HTML
+  transports; httpx transport exceptions are re-raised as `transient_provider` with credential
+  values scrubbed from the message; the HTML challenge check now runs before the identity-marker
+  checks so well-formed challenge pages yield `authorization_denied` instead of
+  `malformed_response` while truncated markup without a title still fails as malformed; and HTML
+  post items carry an explicit null `status` for shape consistency with DAPI observations. Nine
+  new injected-transport tests pin these behaviors. Two review findings were verified as false
+  alarms (the Source regex is bounded by the opening tag; the malformed fixture is valid JSON),
+  and one — sample-versus-original dimensions — was already handled by preferring the `Size:`
+  statistic.
 
 ## [2026-10-01]
 
@@ -68,8 +134,8 @@ Rules:
 - **Candidate-lookup and library-expansion writes moved behind internal persistence components** —
   the five lookup run/request/checkpoint/result methods and four library plan/probe/execution/post
   methods now live in `media_catalog.persistence.lookup.LookupWrites` and
-  `...library.LibraryWrites`, with `CatalogWriter` delegating identically; the platform-identity
-  lookup became a shared support helper the facade and components both use.
+  `...library.LibraryWrites`, with identical public signatures delegated by `CatalogWriter`; the
+  platform-identity lookup became a shared support helper the facade and components both use.
 - **Acquisition writes moved behind an internal persistence component** — the nine acquisition
   plan, run, run-item, attempt, partial, verification, and quarantine write methods now live in
   `media_catalog.persistence.acquisition.AcquisitionWrites` with identical public signatures
@@ -79,29 +145,6 @@ Rules:
   in `media_catalog.persistence.storage.StorageWrites`, with `CatalogWriter` keeping identical
   public signatures as explicit delegations on the caller's shared transaction; the root-upsert
   compatibility alias is preserved.
-
-## [2026-10-02]
-
-### Added
-
-- **The Gelbooru DAPI JSON adapter is implemented** — `GelbooruAdapter` renders explicit authenticated
-  requests for single-post fetch (`id=`), tag metadata (`name=`), and bounded post listings (`pid`/`limit`),
-  normalizes fixture-proven response shapes (list, dict, bare-array, missing-key empty, three error
-  envelope forms) into provider-neutral `NormalizedItem` pages covering posts, accounts, uploader
-  participants, unknown-category tags, media occurrences with original/sample/preview variants,
-  and source references; `_gelbooru_timestamp` handles both ctime-like and `YYYY-MM-DD HH:MM:SS`
-  timestamp formats observed in live captures.
-- **Gelbooru DAPI adapter tests verify request shapes, typed outcomes, and normalization** — 27
-  injected-transport tests pin exact rendered request parameters, the 100-entry page ceiling, status
-  code-to-outcome mapping (401/403/404/429/5xx/error-envelope/malformed), response-first raw
-  retention, continuation validation, listing continuation with pid increment, idempotent
-  normalization against fixture data, zero media-host requests, and all three DAPI response shapes.
-
-### Changed
-
-- **Gelbooru schema audit timestamp corrected** — live captures use ctime-like format with timezone
-  offset (`Wed Jul 30 10:16:34 -0500 2025`); the adapter normalizes to UTC ISO, and schema audit
-  and adapter test expectations now match the actual normalized timestamps.
 
 ## [2026-09-30]
 

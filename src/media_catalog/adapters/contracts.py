@@ -708,6 +708,7 @@ class AdapterOutcome(StrEnum):
     AUTHORIZATION_DENIED = "authorization_denied"
     RATE_LIMITED = "rate_limited"
     TRANSIENT_PROVIDER = "transient_provider"
+    RESPONSE_TOO_LARGE = "response_too_large"
     MALFORMED_RESPONSE = "malformed_response"
     BUDGET_EXHAUSTED = "budget_exhausted"
     LOCAL_PERSISTENCE = "local_persistence"
