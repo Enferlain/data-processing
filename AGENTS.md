@@ -1,6 +1,12 @@
 # Agent Instructions
 
-## Sub agent usage
+## Tools
+
+### Search
+
+Prefer rg instead of grep
+
+### Subagents
 
 Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions.
 

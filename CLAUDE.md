@@ -2,7 +2,13 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
-## Sub agent usage
+## Tools
+
+### Search
+
+Prefer rg instead of grep
+
+### Subagents
 
 Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions. If there are no instructions, ask the user.
 
