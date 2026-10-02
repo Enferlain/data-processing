@@ -12,7 +12,7 @@ DAPI_SCHEMA_VERSION = "gelbooru-dapi-json-v1"
 HTML_SCHEMA_VERSION = "gelbooru-html-v1"
 DAPI_TRANSPORT_VERSION = "gelbooru-dapi-v1"
 HTML_PARSER_VERSION = "gelbooru-html-parser-v1"
-CONTINUATION_VERSION = "gelbooru-pid-v1"
+CONTINUATION_VERSION = "gelbooru-pid-v2"
 
 GELBOORU_BASE_URL = "https://gelbooru.com"
 GELBOORU_HOST = "gelbooru.com"

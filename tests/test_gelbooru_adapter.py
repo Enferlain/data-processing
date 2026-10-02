@@ -93,6 +93,37 @@ def _dapi_post_body(post_id: str) -> dict:
     }
 
 
+def _scoped_continuation(
+    *, target: str = "test", pid: int = 2, last_pid: int = 1, limit: int = 50
+) -> Continuation:
+    """Build a fully scoped listing continuation for validation tests."""
+    from media_catalog.adapters.gelbooru.adapter import ADAPTER_VERSION as AV
+    from media_catalog.adapters.gelbooru.config import (
+        DAPI_SCHEMA_VERSION,
+        DAPI_TRANSPORT_VERSION,
+    )
+
+    return Continuation(
+        "gelbooru",
+        CONTINUATION_VERSION,
+        {
+            "operation": "list_account_posts",
+            "target": target,
+            "query": "",
+            "sort": "id-desc",
+            "transport": DAPI_TRANSPORT_VERSION,
+            "direction": "forward",
+            "pid": str(pid),
+            "last_pid": str(last_pid),
+            "limit": str(limit),
+            "last_id": 100,
+            "continuation_version": CONTINUATION_VERSION,
+            "adapter_version": AV,
+            "schema_version": DAPI_SCHEMA_VERSION,
+        },
+    )
+
+
 # ── Task 3.5a: exact request shapes ──────────────────────────────────
 
 
@@ -158,7 +189,7 @@ class TestRequestShapes:
         client = _make_client([response])
 
         adapter = GelbooruAdapter(client=client, credentials=credentials)
-        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {"pid": "2", "limit": "50"})
+        continuation = _scoped_continuation()
         request = AdapterRequest(
             AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
         )
@@ -167,8 +198,8 @@ class TestRequestShapes:
         params = client.get.call_args.kwargs["params"]
         assert params["pid"] == "2"
         assert params["limit"] == "50"
-        assert envelope.request_identity == "gelbooru:dapi_json:listing:2:50"
-        assert envelope.request_target == "listing:2:50"
+        assert envelope.request_identity == "gelbooru:dapi_json:listing:test:id-desc:forward:2:50"
+        assert envelope.request_target == "listing:test:id-desc:forward:2:50"
 
     def test_page_ceiling_enforced(self) -> None:
         """limit is capped at MAX_PAGE_SIZE (100) regardless of continuation value."""
@@ -181,7 +212,7 @@ class TestRequestShapes:
 
         adapter = GelbooruAdapter(client=client, credentials=credentials)
         # Continuation requests 200 — adapter caps to MAX_PAGE_SIZE
-        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {"pid": "0", "limit": "200"})
+        continuation = _scoped_continuation(pid=1, last_pid=0, limit=200)
         request = AdapterRequest(
             AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
         )
@@ -431,9 +462,7 @@ class TestCommittedPageResume:
         client = _make_client([response])
 
         adapter = GelbooruAdapter(client=client, credentials=credentials)
-        continuation = Continuation(
-            "gelbooru", CONTINUATION_VERSION, {"pid": "0", "limit": str(limit)}
-        )
+        continuation = _scoped_continuation(pid=1, last_pid=0, limit=limit)
         request = AdapterRequest(
             AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
         )
@@ -441,7 +470,19 @@ class TestCommittedPageResume:
         page = adapter.normalize(envelope)
 
         assert page.continuation is not None
-        assert page.continuation.value == {"pid": "1", "limit": str(limit)}
+        value = page.continuation.value
+        # Boundary advances forward one committed page.
+        assert value["pid"] == "2"
+        assert value["last_pid"] == "1"
+        assert value["limit"] == str(limit)
+        assert value["last_id"] == limit  # last post id in response order
+        # Every scope dimension travels with the checkpoint.
+        assert value["operation"] == "list_account_posts"
+        assert value["target"] == "test"
+        assert value["query"] == ""
+        assert value["sort"] == "id-desc"
+        assert value["direction"] == "forward"
+        assert value["continuation_version"] == CONTINUATION_VERSION
         assert page.continuation.adapter == "gelbooru"
         assert page.continuation.version == CONTINUATION_VERSION
 
@@ -490,9 +531,7 @@ class TestCommittedPageResume:
         client = _make_client([response])
 
         adapter = GelbooruAdapter(client=client, credentials=credentials)
-        continuation = Continuation(
-            "gelbooru", CONTINUATION_VERSION, {"pid": "0", "limit": str(limit)}
-        )
+        continuation = _scoped_continuation(pid=1, last_pid=0, limit=limit)
         request = AdapterRequest(
             AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
         )
@@ -776,7 +815,10 @@ class TestReviewHardening:
         client = _make_client([])
 
         adapter = GelbooruAdapter(client=client, credentials=credentials)
-        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {"pid": "0", "limit": "abc"})
+        base = _scoped_continuation(pid=1, last_pid=0)
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "limit": "abc"}
+        )
         request = AdapterRequest(
             AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
         )
@@ -791,7 +833,8 @@ class TestReviewHardening:
         client = _make_client([])
 
         adapter = GelbooruAdapter(client=client, credentials=credentials)
-        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {"pid": "-1", "limit": "25"})
+        base = _scoped_continuation(pid=1, last_pid=0)
+        continuation = Continuation("gelbooru", CONTINUATION_VERSION, {**base.value, "pid": "-1"})
         request = AdapterRequest(
             AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
         )
@@ -834,3 +877,218 @@ class TestReviewHardening:
         assert exc_info.value.outcome == AdapterOutcome.TRANSIENT_PROVIDER
         assert secret not in str(exc_info.value)
         assert "12345" not in str(exc_info.value)
+
+
+# ── Task 3.4: scope-validated continuations ──────────────────────────
+
+
+class TestScopedContinuations:
+    """Every continuation scope dimension is validated before network access."""
+
+    def _adapter_with_unused_client(self) -> tuple[GelbooruAdapter, MagicMock]:
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        client = _make_client([])
+        return GelbooruAdapter(client=client, credentials=credentials), client
+
+    def test_continuation_carries_all_scope_dimensions(self) -> None:
+        """A produced continuation records target, query, sort, transport,
+        direction, boundary, and version material."""
+        from media_catalog.adapters.gelbooru.adapter import ADAPTER_VERSION as AV
+        from media_catalog.adapters.gelbooru.config import (
+            DAPI_SCHEMA_VERSION,
+            DAPI_TRANSPORT_VERSION,
+        )
+
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        limit = 2
+        posts = [_dapi_post_body(str(number))["post"][0] for number in (7, 5)]
+        for post, number in zip(posts, (7, 5), strict=True):
+            post["id"] = number
+        body = {"@attributes": {"limit": limit, "offset": 0, "count": 10}, "post": posts}
+        client = _make_client([_mock_response(200, json.dumps(body).encode())])
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "test",
+            continuation=_scoped_continuation(pid=1, last_pid=0, limit=limit),
+        )
+        page = adapter.normalize(adapter.fetch(request))
+
+        assert page.continuation is not None
+        value = page.continuation.value
+        assert value == {
+            "operation": "list_account_posts",
+            "target": "test",
+            "query": "",
+            "sort": "id-desc",
+            "transport": DAPI_TRANSPORT_VERSION,
+            "direction": "forward",
+            "pid": "2",
+            "last_pid": "1",
+            "limit": str(limit),
+            "last_id": 5,
+            "continuation_version": CONTINUATION_VERSION,
+            "adapter_version": AV,
+            "schema_version": DAPI_SCHEMA_VERSION,
+        }
+
+    def test_mismatched_target_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        continuation = _scoped_continuation(target="other")
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="target is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_unadmitted_query_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "query": "tagme"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="query is not admitted"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_unadmitted_sort_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "sort": "score"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="sort is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_wrong_direction_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "direction": "backward"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="direction is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_wrong_transport_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "transport": "html"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="transport is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_inconsistent_boundary_rejected_before_network(self) -> None:
+        """pid must advance exactly one committed page past last_pid."""
+        adapter, client = self._adapter_with_unused_client()
+        continuation = _scoped_continuation(pid=5, last_pid=0)
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="boundary is inconsistent"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_missing_last_seen_id_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        value = {key: item for key, item in base.value.items() if key != "last_id"}
+        continuation = Continuation("gelbooru", CONTINUATION_VERSION, value)
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="last-seen id"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_wrong_operation_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "operation": "fetch_post"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="operation is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_incompatible_schema_version_rejected_before_network(self) -> None:
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "schema_version": "v9"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="schema version is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_legacy_v1_continuation_rejected_by_version(self) -> None:
+        """Old unscoped pid-v1 checkpoints fail closed on version scope."""
+        adapter, client = self._adapter_with_unused_client()
+        continuation = Continuation("gelbooru", "gelbooru-pid-v1", {"pid": "1", "limit": "50"})
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="incompatible Gelbooru continuation version"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_legacy_request_target_yields_no_continuation(self) -> None:
+        """Re-normalizing an old-format observation treats the page as final
+        instead of minting an unscoped continuation."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        limit = 2
+        posts = [_dapi_post_body(str(number))["post"][0] for number in (7, 5)]
+        for post, number in zip(posts, (7, 5), strict=True):
+            post["id"] = number
+        body = {"@attributes": {"limit": limit, "offset": 0, "count": 10}, "post": posts}
+        adapter = GelbooruAdapter(client=None, credentials=credentials)
+
+        from media_catalog.adapters.contracts import ResponseEnvelope
+
+        envelope = ResponseEnvelope(
+            provider="gelbooru",
+            instance="gelbooru",
+            operation=AdapterOperation.LIST_ACCOUNT_POSTS,
+            request_identity="gelbooru:dapi_json:listing:0:2",
+            status_code=200,
+            headers={"content-type": "application/json"},
+            payload=json.dumps(body).encode(),
+            observed_at="2026-10-02T00:00:00Z",
+            adapter_version=ADAPTER_VERSION,
+            schema_version=DAPI_SCHEMA_VERSION,
+            transport_key=DAPI_TRANSPORT_VERSION,
+            transport_version=DAPI_TRANSPORT_VERSION,
+            request_target="listing:0:2",
+        )
+        page = adapter.normalize(envelope)
+        assert page.continuation is None
+
+    def test_scoped_request_target_round_trips_through_identity(self) -> None:
+        """The scoped identity format parses back into its scope material."""
+        parsed = GelbooruAdapter._parse_listing_target("listing:channel:id-desc:forward:3:50")
+        assert parsed == ("channel", 3, 50)
+        assert GelbooruAdapter._parse_listing_target("listing:0:50") is None
+        assert GelbooruAdapter._parse_listing_target("listing:t:id-desc:backward:0:50") is None
+        assert GelbooruAdapter._parse_listing_target(None) is None

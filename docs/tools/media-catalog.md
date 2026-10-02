@@ -252,12 +252,16 @@ pages (missing tag-list and Posted:/Uploader: markers) yield `authorization_deni
 response bodies raise `response_too_large`. Malformed JSON or HTML without identity markers raises
 `malformed_response`.
 
-**Resume limits:** Listing operations (`gelbooru-dapi-list`) store an opaque `pid` continuation
-checkpoint. Resume is validated before network access: transport mismatch, incompatible continuation
-format, or incompatible operation/target all raise `ValueError` without contacting Gelbooru. Resume is
-only supported from a committed checkpoint — complete runs cannot be re-opened. Query, sort,
-direction, and boundary scoping are not yet enforced at resume time (see task 3.4 of the active
-OpenSpec change).
+**Resume limits:** Listing operations (`gelbooru-dapi-list`) store a fully scoped `pid` continuation
+checkpoint. The continuation records the operation, listing target, query scope (unfiltered only),
+sort (`id-desc`), transport, direction (`forward`), page boundary (`pid`/`last_pid`/`limit` plus the
+last-seen post id for audit), and continuation/adapter/schema versions. Resume validates every one of
+those dimensions before network access — mismatched target, unadmitted query or sort, wrong
+transport or direction, inconsistent boundary, or stale version material all raise `ValueError`
+without contacting Gelbooru. Resume is only supported from a committed checkpoint; complete runs
+cannot be re-opened. Because `pid` offsets can shift when the provider adds or removes posts, resume
+is a bounded observation rather than gap-free historical enumeration; each checkpoint retains the
+last-seen post id so drift stays auditable through raw provenance.
 
 **Troubleshooting:** If DAPI returns `authentication_required` or `authorization_denied`, verify
 both `GELBOORU_USER_ID` and `GELBOORU_API_KEY` are set and valid. If HTML returns

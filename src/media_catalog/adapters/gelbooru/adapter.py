@@ -40,6 +40,15 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+# Listing enumeration scope admitted by this adapter.  DAPI serves posts
+# newest-first (descending ids); `pid` offsets step forward through that
+# fixed ordering, and the unfiltered listing carries no tag query.  These
+# constants are the only values continuation scope validation admits.
+_LISTING_SORT = "id-desc"
+_LISTING_DIRECTION = "forward"
+_LISTING_QUERY = ""
+
+
 def _gelbooru_timestamp(value: str) -> str:
     """Convert Gelbooru timestamps to ISO 'YYYY-MM-DDTHH:MM:SSZ'.
 
@@ -225,20 +234,18 @@ class GelbooruAdapter:
     def _dapi_listing_request(
         self, target: str, continuation: Continuation | None
     ) -> tuple[str, dict[str, str], str, str]:
-        """Render a DAPI generic post listing request with pid/limit pagination."""
-        pid = "0"
+        """Render a DAPI generic post listing request with pid/limit pagination.
+
+        The listing target and the admitted scope (unfiltered query, id-desc
+        sort, forward direction) are embedded in the request identity and
+        target so every retained observation and continuation checkpoint
+        records exactly which enumeration it belongs to.
+        """
+        listing_target = _listing_target_text(target)
+        pid = 0
         limit = MAX_PAGE_SIZE
         if continuation is not None:
-            self._validate_continuation(continuation)
-            try:
-                pid_num = int(str(continuation.value.get("pid", "0")))
-                limit_num = int(continuation.value.get("limit", MAX_PAGE_SIZE))
-            except (TypeError, ValueError):
-                raise ValueError("malformed Gelbooru continuation payload") from None
-            if pid_num < 0 or limit_num < 1:
-                raise ValueError("Gelbooru continuation pid/limit out of range")
-            pid = str(pid_num)
-            limit = min(limit_num, MAX_PAGE_SIZE)
+            pid, limit = self._validate_listing_continuation(continuation, target=listing_target)
         if self._credentials is None:
             raise ValueError("DAPI requests require credentials")
         params = self._credentials.authenticated_query(
@@ -247,12 +254,17 @@ class GelbooruAdapter:
                 "s": "post",
                 "q": "index",
                 "json": "1",
-                "pid": pid,
+                "pid": str(pid),
                 "limit": str(limit),
             }
         )
-        identity = f"{self.instance_key}:dapi_json:listing:{pid}:{limit}"
-        request_target = f"listing:{pid}:{limit}"
+        identity = (
+            f"{self.instance_key}:dapi_json:listing:{listing_target}:"
+            f"{_LISTING_SORT}:{_LISTING_DIRECTION}:{pid}:{limit}"
+        )
+        request_target = (
+            f"listing:{listing_target}:{_LISTING_SORT}:{_LISTING_DIRECTION}:{pid}:{limit}"
+        )
         return f"{self.instance.base_url}/index.php", params, identity, request_target
 
     # ── Response outcome classification ────────────────────────────────
@@ -338,43 +350,118 @@ class GelbooruAdapter:
         if continuation.version != CONTINUATION_VERSION:
             raise ValueError("incompatible Gelbooru continuation version")
 
+    def _validate_listing_continuation(
+        self, continuation: Continuation, *, target: str
+    ) -> tuple[int, int]:
+        """Validate every continuation scope dimension before network access.
+
+        Task 3.4: a continuation is admitted only when its operation, target,
+        query, sort, transport, direction, boundary, and version material all
+        match the enumeration this adapter is about to render.  Any mismatch
+        raises ``ValueError`` before an HTTP request exists, so an incompatible
+        resume fails closed instead of silently continuing a different query.
+        """
+        self._validate_continuation(continuation)
+        value = continuation.value
+        if value.get("operation") != AdapterOperation.LIST_ACCOUNT_POSTS.value:
+            raise ValueError("Gelbooru listing continuation operation is incompatible")
+        if value.get("target") != target:
+            raise ValueError("Gelbooru listing continuation target is incompatible")
+        if value.get("query") != _LISTING_QUERY:
+            raise ValueError("Gelbooru listing continuation query is not admitted")
+        if value.get("sort") != _LISTING_SORT:
+            raise ValueError("Gelbooru listing continuation sort is incompatible")
+        if value.get("transport") != self.transport_key:
+            raise ValueError("Gelbooru listing continuation transport is incompatible")
+        if value.get("direction") != _LISTING_DIRECTION:
+            raise ValueError("Gelbooru listing continuation direction is incompatible")
+        try:
+            pid = int(str(value.get("pid", "")))
+            last_pid = int(str(value.get("last_pid", "")))
+            limit = int(str(value.get("limit", "")))
+        except (TypeError, ValueError):
+            raise ValueError("malformed Gelbooru continuation boundary") from None
+        if pid < 0 or last_pid < 0 or limit < 1:
+            raise ValueError("Gelbooru continuation pid/limit out of range")
+        if pid != last_pid + 1:
+            raise ValueError("Gelbooru continuation boundary is inconsistent")
+        last_id = value.get("last_id")
+        if not isinstance(last_id, int) or isinstance(last_id, bool) or last_id < 1:
+            raise ValueError("Gelbooru continuation is missing its last-seen id")
+        if value.get("continuation_version") != CONTINUATION_VERSION:
+            raise ValueError("Gelbooru listing continuation version is incompatible")
+        if value.get("adapter_version") != self.adapter_version:
+            raise ValueError("Gelbooru listing continuation adapter version is incompatible")
+        if value.get("schema_version") != self.schema_version:
+            raise ValueError("Gelbooru listing continuation schema version is incompatible")
+        return pid, min(limit, MAX_PAGE_SIZE)
+
     # ── Listing continuation helpers ───────────────────────────────────
 
     @staticmethod
-    def _parse_listing_target(request_target: str | None) -> tuple[int, int] | None:
-        """Extract (pid, limit) from a listing request_target string."""
+    def _parse_listing_target(
+        request_target: str | None,
+    ) -> tuple[str, int, int] | None:
+        """Extract (target, pid, limit) from a scoped listing request_target.
+
+        Expected format: ``listing:{target}:{sort}:{direction}:{pid}:{limit}``.
+        Legacy three-field targets are not understood and yield ``None`` so
+        re-normalizing an old observation treats the page as final instead of
+        minting an unscoped continuation.
+        """
         if not request_target or not request_target.startswith("listing:"):
             return None
         parts = request_target.split(":")
-        if len(parts) != 3:
+        if len(parts) != 6:
+            return None
+        if parts[2] != _LISTING_SORT or parts[3] != _LISTING_DIRECTION:
             return None
         try:
-            pid = int(parts[1])
-            limit = int(parts[2])
+            pid = int(parts[4])
+            limit = int(parts[5])
         except (ValueError, IndexError):
             return None
         if pid < 0 or not (1 <= limit <= MAX_PAGE_SIZE):
             return None
-        return pid, limit
+        return parts[1], pid, limit
 
     def _listing_continuation(
         self, response: ResponseEnvelope, body: object
     ) -> Continuation | None:
-        """Produce a continuation for a listing page if more results may exist."""
+        """Produce a fully scoped continuation for a listing page if it was full."""
         listing = self._parse_listing_target(response.request_target)
         if listing is None:
             return None
-        pid, limit = listing
+        target, pid, limit = listing
         posts = self._parse_dapi_post_body(body)
         if not posts or len(posts) < limit:
             return None
+        last_post = posts[-1]
+        last_id = last_post.get("id")
+        if not isinstance(last_id, int) or isinstance(last_id, bool) or last_id < 1:
+            return None
         # Full page received; the remote executor decides whether to continue
-        # based on its own budget rules.  We signal that another page exists.
+        # based on its own budget rules.  We signal that another page exists,
+        # carrying every scope dimension so resume can be validated up front.
         next_pid = pid + 1
         return Continuation(
             self.provider_key,
             CONTINUATION_VERSION,
-            {"pid": str(next_pid), "limit": str(limit)},
+            {
+                "operation": AdapterOperation.LIST_ACCOUNT_POSTS.value,
+                "target": target,
+                "query": _LISTING_QUERY,
+                "sort": _LISTING_SORT,
+                "transport": self.transport_key,
+                "direction": _LISTING_DIRECTION,
+                "pid": str(next_pid),
+                "last_pid": str(pid),
+                "limit": str(limit),
+                "last_id": last_id,
+                "continuation_version": CONTINUATION_VERSION,
+                "adapter_version": self.adapter_version,
+                "schema_version": self.schema_version,
+            },
         )
 
     # ── DAPI response shape parsing ────────────────────────────────────
@@ -639,3 +726,19 @@ def _stable_id(value: str, name: str) -> str:
     if not isinstance(value, str) or not value.isdecimal() or int(value) < 1:
         raise ValueError(f"{name} must be a positive numeric stable ID")
     return str(int(value))
+
+
+def _listing_target_text(value: str) -> str:
+    """Validate the listing target text that scopes a pid enumeration.
+
+    The target becomes a colon-separated field of the request identity and
+    target material, so it must be bounded, non-empty, and colon-free.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Gelbooru listing target must be non-empty text")
+    value = value.strip()
+    if len(value) > 100 or ":" in value or any(ord(char) < 32 for char in value):
+        raise ValueError(
+            "Gelbooru listing target must be bounded text without colons or control characters"
+        )
+    return value

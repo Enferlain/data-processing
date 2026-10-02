@@ -16,6 +16,17 @@ Rules:
 
 ### Added
 
+- **Gelbooru DAPI continuations are fully scope-validated (task 3.4)** — listing continuations now
+  carry every enumeration dimension — operation, listing target, query scope (unfiltered only, so a
+  continuation claiming a tag query fails closed), sort (`id-desc`, the only pid-stable DAPI order),
+  transport, direction (`forward`), page boundary (`pid`, `last_pid`, `limit`, and the last-seen
+  post id for drift audit), and continuation/adapter/schema versions — and resume validates all of
+  them before any network access. The continuation version bumped `gelbooru-pid-v1` → `gelbooru-pid-v2`
+  so legacy unscoped checkpoints fail closed with a clear version error, the listing request
+  identity/target embed the scope (`listing:<target>:id-desc:forward:<pid>:<limit>`), and boundary
+  consistency requires `pid == last_pid + 1`. Thirteen new tests pin each dimension's rejection plus
+  fail-safe handling of legacy request-target material; `gallery-dl`'s Gelbooru extractor (pid
+  stepping and `sort:id`/`id:<N` ordering evidence) was used as the interaction reference.
 - **The Gelbooru DAPI JSON adapter is implemented** — `GelbooruAdapter` renders explicit authenticated
   requests for single-post fetch (`id=`), tag metadata (`name=`), and bounded post listings (`pid`/`limit`),
   normalizes fixture-proven response shapes (list, dict, bare-array, missing-key empty, three error
