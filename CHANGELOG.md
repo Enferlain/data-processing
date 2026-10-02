@@ -8,9 +8,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Rules:
+
 - Use proper sub titles "Added", "Changed", "Removed" and "Fixed"
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
+
+## [2026-10-03]
+
+### Added
+
+- **The provenance-kernel direction is adopted** — a new `docs/plans/provenance-kernel.md` defines
+  the domain-neutral vocabulary (source, source object, observation, blob, representation,
+  assertion, relationship, evidence, acquisition, run, review, projection) with uniform epistemic
+  statuses (`observed`, `verified`, `derived`, `inferred`, `reviewed`), and maps every concept onto
+  the existing catalog schema with status and action. The kernel is latent in today's tables, so
+  this is a naming, spec, and boundary change — no data migration is planned. Milestone tracked as
+  Bead `data-processing-u1d`.
+
+### Changed
+
+- **The roadmap's goal broadened** from a cross-platform media catalog to a source-aware gathering
+  and provenance system with media as the first data family. The next milestone is the bounded
+  provenance-kernel architectural pass (per-table mapping verification, an OpenSpec kernel
+  capability spec, and cheap boundary re-homing absorbing the two ready persistence follow-ups);
+  the reviewed-target workflow milestone follows it. Two principles were added: the durable
+  database is the evidence layer with projections on top, and domain-neutral extraction requires a
+  second consumer or a concrete workflow.
+- **The media catalog plan is annotated** as the media-family domain plan under the kernel framing;
+  its vocabulary remains authoritative for the media family.
 
 ## [2026-10-02]
 

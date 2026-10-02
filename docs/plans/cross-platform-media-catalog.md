@@ -1,9 +1,14 @@
 # Cross-platform media catalog plan
 
 Status: proposed
-Last updated: 2026-08-05
+Last updated: 2026-10-03
 Runtime: Python 3.13
 Initial storage: SQLite plus a content-addressed media directory
+
+Since 2026-10-03 this is the media-family domain plan under the
+[provenance kernel](provenance-kernel.md) framing. Its vocabulary — platform, account, post, media
+occurrence, asset, observation, evidence — remains authoritative for the media family; the kernel
+plan maps it onto the domain-neutral core and governs new cross-cutting concepts.
 
 ## 1. Goal
 

@@ -12,6 +12,9 @@ Prefer rg instead of grep
 
 Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions. If there are no instructions, ask the user.
 
+- When running model glm-5.3[1m], subagents should run under model glm-5.3-flash[1m].
+- When running a different model, assume that that model should be reused for subagents.
+
 ## Python Quality Gates
 
 Use the project environment through `uv`.

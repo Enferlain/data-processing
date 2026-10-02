@@ -1,4 +1,6 @@
-# Agent Instructions
+# Project Instructions for AI Agents
+
+This file provides instructions and context for AI coding agents working on this project.
 
 ## Tools
 
@@ -8,7 +10,10 @@ Prefer rg instead of grep
 
 ### Subagents
 
-Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions.
+Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions. If there are no instructions, ask the user.
+
+- When running model glm-5.3[1m], subagents should run under model glm-5.3-flash[1m].
+- When running a different model, assume that that same model should be reused for subagents.
 
 ## Python Quality Gates
 

@@ -1,11 +1,14 @@
 # Project roadmap
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 
 ## Goal
 
-Build local-first tools that turn personal media activity into a durable, searchable, and
-provenance-preserving collection.
+Build local-first tools that gather, retain, cross-reference, verify, and organize data from
+heterogeneous sources while preserving provenance and uncertainty. Media is the first data family,
+not the definition of the system: the durable database is the evidence layer, and consumer schemas
+are projections over it. See the [provenance kernel plan](docs/plans/provenance-kernel.md) for the
+domain-neutral vocabulary and how the current schema already embodies it.
 
 The main catalog workflow should eventually let someone:
 
@@ -30,7 +33,8 @@ the other project records:
 | Source | Responsibility |
 | --- | --- |
 | This roadmap | Current direction, completed capabilities, next milestone, and later work |
-| [Detailed catalog plan](docs/plans/cross-platform-media-catalog.md) | Architecture, data model, policies, research, risks, and long-term design |
+| [Provenance kernel plan](docs/plans/provenance-kernel.md) | Domain-neutral north star, kernel vocabulary, current-schema mapping, and generalization path |
+| [Detailed catalog plan](docs/plans/cross-platform-media-catalog.md) | Media-family architecture, data model, policies, research, risks, and long-term design |
 | OpenSpec | Requirements and design for the active implementation change |
 | Beads (`bd`) | Concrete ready, claimed, blocked, and follow-up work |
 | [Changelog](CHANGELOG.md) | Dated history of completed changes |
@@ -50,6 +54,12 @@ The `add-gelbooru-metadata-adapter` OpenSpec change under Bead `data-processing-
 archived (2026-10-02): all 37 tasks implemented, two review passes addressed, delta specs synced into
 the main `gelbooru-metadata-adapter` capability spec plus additions to `media-catalog-core` and
 `remote-metadata-sync`, and all quality gates green.
+
+On 2026-10-03 the provenance-kernel direction was adopted: the north star broadened from a
+cross-platform media catalog to a source-aware gathering and provenance system with media as the
+first data family. Existing schema, data, and tools are unaffected — the kernel is a naming, spec,
+and boundary change for concepts the schema already implements. The next milestone is the
+provenance-kernel architectural pass.
 
 Live task state can be checked with:
 
@@ -237,14 +247,29 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Current milestone: none active
+## Next milestone: provenance-kernel architectural pass
 
-The Gelbooru metadata adapter milestone is complete and archived. Pick the next milestone from
-**Planned after the active milestone** when a concrete workflow justifies it — the leading candidate
-per the pipeline gap analysis is a cohesive workflow that carries a reviewed target through
-metadata sync, browsing, and acquisition without manual identifier translation between commands.
+Name, verify, and spec the domain-neutral core that the schema already implements, so later
+milestones build against a boundary instead of baking media assumptions deeper. Bounded to
+documentation, specification, and cheap re-homing:
 
-## Planned after the active milestone
+- verify the kernel-to-schema mapping in the kernel plan against the actual migrations, per table;
+- add an OpenSpec kernel capability spec covering source and source-object identity, observation
+  retention and revisions, the run/checkpoint contract, the evidence and review ledger, blobs, and
+  typed relationships with epistemic status (`observed`, `verified`, `derived`, `inferred`,
+  `reviewed`);
+- re-home or name module and spec boundaries where cheap, absorbing the two ready persistence
+  follow-ups (the `adoption_items` read move and single-family vocabulary colocation);
+- reconcile the `observations` versus `raw_observations` naming in the kernel vocabulary.
+
+Explicitly out of scope: table renames, data migration, adapter behavior changes, and speculative
+abstractions without a second consumer.
+
+The milestone after this remains the leading candidate from the pipeline gap analysis: a cohesive
+workflow that carries a reviewed target through metadata sync, browsing, and acquisition without
+manual identifier translation between commands.
+
+## Planned after the current milestone
 
 ### Broader provider coverage
 
@@ -257,7 +282,7 @@ metadata sync, browsing, and acquisition without manual identifier translation b
 
 ### Operations and portability
 
-- Add bounded JSONL/CSV exports intended for analysis and migration.
+- Add bounded JSONL/CSV export projections intended for analysis and migration.
 - Add explicit backup and restore workflows with integrity and count verification.
 - Define retention and redaction policy for raw observations and failed network records.
 - Improve schema, adapter-version, repair, and troubleshooting reports.
@@ -271,6 +296,12 @@ metadata sync, browsing, and acquisition without manual identifier translation b
 - Make unavailable, deleted, replaced, and moved records easy to revisit.
 - Support bounded query-based discovery where provider capabilities allow it, without recursive or
   unlimited expansion.
+
+### New data families
+
+- Non-media payloads such as text, webpages, profiles, or dataset records enter through the same
+  observation, run, and evidence contracts when a concrete workflow justifies them.
+- No family-specific bypasses around provenance, bounded interaction, or review.
 
 ## Later research: supervised media and work matching
 
@@ -316,6 +347,10 @@ source direction, or preferred quality. Those conclusions require provenance and
 - Discovered content never inherits liked or bookmarked state.
 - Better-quality selection remains explicit until its policy and evidence are trustworthy.
 - Private paths, credentials, cookies, signed URLs, and raw payloads stay out of normal output.
+- The durable database is the evidence layer; consumer schemas and exports are projections with
+  stated policies.
+- Extract domain-neutral concepts only when a second consumer or a concrete workflow needs them;
+  typed schemas over a small kernel, never a generic entity-attribute-value soup.
 
 ## Updating this roadmap
 
