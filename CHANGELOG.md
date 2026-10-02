@@ -14,6 +14,12 @@ Rules:
 
 ### Added
 
+- **The Gelbooru schema audit proves the neutral schema needs no migration** — a fixture-driven
+  round-trip suite persists every proven Gelbooru fact (platform seed, posts with ratings and
+  declared hashes, uploader participants, unknown-category tags with native numeric codes,
+  transport-identified raw observations and remote runs) while exercising foreign-key,
+  origin-immutability and vocabulary triggers, idempotent re-upserts with stable IDs, rollback
+  cleanliness, and doctor checks; tag ambiguity stays recoverable through retained raw payloads.
 - **The reviewed Gelbooru fixture contract is documented** — a provider contract record now covers
   observed request and response shapes, post/tag field types, envelope variants, page-number
   pagination semantics, tag-category evidence, media variants, status-to-outcome mapping, pacing

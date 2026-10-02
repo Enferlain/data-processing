@@ -12,7 +12,7 @@
 - [x] 2.2 Implement external `GELBOORU_USER_ID` and `GELBOORU_API_KEY` resolution as an all-or-nothing credential pair with redacted representations and failure before network access when configuration is absent or partial.
 - [x] 2.3 Extend provider request, raw-provenance, and resume material with an explicit transport key/version while preserving the stable behavior and stored identities of existing providers.
 - [x] 2.4 Ensure query-parameter credentials are injected only at the final DAPI HTTP boundary and sanitize transport exceptions, durable request attempts, raw-observation metadata, diagnostics, human output, and JSON output against credential values and rendered authenticated URLs.
-- [ ] 2.5 Audit the existing neutral schema and Gelbooru platform seed against proven fixtures; add only the smallest provider-neutral migration needed for a demonstrated gap, with fresh-schema, upgrade, rollback, foreign-key, trigger, ID-preservation, doctor, and immutability tests.
+- [x] 2.5 Audit the existing neutral schema and Gelbooru platform seed against proven fixtures; add only the smallest provider-neutral migration needed for a demonstrated gap, with fresh-schema, upgrade, rollback, foreign-key, trigger, ID-preservation, doctor, and immutability tests.
 
 ## 3. Credentialed JSON-DAPI Adapter
 
