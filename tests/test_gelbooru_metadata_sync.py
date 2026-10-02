@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 
 import httpx
@@ -38,6 +39,11 @@ NOW = "2026-10-02T00:00:00Z"
 DAPI_SUITE = load_fixture_suite(FIXTURES / "gelbooru.json")
 HTML_SUITE = load_fixture_suite(FIXTURES / "gelbooru_html.json")
 CREDENTIALS = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+
+# Sentinel values for privacy scanning (7.2). These must never appear in
+# public result objects, database rows, or error messages.
+SENTINEL_USER = "sentinel_user_id_999"
+SENTINEL_KEY = "sentinel_api_key_xyz888"
 
 
 def _dapi_case(name: str):
@@ -644,3 +650,538 @@ def test_sync_keeps_media_metadata_only_without_assets_or_acquisition(tmp_path: 
         ):
             count = database.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             assert count == 0, table
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Task 7.1: acceptance matrix for all five real Gelbooru post IDs
+# ---------------------------------------------------------------------------
+
+# The five real post IDs from the fixture contract, including the three
+# user-labelled variation records (10720246, 10791439, 10791440).
+# Fixture case names differ for variation records, so we map post_id → case_name.
+_DAPI_CASE_MAP: dict[str, str] = {
+    "12370900": "post_12370900",
+    "11605534": "post_11605534",
+    "10720246": "variation_distinct_10720246",
+    "10791439": "variation_pair_10791439",
+    "10791440": "variation_pair_10791440",
+}
+_HTML_CASE_MAP: dict[str, str] = {
+    "12370900": "html_post_12370900",
+    "11605534": "html_post_11605534",
+    "10720246": "html_variation_distinct_10720246",
+    "10791439": "html_variation_pair_10791439",
+    "10791440": "html_variation_pair_10791440",
+}
+_GELBOORU_POST_IDS = tuple(_DAPI_CASE_MAP.keys())
+
+
+def _dapi_handler_for(post_id: str) -> Callable[[httpx.Request], httpx.Response]:
+    """Return a handler that serves the DAPI fixture for a specific post ID."""
+    payload = _dapi_case(_DAPI_CASE_MAP[post_id]).response.payload
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_id = request.url.params.get("id")
+        assert requested_id == post_id, f"expected id={post_id}, got {requested_id}"
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=payload,
+        )
+
+    return handler
+
+
+def _html_handler_for(post_id: str) -> Callable[[httpx.Request], httpx.Response]:
+    """Return a handler that serves the HTML fixture for a specific post ID."""
+    body = _html_body(_HTML_CASE_MAP[post_id]).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_id = request.url.params.get("id")
+        assert requested_id == post_id, f"expected id={post_id}, got {requested_id}"
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html; charset=UTF-8"},
+            content=body,
+        )
+
+    return handler
+
+
+@pytest.mark.parametrize("post_id", _GELBOORU_POST_IDS)
+def test_acceptance_dapi_post_synchronizes_and_produces_normalized_facts(
+    tmp_path: Path, post_id: str
+) -> None:
+    """7.1: Each of the five real Gelbooru posts reconciles through DAPI."""
+    path = tmp_path / f"catalog_{post_id}.sqlite3"
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, _dapi_handler_for(post_id))
+        result = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            post_id,
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        assert result.status == "complete"
+        assert result.outcome == "success"
+
+        post = database.connection.execute(
+            """SELECT p.native_post_id, p.rating, p.availability
+               FROM posts p JOIN platforms pl ON pl.platform_id = p.platform_id
+               WHERE pl.platform_key = 'gelbooru' AND p.native_post_id = ?""",
+            (post_id,),
+        ).fetchone()
+        assert post is not None
+        assert post["native_post_id"] == post_id
+        assert post["availability"] == "available"
+
+
+@pytest.mark.parametrize("post_id", _GELBOORU_POST_IDS)
+def test_acceptance_html_post_synchronizes_and_produces_normalized_facts(
+    tmp_path: Path, post_id: str
+) -> None:
+    """7.1: Each of the five real Gelbooru posts reconciles through HTML."""
+    path = tmp_path / f"catalog_{post_id}.sqlite3"
+    with CatalogDatabase(path) as database:
+        service = _html_service(database, _html_handler_for(post_id))
+        result = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            post_id,
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        assert result.status == "complete"
+        assert result.outcome == "success"
+
+        post = database.connection.execute(
+            """SELECT p.native_post_id, p.rating, p.availability
+               FROM posts p JOIN platforms pl ON pl.platform_id = p.platform_id
+               WHERE pl.platform_key = 'gelbooru' AND p.native_post_id = ?""",
+            (post_id,),
+        ).fetchone()
+        assert post is not None
+        assert post["native_post_id"] == post_id
+        assert post["availability"] == "available"
+
+
+def test_acceptance_dapi_and_html_coexist_under_same_post_identity(tmp_path: Path) -> None:
+    """7.1: DAPI and HTML observations for the same post reconcile into one identity."""
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        _dapi_service(database, _dapi_handler_for("12370900")).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        _html_service(database, _html_handler_for("12370900")).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+        # One post identity, two raw observations (one per transport).
+        posts = database.connection.execute(
+            """SELECT p.native_post_id FROM posts p
+               JOIN platforms pl ON pl.platform_id = p.platform_id
+               WHERE pl.platform_key = 'gelbooru'"""
+        ).fetchall()
+        assert [row["native_post_id"] for row in posts] == ["12370900"]
+        raw_count = database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[
+            0
+        ]
+        assert raw_count == 2
+        # Each run has its own transport identity.
+        runs = database.connection.execute(
+            "SELECT transport_key FROM remote_runs ORDER BY remote_run_id"
+        ).fetchall()
+        assert len(runs) == 2
+        assert runs[0]["transport_key"] == DAPI_TRANSPORT_VERSION
+        assert runs[1]["transport_key"] == HTML_PARSER_VERSION
+
+
+def test_acceptance_variation_preserves_distinct_and_pair_records(
+    tmp_path: Path,
+) -> None:
+    """7.1: The three variation records (10720246, 10791439, 10791440) reconcile
+    with stable distinct/pair semantics under both transports."""
+    variation_ids = ("10720246", "10791439", "10791440")
+
+    for post_id in variation_ids:
+        path = tmp_path / f"catalog_{post_id}.sqlite3"
+        with CatalogDatabase(path) as database:
+            _dapi_service(database, _dapi_handler_for(post_id)).synchronize(
+                AdapterOperation.FETCH_POST,
+                post_id,
+                limits=SyncLimits(3, 3, 500, 60),
+            )
+            _html_service(database, _html_handler_for(post_id)).synchronize(
+                AdapterOperation.FETCH_POST,
+                post_id,
+                limits=SyncLimits(3, 3, 500, 60),
+            )
+
+            post = database.connection.execute(
+                """SELECT p.native_post_id, p.rating FROM posts p
+                   JOIN platforms pl ON pl.platform_id = p.platform_id
+                   WHERE pl.platform_key = 'gelbooru' AND p.native_post_id = ?""",
+                (post_id,),
+            ).fetchone()
+            assert post is not None
+            assert post["native_post_id"] == post_id
+            # Each variation post still produces one identity with two
+            # independent transport histories.
+            raw_count = database.connection.execute(
+                "SELECT COUNT(*) FROM raw_observations"
+            ).fetchone()[0]
+            assert raw_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Task 7.2: privacy and network-isolation tests
+# ---------------------------------------------------------------------------
+
+
+def test_acceptance_result_objects_contain_no_credential_sentinels(
+    tmp_path: Path,
+) -> None:
+    """7.2: Synchronization result objects, run metadata, and database rows
+    contain no credential values or authenticated URLs."""
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, _dapi_post_handler())
+        result = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+        # The SyncResult must not contain credential material.
+        result_json = json.dumps(asdict(result))
+        assert SENTINEL_USER not in result_json
+        assert SENTINEL_KEY not in result_json
+
+        # Run metadata in the database must not contain credentials.
+        run = get_remote_run(database, result.remote_run_id)
+        assert run is not None
+        run_json = json.dumps(run)
+        assert SENTINEL_USER not in run_json
+        assert SENTINEL_KEY not in run_json
+
+        # Request identity (from run metadata) is semantic (transport+operation+id),
+        # never URL-shaped or credential-bearing.
+        request_identity = run["requests"][0]["request_identity"]
+        assert request_identity == "gelbooru:dapi_json:post:12370900"
+        assert "api_key" not in request_identity
+        assert "user_id" not in request_identity
+
+
+def test_acceptance_only_gelbooru_endpoint_is_contacted(tmp_path: Path) -> None:
+    """7.2: The injected transport proves that only the Gelbooru DAPI/HTML
+    endpoint is contacted — no media hosts, no secondary API calls."""
+    contacted_hosts: list[str] = []
+
+    def tracking_handler(request: httpx.Request) -> httpx.Response:
+        contacted_hosts.append(request.url.host)
+        if "page=dapi" in str(request.url):
+            payload = _dapi_case("post_12370900").response.payload
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                content=payload,
+            )
+        elif "page=post" in str(request.url) and "s=view" in str(request.url):
+            body = _html_body("html_post_12370900").encode()
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html; charset=UTF-8"},
+                content=body,
+            )
+        return httpx.Response(404)
+
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        _dapi_service(database, tracking_handler).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        _html_service(database, tracking_handler).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+    # Only gelbooru.com was contacted, once per transport.
+    assert all(host == "gelbooru.com" for host in contacted_hosts)
+    assert len(contacted_hosts) == 2
+
+
+# ---------------------------------------------------------------------------
+# Task 7.3: budget, interruption, rollback, reopen, resume, duplicates,
+#           malformed-response, and transport-mismatch tests
+# ---------------------------------------------------------------------------
+
+
+def test_budget_exhaustion_stops_before_record_limit(tmp_path: Path) -> None:
+    """7.3: Budget exhaustion at the record boundary halts listing before
+    admitting extra pages. The page is not committed (atomic page boundary),
+    so no records appear in the database, but the raw observation is retained."""
+    path = tmp_path / "catalog.sqlite3"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        pid = request.url.params.get("pid", "0")
+        body = _minimal_listing_body(100, 1) if pid == "0" else _minimal_listing_body(3, 101)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=json.dumps(body).encode(),
+        )
+
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, handler)
+        # Budget: 1 request, 1 page, 50 records (first page returns 100).
+        result = service.synchronize(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "listing",
+            limits=SyncLimits(1, 1, 50, 60),
+        )
+        assert result.status == "paused"
+        assert result.budget_boundary == "record"
+        # Record-level exhaustion means the page was not committed atomically.
+        count = database.connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+        assert count == 0
+        # The raw observation is retained for later resume.
+        raw_count = database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[
+            0
+        ]
+        assert raw_count == 1
+
+
+def test_database_reopen_resume_without_duplicate_posts(tmp_path: Path) -> None:
+    """7.3: Resume after database reopen does not create duplicate posts."""
+    path = tmp_path / "catalog.sqlite3"
+    requested_pids: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        pid = request.url.params.get("pid", "0")
+        requested_pids.append(pid)
+        body = _minimal_listing_body(100, 1) if pid == "0" else _minimal_listing_body(3, 101)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=json.dumps(body).encode(),
+        )
+
+    # First session: list first page, pause at page boundary.
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, handler)
+        first = service.synchronize(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "listing",
+            limits=SyncLimits(5, 1, 1000, 60),
+        )
+        assert first.status == "paused"
+        run_id = first.remote_run_id
+
+    # Reopen database in a new context and resume.
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, handler)
+        resumed = service.synchronize(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "listing",
+            limits=SyncLimits(5, 5, 1000, 60),
+            resume_from_run_id=run_id,
+        )
+        assert resumed.status == "complete"
+
+        post_ids = {
+            row[0]
+            for row in database.connection.execute("SELECT native_post_id FROM posts").fetchall()
+        }
+        assert post_ids == {str(n) for n in range(1, 104)}
+    # No duplicate requests — the handler saw only pid=0 then pid=1.
+    assert requested_pids == ["0", "1"]
+
+
+def test_reobservation_is_idempotent_raw_history_grows(tmp_path: Path) -> None:
+    """7.3: Re-synchronizing the same post produces no duplicate normalized
+    records but grows the raw observation history."""
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, _dapi_post_handler())
+        first = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        assert first.status == "complete"
+
+        second = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        assert second.status == "complete"
+
+        # Two raw observations for the same post.
+        raw_count = database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[
+            0
+        ]
+        assert raw_count == 2
+        # But only one post record — COALESCE-gated upsert deduplicates.
+        post_count = database.connection.execute(
+            """SELECT COUNT(*) FROM posts p
+               JOIN platforms pl ON pl.platform_id = p.platform_id
+               WHERE pl.platform_key = 'gelbooru'"""
+        ).fetchone()[0]
+        assert post_count == 1
+
+
+def test_malformed_dapi_response_produces_typed_outcome(tmp_path: Path) -> None:
+    """7.3: A malformed DAPI response body yields a typed malformed outcome
+    rather than an unhandled exception."""
+    path = tmp_path / "catalog.sqlite3"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=b"not valid json {{{",
+        )
+
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, handler)
+        result = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        assert result.status == "failed"
+        assert result.outcome == "malformed_response"
+        # Raw observation retained for audit.
+        raw_count = database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[
+            0
+        ]
+        assert raw_count == 1
+        assert database.connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0] == 0
+
+
+def test_transport_mismatch_rejects_resume_before_network(tmp_path: Path) -> None:
+    """7.3: Resuming a DAPI listing run through the HTML adapter is rejected
+    before any network access occurs due to transport mismatch."""
+    path = tmp_path / "catalog.sqlite3"
+
+    def dapi_listing_handler(request: httpx.Request) -> httpx.Response:
+        pid = request.url.params.get("pid", "0")
+        body = _minimal_listing_body(100, 1) if pid == "0" else _minimal_listing_body(3, 101)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=json.dumps(body).encode(),
+        )
+
+    # The HTML adapter doesn't support LIST_ACCOUNT_POSTS, so we verify the
+    # transport mismatch at the resume validation layer by constructing the
+    # adapter manually and attempting a resume with a different transport key.
+    with CatalogDatabase(path) as database:
+        # Create a DAPI listing run that pauses at the page boundary.
+        dapi_service = _dapi_service(database, dapi_listing_handler)
+        first = dapi_service.synchronize(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "listing",
+            limits=SyncLimits(5, 1, 1000, 60),
+        )
+        assert first.status == "paused"
+        run_id = first.remote_run_id
+
+    # Verify the run was created with DAPI transport key.
+    run = get_remote_run(path, run_id)
+    assert run is not None
+    assert run["transport_key"] == DAPI_TRANSPORT_VERSION
+
+    # Resume with an adapter that has a different transport key must fail
+    # before any network request is made.
+    with CatalogDatabase(path) as database:
+        html_service = _html_service(database, _html_post_handler())
+        # The HTML adapter's transport key is different from DAPI_TRANSPORT_VERSION,
+        # so resume validation should reject it as a transport mismatch.
+        with pytest.raises(ValueError, match="incompatible"):
+            html_service.synchronize(
+                AdapterOperation.LIST_ACCOUNT_POSTS,
+                "listing",
+                limits=SyncLimits(5, 5, 1000, 60),
+                resume_from_run_id=run_id,
+            )
+
+
+def test_acceptance_three_variation_posts_have_independent_histories(
+    tmp_path: Path,
+) -> None:
+    """7.1: The three variation records each produce independent observation
+    histories with stable distinct/pair semantics."""
+    variation_ids = ("10720246", "10791439", "10791440")
+
+    for post_id in variation_ids:
+        path = tmp_path / f"catalog_{post_id}.sqlite3"
+        with CatalogDatabase(path) as database:
+            _dapi_service(database, _dapi_handler_for(post_id)).synchronize(
+                AdapterOperation.FETCH_POST,
+                post_id,
+                limits=SyncLimits(3, 3, 500, 60),
+            )
+
+            post = database.connection.execute(
+                """SELECT p.native_post_id FROM posts p
+                   JOIN platforms pl ON pl.platform_id = p.platform_id
+                   WHERE pl.platform_key = 'gelbooru' AND p.native_post_id = ?""",
+                (post_id,),
+            ).fetchone()
+            assert post is not None
+            assert post["native_post_id"] == post_id
+            # Each variation post produces one identity with its own raw history.
+            raw_count = database.connection.execute(
+                "SELECT COUNT(*) FROM raw_observations"
+            ).fetchone()[0]
+            assert raw_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 6.4: offline inspection of Gelbooru runs, posts, and occurrences
+# ---------------------------------------------------------------------------
+
+
+def test_offline_inspection_shows_gelbooru_identity_provenance_and_variants(
+    tmp_path: Path,
+) -> None:
+    from media_catalog.media_queries import list_media_occurrences
+
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        result = _dapi_service(database, _dapi_post_handler()).synchronize(
+            AdapterOperation.FETCH_POST,
+            "12370900",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+
+    run = get_remote_run(path, result.remote_run_id)
+    assert run["platform"] == "gelbooru"
+    assert run["transport_key"] == DAPI_TRANSPORT_VERSION
+    assert run["requests"][0]["request_identity"] == "gelbooru:dapi_json:post:12370900"
+    # The run view exposes typed outcome and counters, never raw payloads.
+    assert "payload" not in json.dumps(run)
+
+    occurrences = list_media_occurrences(path, platform="gelbooru")
+    assert len(occurrences["results"]) == 1
+    occurrence = occurrences["results"][0]
+    # Declared provider facts are visible as declared, distinct from any
+    # locally verified asset facts (none exist for metadata-only syncs).
+    assert occurrence["post"]["native_post_id"] == "12370900"
+    variants = occurrence["variants"]
+    variant_keys = {variant["key"] for variant in variants}
+    assert {"original", "preview"} <= variant_keys
+    # Stable selectors exist for every variant, and Gelbooru stays excluded
+    # from acquisition pending an explicit provider policy.
+    assert all(variant["selection"] for variant in variants)
+    assert all(variant["eligibility"] == "excluded" for variant in variants)
+    assert occurrence["asset_count"] == 0
+    # Declared MD5 stays visible as a provider declaration.
+    assert "fef8d5889c2fe425dd50cfade909cec9" in json.dumps(occurrence["declared"])

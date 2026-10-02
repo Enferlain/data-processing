@@ -187,6 +187,88 @@ Alias observations are append-only history with status, timestamps, IDs, and pro
 not silently treated as a current artist name. The list operation uses at most 320 records per page
 and stores an opaque `b<ID>` continuation toward older posts, rather than a durable numeric page.
 
+### Gelbooru metadata — metadata-only, requires operator authorization
+
+Gelbooru supports two explicit metadata transports: credentialed JSON DAPI (for posts, tags, and
+bounded listings) and anonymous HTML (for single-post pages). Both transports are metadata-only:
+they never request an image URL, download media, or create an asset or acquisition row.
+
+```bash
+# DAPI post — requires GELBOORU_USER_ID and GELBOORU_API_KEY environment variables
+uv run catalog metadata gelbooru-dapi-post catalog-output/catalog.sqlite3 12370900 --json
+
+# DAPI tag metadata
+uv run catalog metadata gelbooru-dapi-tag catalog-output/catalog.sqlite3 artist_tag --json
+
+# DAPI bounded listing — pid/limit pagination, max 100 entries per page
+uv run catalog metadata gelbooru-dapi-list catalog-output/catalog.sqlite3 listing \
+  --max-requests 3 --max-pages 2 --max-records 500 --max-seconds 60 \
+  --resume-from 12
+
+# HTML single-post — no credentials required
+uv run catalog metadata gelbooru-html-post catalog-output/catalog.sqlite3 12370900
+```
+
+**Credential setup:** Set `GELBOORU_USER_ID` and `GELBOORU_API_KEY` as environment variables.
+Both must be present for DAPI operations; the adapter fails before any network access if either is
+missing or empty. HTML operations never use credentials. Credentials are joined into the DAPI query
+parameters only at the final HTTP boundary and are scrubbed from request identities, database
+diagnostics, structured output, and retained provider payloads.
+
+**Transport selection:** The command name encodes the transport. `gelbooru-dapi-*` commands use the
+credentialed DAPI JSON adapter; `gelbooru-html-post` uses the anonymous HTML adapter. There is no
+silent fallback — choosing the wrong transport for the data you need is a user decision, not an
+automatic correction.
+
+**Pacing and page limits:** Gelbooru enforces a 2-second minimum interval between requests and a
+100-entry maximum page size for DAPI listings. Listing continuation uses `pid`/`limit` pagination
+with an opaque checkpoint stored in the database. Resume is only supported for `gelbooru-dapi-list`
+operations. The `--resume-from` flag is rejected for all other Gelbooru commands.
+
+**Provenance and raw retention:** Each synchronization run retains the raw response before
+normalization. DAPI and HTML observations for the same post coexist as separate transport-identified
+raw records under one reconciled post identity. Run metadata records the transport key/version,
+request identity, adapter version, and schema version. Raw payloads are never opened by inspection
+commands.
+
+**Raw-versus-normalized behavior:** The current-projection policy implements omission-never-erases:
+a later HTML observation never erases DAPI-proven facts (original URL, declared MD5, dimensions,
+post status); a later DAPI observation fills gaps an HTML-only view lacked. Disagreeing mutable facts
+(resolved to the newer observation) keep both raw payloads for audit. Declared MD5 remains a provider
+assertion until the separate asset workflow verifies bytes.
+
+**Privacy:** Credentials are resolved from environment variables only, never from CLI arguments or
+configuration files. The `authenticated_query()` method joins credentials at the final DAPI boundary
+and does not mutate the base query dict. Transport exceptions are sanitized via `sanitize_exception()`
+which scrubs credential values from error messages. The HTML adapter operates without credentials,
+cookies, or browser automation.
+
+**Typed failures:** Gelbooru operations produce typed outcomes: `success`, `unavailable`,
+`authentication_required`, `authorization_denied`, `rate_limited`, `transient_provider`,
+`response_too_large`, `malformed_response`, and `budget_exhausted`. Challenge pages (missing
+tag-list and Posted:/Uploader: markers) yield `authorization_denied`. Oversized response bodies
+raise `response_too_large`. Malformed JSON or HTML without identity markers raises
+`malformed_response`.
+
+**Resume limits:** Listing operations (`gelbooru-dapi-list`) store an opaque `pid` continuation
+checkpoint. Resume is validated before network access: transport mismatch, incompatible continuation
+format, or incompatible request scope all raise `ValueError` without contacting Gelbooru. Resume is
+only supported from a committed checkpoint — complete runs cannot be re-opened.
+
+**Troubleshooting:** If DAPI returns `authentication_required` or `authorization_denied`, verify
+both `GELBOORU_USER_ID` and `GELBOORU_API_KEY` are set and valid. If HTML returns
+`authorization_denied`, Gelbooru may be presenting a challenge page (Cloudflare or similar) — the
+HTML adapter cannot bypass authentication. If a listing pauses at a budget boundary, use
+`--resume-from <run_id>` to continue from the committed checkpoint. Raw observations can be
+inspected offline with `catalog metadata run-show`.
+
+**⚠ Automation-policy risk:** Gelbooru's terms of service restrict automated access. Credentials do
+not grant permission to crawl or recursively fetch posts. The metadata adapter is designed for
+explicit, bounded, per-post requests — not scheduled or recursive crawling. The operator must
+confirm personal-use or other authorization before enabling live Gelbooru synchronization. Live
+smoke tests are disabled by default and require `GELBOORU_LIVE_SMOKE=acknowledged` plus external
+credentials to run.
+
 Inspect past runs without network access or credentials:
 
 ```bash

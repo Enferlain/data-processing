@@ -1436,3 +1436,161 @@ def test_e621_library_partial_credentials_fail_without_secret_leak(
         assert sentinel not in json.dumps(payload)
         assert "error" in payload
     assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    ("command", "target", "operation"),
+    [
+        ("gelbooru-dapi-post", "12370900", AdapterOperation.FETCH_POST),
+        ("gelbooru-dapi-tag", "artist_tag", AdapterOperation.FETCH_TAG),
+        ("gelbooru-dapi-list", "listing", AdapterOperation.LIST_ACCOUNT_POSTS),
+        ("gelbooru-html-post", "12370900", AdapterOperation.FETCH_POST),
+    ],
+)
+def test_gelbooru_metadata_cli_routes_operations_with_provider_limits(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    target: str,
+    operation: AdapterOperation,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+
+    service_calls: list[tuple[object, str, object, int | None]] = []
+    service_intervals: list[float] = []
+    html_constructor_kwargs: list[dict] = []
+
+    class FakeDapiAdapter:
+        adapter_version = "gelbooru-v1"
+        schema_version = "gelbooru-dapi-v1"
+        instance_key = "gelbooru"
+
+        def __init__(self, instance: object, *, client: object, credentials: object) -> None:
+            assert credentials is not None
+
+    class FakeHtmlAdapter:
+        adapter_version = "gelbooru-v1"
+        schema_version = "gelbooru-html-v1"
+        instance_key = "gelbooru"
+
+        def __init__(self, instance: object, **kwargs: object) -> None:
+            html_constructor_kwargs.append(dict(kwargs))
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: object,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            service_intervals.append(minimum_interval_seconds)
+
+        def synchronize(
+            self,
+            actual_operation: AdapterOperation,
+            actual_target: str,
+            *,
+            limits: object,
+            resume_from_run_id: int | None,
+        ) -> SyncResult:
+            service_calls.append((actual_operation, actual_target, limits, resume_from_run_id))
+            return SyncResult(
+                remote_run_id=77,
+                platform="gelbooru",
+                operation=actual_operation.value,
+                target=actual_target,
+                status="complete",
+                outcome="success",
+                request_count=1,
+                page_count=1,
+                record_count=1,
+                resumed_from_run_id=resume_from_run_id,
+            )
+
+    monkeypatch.setattr(cli_module, "GelbooruAdapter", FakeDapiAdapter)
+    monkeypatch.setattr(cli_module, "GelbooruHtmlAdapter", FakeHtmlAdapter)
+    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    # Sentinel credential values prove the HTML path never reads them.
+    monkeypatch.setenv("GELBOORU_USER_ID", "sentinel-user")
+    monkeypatch.setenv("GELBOORU_API_KEY", "sentinel-key")
+
+    main(
+        [
+            "metadata",
+            command,
+            str(catalog),
+            target,
+            "--max-requests",
+            "4",
+            "--max-pages",
+            "5",
+            "--max-records",
+            "6",
+            "--max-seconds",
+            "30",
+            "--json",
+        ]
+    )
+
+    assert service_calls and service_calls[0][0] is operation
+    assert service_calls[0][1] == target
+    assert service_calls[0][3] is None
+    # The provider pacing floor is passed to the service unconditionally.
+    assert service_intervals == [cli_module.GELBOORU.minimum_interval_seconds]
+    if command == "gelbooru-html-post":
+        assert "credentials" not in html_constructor_kwargs[0]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["remote_run_id"] == 77
+    assert payload["status"] == "complete"
+    assert "sentinel-user" not in capsys.readouterr().out
+
+
+def test_gelbooru_cli_resume_rejected_outside_listing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    monkeypatch.setenv("GELBOORU_USER_ID", "u")
+    monkeypatch.setenv("GELBOORU_API_KEY", "k")
+
+    class NeverAdapter:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("adapter must not be constructed")
+
+    monkeypatch.setattr(cli_module, "GelbooruAdapter", NeverAdapter)
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "metadata",
+                "gelbooru-dapi-post",
+                str(catalog),
+                "12370900",
+                "--resume-from",
+                "3",
+            ]
+        )
+
+
+def test_gelbooru_cli_dapi_requires_credentials_before_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    monkeypatch.delenv("GELBOORU_USER_ID", raising=False)
+    monkeypatch.delenv("GELBOORU_API_KEY", raising=False)
+
+    class NeverAdapter:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("adapter must not be constructed")
+
+    monkeypatch.setattr(cli_module, "GelbooruAdapter", NeverAdapter)
+    with pytest.raises(SystemExit):
+        main(["metadata", "gelbooru-dapi-post", str(catalog), "12370900"])

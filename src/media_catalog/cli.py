@@ -22,6 +22,12 @@ from media_catalog.adapters.danbooru import (
     DanbooruCredentials,
 )
 from media_catalog.adapters.e621 import E621, E621Adapter, E621Credentials
+from media_catalog.adapters.gelbooru import (
+    GELBOORU,
+    GelbooruAdapter,
+    GelbooruCredentials,
+    GelbooruHtmlAdapter,
+)
 from media_catalog.adapters.pixiv import PixivAdapter
 from media_catalog.candidate_lookup import (
     CandidateLookupQueryService,
@@ -84,6 +90,16 @@ def _add_sync_limits(parser: argparse.ArgumentParser, *, listing: bool) -> None:
 E621_CREDENTIAL_GUIDANCE = (
     "Optional e621 credentials are resolved from external E621_USERNAME and E621_API_KEY "
     "environment references; credentials are never CLI flags."
+)
+
+GELBOORU_DAPI_CREDENTIAL_GUIDANCE = (
+    "Gelbooru DAPI credentials are resolved from external GELBOORU_USER_ID and "
+    "GELBOORU_API_KEY environment references; credentials are never CLI flags."
+)
+
+GELBOORU_HTML_GUIDANCE = (
+    "The anonymous Gelbooru HTML transport uses no credentials and never falls back "
+    "to the credentialed DAPI transport."
 )
 
 
@@ -348,12 +364,23 @@ def build_parser() -> argparse.ArgumentParser:
         "e621-tag": False,
         "e621-alias": False,
         "e621-list": True,
+        "gelbooru-dapi-post": False,
+        "gelbooru-dapi-tag": False,
+        "gelbooru-dapi-list": True,
+        "gelbooru-html-post": False,
     }
+
+    def _metadata_description(name: str) -> str | None:
+        if name.startswith("e621-"):
+            return E621_CREDENTIAL_GUIDANCE
+        if name.startswith("gelbooru-dapi-"):
+            return GELBOORU_DAPI_CREDENTIAL_GUIDANCE
+        if name == "gelbooru-html-post":
+            return GELBOORU_HTML_GUIDANCE
+        return None
+
     for name, listing in operations.items():
-        command = metadata_commands.add_parser(
-            name,
-            description=E621_CREDENTIAL_GUIDANCE if name.startswith("e621-") else None,
-        )
+        command = metadata_commands.add_parser(name, description=_metadata_description(name))
         command.add_argument("catalog", type=Path)
         command.add_argument("target")
         _add_sync_limits(command, listing=listing)
@@ -691,6 +718,38 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     arguments.target,
                     limits=limits,
                     resume_from_run_id=arguments.resume_from,
+                )
+        elif command.startswith("gelbooru-"):
+            # The transport is part of the command name; there is never a
+            # silent fallback between the credentialed DAPI and anonymous
+            # HTML transports.
+            resume_from = arguments.resume_from
+            if resume_from is not None and command != "gelbooru-dapi-list":
+                raise ValueError("--resume-from is only supported for gelbooru-dapi-list")
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                if command == "gelbooru-html-post":
+                    adapter = GelbooruHtmlAdapter(GELBOORU, client=client)
+                    operation = AdapterOperation.FETCH_POST
+                else:
+                    operation = {
+                        "gelbooru-dapi-post": AdapterOperation.FETCH_POST,
+                        "gelbooru-dapi-tag": AdapterOperation.FETCH_TAG,
+                        "gelbooru-dapi-list": AdapterOperation.LIST_ACCOUNT_POSTS,
+                    }[command]
+                    adapter = GelbooruAdapter(
+                        GELBOORU,
+                        client=client,
+                        credentials=GelbooruCredentials.from_environment(GELBOORU),
+                    )
+                result = MetadataSyncService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=GELBOORU.minimum_interval_seconds,
+                ).synchronize(
+                    operation,
+                    arguments.target,
+                    limits=limits,
+                    resume_from_run_id=resume_from,
                 )
         elif command.startswith("e621-"):
             operation = {

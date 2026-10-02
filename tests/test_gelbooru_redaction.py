@@ -3,10 +3,15 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from media_catalog.adapters import AdapterOperation
+from media_catalog.adapters.contracts import AdapterRequest
 from media_catalog.adapters.gelbooru import (
+    GELBOORU,
     REDACTED,
+    GelbooruAdapter,
     GelbooruCaptureError,
     GelbooruCredentials,
+    GelbooruHtmlAdapter,
     capture_gelbooru_dapi_post,
     sanitize_exception,
     sanitize_mapping,
@@ -111,3 +116,58 @@ def test_capture_transport_errors_surface_sanitized_messages() -> None:
     assert SENTINEL_KEY not in message
     assert "api_key" not in message
     assert "user_id" not in message
+
+
+# ---------------------------------------------------------------------------
+# Task 7.2: network isolation — only Gelbooru endpoints are contacted
+# ---------------------------------------------------------------------------
+
+
+def test_dapi_adapter_contacts_only_gelbooru_endpoint() -> None:
+    """7.2: DAPI fetch makes exactly one request to gelbooru.com and no
+    secondary requests to media hosts or other endpoints."""
+    contacted_hosts: list[str] = []
+
+    def tracking_handler(request: httpx.Request) -> httpx.Response:
+        contacted_hosts.append(request.url.host)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=b'{"@attributes": {"count": 0}}',
+        )
+
+    adapter = GelbooruAdapter(
+        GELBOORU,
+        client=httpx.Client(transport=httpx.MockTransport(tracking_handler)),
+        credentials=CREDENTIALS,
+    )
+    request = AdapterRequest(operation=AdapterOperation.FETCH_POST, target="12370900")
+    envelope = adapter.fetch(request)
+    assert envelope.status_code == 200
+    assert all(host == "gelbooru.com" for host in contacted_hosts)
+    assert len(contacted_hosts) == 1
+
+
+def test_html_adapter_contacts_only_gelbooru_endpoint() -> None:
+    """7.2: HTML fetch makes exactly one request to gelbooru.com with no
+    credentials, cookies, or secondary requests."""
+    contacted_hosts: list[str] = []
+
+    def tracking_handler(request: httpx.Request) -> httpx.Response:
+        contacted_hosts.append(request.url.host)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html; charset=UTF-8"},
+            content=b"<html><head><title>Post 12370900</title></head>"
+            b"<body><title>Post 12370900</title></body></html>",
+        )
+
+    adapter = GelbooruHtmlAdapter(
+        GELBOORU,
+        client=httpx.Client(transport=httpx.MockTransport(tracking_handler)),
+    )
+    request = AdapterRequest(operation=AdapterOperation.FETCH_POST, target="12370900")
+    envelope = adapter.fetch(request)
+    assert envelope.status_code == 200
+    assert all(host == "gelbooru.com" for host in contacted_hosts)
+    assert len(contacted_hosts) == 1

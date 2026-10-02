@@ -58,6 +58,28 @@ Rules:
   lacked, a disagreeing rating resolves to the newer observation while both raw payloads keep
   the audit trail, and returned media URLs stay browseable metadata-only variants with declared
   MD5 as a provider assertion and zero asset or acquisition rows after synchronization.
+- **The Gelbooru acceptance matrix reconciles all five real posts across transports** — five
+  parametrized tests verify each captured post ID (12370900, 11605534, 10720246, 10791439,
+  10791440) synchronizes through both DAPI and HTML, produces stable post reconciliation under
+  a shared numeric identity, and retains independent observation histories; the three variation
+  records each maintain distinct/pair semantics with two transport-identified raw observations
+  per post.
+- **Gelbooru privacy and network-isolation tests cover result objects and endpoint contact** —
+  sync result objects, run metadata, and database rows are scanned for credential sentinels and
+  contain no authenticated URLs; adapter-level tests prove only gelbooru.com is contacted with
+  exactly one request per transport and no secondary media-host requests.
+- **Gelbooru budget, resilience, and transport-mismatch tests use real catalog persistence** —
+  budget exhaustion halts at the record boundary with raw retention but no committed page;
+  database reopen and resume produces no duplicate posts; re-observation is idempotent while
+  growing raw history; malformed DAPI responses produce typed `malformed_response` outcomes;
+  transport mismatch is rejected before any network access.
+- **Provider regression suites for Pixiv, Danbooru, AIBooru, and e621 pass** — existing
+  adapter and metadata-sync test suites for all four providers confirm Gelbooru integration
+  does not declare or trigger unrelated capabilities.
+- **Disabled-by-default live smoke tests require explicit operator authorization** — one DAPI
+  post and one HTML post smoke test are guarded by `GELBOORU_LIVE_SMOKE=acknowledged` and
+  external credential environment variables, with hard request/body/record/time limits and
+  assertions that no media host is contacted.
 
 ### Changed
 

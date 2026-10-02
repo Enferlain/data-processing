@@ -1,6 +1,6 @@
 # Project roadmap
 
-Last updated: 2026-08-13
+Last updated: 2026-10-02
 
 ## Goal
 
@@ -42,11 +42,16 @@ deliberately deferred.
 
 ## Current state
 
-The `add-artist-library-expansion` milestone is complete and archived. The implementation portion of
-the active `add-e621-metadata-adapter` OpenSpec change under Bead `data-processing-7cy` is complete
-through metadata synchronization, lookup, library expansion, target-scoped browsing, and verified
-media acquisition. Its disabled live smoke tests and full quality gates are also complete. The
-OpenSpec change remains active and unarchived only for final review handoff and archive steps.
+The `add-artist-library-expansion` milestone is complete and archived. The `add-e621-metadata-adapter`
+OpenSpec change under Bead `data-processing-7cy` is complete through metadata synchronization, lookup,
+library expansion, target-scoped browsing, and verified media acquisition. Its disabled live smoke tests
+and full quality gates are also complete. The OpenSpec change remains active and unarchived only for
+final review handoff and archive steps.
+
+The `add-gelbooru-metadata-adapter` OpenSpec change under Bead `data-processing-fql` is complete
+through metadata synchronization, acceptance matrix, regression, and policy tests. Its disabled
+live smoke tests require explicit operator authorization. The implementation is complete; remaining
+work is documentation finalization, quality-gate verification, and change archiving.
 
 Live task state can be checked with:
 
@@ -137,8 +142,30 @@ and [media browsing](openspec/changes/archive/2026-08-11-add-media-occurrence-br
   staging, quarantine, and verified CAS publication.
 
 Tags, aliases, and uploaders remain evidence rather than automatic identity/authorship. Generic
-filtered counts and cross-database alias mapping are not available; Gelbooru remains future work.
+filtered counts and cross-database alias mapping are not available.
 Metadata and expansion never fetch media, and live e621 smoke tests remain disabled by default.
+
+### Gelbooru metadata — Complete
+
+- Gelbooru post metadata can be synchronized through two explicit transports: credentialed JSON DAPI
+  (single posts, tag metadata, bounded listings) and anonymous HTML (single-post pages).
+- Both transports normalize fixture-proven fields — post identity, timestamps, rating, score,
+  declared MD5, dimensions, tag-category evidence, uploader participants, and media variant
+  references — into the shared neutral schema without downloading media or creating assets.
+- DAPI credentials (`GELBOORU_USER_ID`/`GELBOORU_API_KEY`) are resolved from environment variables
+  only, joined at the final HTTP boundary, and scrubbed from all durable and diagnostic surfaces.
+- HTML transport requires no credentials, cookies, or browser automation. Challenge pages are
+  detected and yield `authorization_denied`.
+- Runs retain raw responses before normalization, commit pages atomically with checkpoint/resume for
+  DAPI listings, and enforce a 2-second minimum interval with a 100-entry page ceiling.
+- The current-projection policy ensures omission never erases retained history: DAPI and HTML
+  observations coexist under one post identity, and disagreeing mutable facts resolve to the newer
+  observation while both raw payloads preserve the audit trail.
+- Live smoke tests are disabled by default and require explicit operator authorization
+  (`GELBOORU_LIVE_SMOKE=acknowledged`). Credentials do not grant permission for broad crawling.
+
+See the active
+[add-gelbooru-metadata-adapter OpenSpec](openspec/changes/add-gelbooru-metadata-adapter/).
 
 ### Bounded candidate lookup — Complete
 
@@ -212,14 +239,12 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Current milestone: Gelbooru metadata adapter
+## Current milestone: OpenSpec validation and archive
 
-Complete the active `add-gelbooru-metadata-adapter` change. The offline foundation (fixture
-capture utility, transport/config policy, external credential plumbing, provenance and resume
-migration) is in place; remaining work continues against captured fixtures, and the live DAPI and
-HTML capture tasks run only after explicit operator authorization with external
-`GELBOORU_USER_ID`/`GELBOORU_API_KEY` credentials. No media downloads, broad crawling, or implicit
-identity conclusions are in scope.
+Complete strict OpenSpec validation, bounded review of each implementation section, and archive
+the `add-gelbooru-metadata-adapter` change after addressing any actionable findings. The Gelbooru
+metadata adapter implementation is complete through acceptance, regression, and policy tests; the
+remaining work is documentation finalization, quality-gate verification, and change archiving.
 
 ## Planned after the active milestone
 

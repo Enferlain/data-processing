@@ -39,22 +39,22 @@
 
 ## 6. CLI and Offline Inspection
 
-- [ ] 6.1 Add explicit metadata CLI routes for Gelbooru DAPI post, bounded DAPI listing, supported exact tag metadata, and HTML single-post fetches; require the transport in command selection and never silently fall back.
-- [ ] 6.2 Route DAPI commands through external credential resolution and provider pacing, route HTML commands without credentials, and preserve shared request/page/record/time limits plus compatible `--resume-from` only where continuations are supported.
-- [ ] 6.3 Add stable human and JSON result tests covering run IDs, transport identity, typed outcomes, budget boundaries, resume lineage, and bounded diagnostics while excluding query material, credentials, raw payloads, private paths, and returned media URLs.
-- [ ] 6.4 Extend offline remote-run, post, and media-occurrence inspection tests to show Gelbooru identities, declared versus observed facts, provenance, and stable variant selectors without opening raw payloads or media.
+- [x] 6.1 Add explicit metadata CLI routes for Gelbooru DAPI post, bounded DAPI listing, supported exact tag metadata, and HTML single-post fetches; require the transport in command selection and never silently fall back.
+- [x] 6.2 Route DAPI commands through external credential resolution and provider pacing, route HTML commands without credentials, and preserve shared request/page/record/time limits plus compatible `--resume-from` only where continuations are supported.
+- [x] 6.3 Add stable human and JSON result tests covering run IDs, transport identity, typed outcomes, budget boundaries, resume lineage, and bounded diagnostics while excluding query material, credentials, raw payloads, private paths, and returned media URLs.
+- [x] 6.4 Extend offline remote-run, post, and media-occurrence inspection tests to show Gelbooru identities, declared versus observed facts, provenance, and stable variant selectors without opening raw payloads or media.
 
 ## 7. Acceptance, Regression, and Policy Tests
 
-- [ ] 7.1 Add a default-offline acceptance matrix for all five real Gelbooru post IDs across every available captured transport, including the three user-labelled variation records, and assert stable post reconciliation plus independent observation history.
-- [ ] 7.2 Add privacy and network-isolation tests that scan the catalog, public result objects, errors, logs, and fixtures for credential sentinels and prove metadata runs contact only the explicitly selected Gelbooru endpoint.
-- [ ] 7.3 Add budget, interruption, transaction rollback, database reopen, resume, duplicate-observation, malformed-response, and transport-mismatch tests using real catalog persistence and injected HTTP transports.
-- [ ] 7.4 Run provider regression suites for Pixiv, Danbooru, AIBooru, and e621 metadata, lookup, library, browsing, and acquisition boundaries to prove Gelbooru support does not declare or trigger unrelated capabilities.
-- [ ] 7.5 Add disabled-by-default, explicitly authorized live smoke tests for one DAPI post and one HTML post with hard request/body/record/time limits, external credentials for DAPI, policy acknowledgement, and assertions that no media host is contacted.
+- [x] 7.1 Add a default-offline acceptance matrix for all five real Gelbooru post IDs across every available captured transport, including the three user-labelled variation records, and assert stable post reconciliation plus independent observation history.
+- [x] 7.2 Add privacy and network-isolation tests that scan the catalog, public result objects, errors, logs, and fixtures for credential sentinels and prove metadata runs contact only the explicitly selected Gelbooru endpoint.
+- [x] 7.3 Add budget, interruption, transaction rollback, database reopen, resume, duplicate-observation, malformed-response, and transport-mismatch tests using real catalog persistence and injected HTTP transports.
+- [x] 7.4 Run provider regression suites for Pixiv, Danbooru, AIBooru, and e621 metadata, lookup, library, browsing, and acquisition boundaries to prove Gelbooru support does not declare or trigger unrelated capabilities.
+- [x] 7.5 Add disabled-by-default, explicitly authorized live smoke tests for one DAPI post and one HTML post with hard request/body/record/time limits, external credentials for DAPI, policy acknowledgement, and assertions that no media host is contacted.
 
 ## 8. Documentation and Finalization
 
-- [ ] 8.1 Document Gelbooru DAPI and HTML usage, external credential setup, transport selection, pacing and page limits, provenance, raw-versus-normalized behavior, privacy, typed failures, resume limits, and troubleshooting.
-- [ ] 8.2 Document Gelbooru's current automation-policy risk and require the operator to confirm personal-use or other authorization before live use; state that credentials do not grant permission and that scheduled or recursive crawling is not provided.
-- [ ] 8.3 Update the roadmap, changelog, provider capability matrix, and real-example test plan to distinguish implemented metadata from deferred lookup, library expansion, acquisition, aliases, pools, favorites, counts, deleted streams, similarity, and cross-database matching.
-- [ ] 8.4 Run `uv run ruff format --check` on changed Python files, `uv run ruff check .`, `uv run ty check src`, the focused Gelbooru suites, the full test suite, `git diff --check`, and strict OpenSpec validation; then request bounded review of each completed implementation section and address actionable findings before sync/archive.
+- [x] 8.1 Document Gelbooru DAPI and HTML usage, external credential setup, transport selection, pacing and page limits, provenance, raw-versus-normalized behavior, privacy, typed failures, resume limits, and troubleshooting.
+- [x] 8.2 Document Gelbooru's current automation-policy risk and require the operator to confirm personal-use or other authorization before live use; state that credentials do not grant permission and that scheduled or recursive crawling is not provided.
+- [x] 8.3 Update the roadmap, changelog, provider capability matrix, and real-example test plan to distinguish implemented metadata from deferred lookup, library expansion, acquisition, aliases, pools, favorites, counts, deleted streams, similarity, and cross-database matching.
+- [x] 8.4 Run `uv run ruff format --check` on changed Python files, `uv run ruff check .`, `uv run ty check src`, the focused Gelbooru suites, the full test suite, `git diff --check`, and strict OpenSpec validation; then request bounded review of each completed implementation section and address actionable findings before sync/archive.
