@@ -1185,3 +1185,66 @@ def test_offline_inspection_shows_gelbooru_identity_provenance_and_variants(
     assert occurrence["asset_count"] == 0
     # Declared MD5 stays visible as a provider declaration.
     assert "fef8d5889c2fe425dd50cfade909cec9" in json.dumps(occurrence["declared"])
+
+
+def test_resume_with_stale_continuation_version_fails_permanently(
+    tmp_path: Path,
+) -> None:
+    """7.3/3.4: resuming a run whose checkpoint uses a legacy continuation
+    version fails closed as a permanent validation error — never classified
+    transient_provider, and the root cause stays visible."""
+    path = tmp_path / "catalog.sqlite3"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        pid = request.url.params.get("pid", "0")
+        body = _minimal_listing_body(100, 1) if pid == "0" else _minimal_listing_body(3, 101)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=json.dumps(body).encode(),
+        )
+
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, handler)
+        first = service.synchronize(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "listing",
+            limits=SyncLimits(5, 1, 1000, 60),
+        )
+        assert first.status == "paused"
+        run_id = first.remote_run_id
+
+        # Simulate a checkpoint written before the continuation format bump:
+        # replace the stored continuation with a legacy unscoped payload.
+        row = database.connection.execute(
+            "SELECT continuation_json FROM remote_checkpoints WHERE remote_run_id = ?",
+            (run_id,),
+        ).fetchone()
+        stored = json.loads(row["continuation_json"])
+        stored["version"] = "gelbooru-pid-v1"
+        stored["value"] = {"pid": "1", "limit": "100"}
+        database.connection.execute(
+            "UPDATE remote_checkpoints SET continuation_json = ? WHERE remote_run_id = ?",
+            (json.dumps(stored), run_id),
+        )
+        database.connection.commit()
+
+        resumed = _dapi_service(database, handler)
+        with pytest.raises(RuntimeError, match="incompatible Gelbooru continuation version"):
+            resumed.synchronize(
+                AdapterOperation.LIST_ACCOUNT_POSTS,
+                "listing",
+                limits=SyncLimits(5, 5, 1000, 60),
+                resume_from_run_id=run_id,
+            )
+
+        # The failed resume is recorded as a permanent local validation
+        # failure with the root cause in the diagnostic — not transient.
+        # The resume attempt has its own run row; the original stays paused.
+        attempt = database.connection.execute(
+            """SELECT status, termination_outcome, diagnostic_summary
+               FROM remote_runs ORDER BY remote_run_id DESC LIMIT 1"""
+        ).fetchone()
+        assert attempt["status"] == "failed"
+        assert attempt["termination_outcome"] != "transient_provider"
+        assert "incompatible Gelbooru continuation version" in attempt["diagnostic_summary"]

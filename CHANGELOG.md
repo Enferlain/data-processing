@@ -100,6 +100,16 @@ Rules:
 
 ### Fixed
 
+- **Scoped-continuation review: validation errors are never transient provider faults** — the
+  shared request gate no longer wraps adapter `ValueError`s as `transient_provider`; local
+  request-contract failures (incompatible continuation version or scope, malformed target, absent
+  credentials) now propagate so the sync service records the run failed with the root cause in its
+  diagnostic instead of masking it as a retryable provider fault. A stale pre-bump `gelbooru-pid-v1`
+  checkpoint resume is pinned by a service-level test: permanent failure, truthful message, no
+  transient classification. The DAPI post parser also now filters non-dict entries from wrapped
+  `post` lists (matching the bare-array shape) so a garbage trailing entry can never crash
+  continuation production with an untyped `AttributeError`. Two formerly untested scope branches
+  (in-value continuation and adapter version material) gained rejection tests.
 - **Gelbooru adapters harden typed failures after a three-angle review** — DAPI post records with
   missing or unparseable `created_at` now raise `malformed_response` instead of crashing with
   `KeyError`/`ValueError`; malformed listing continuation payloads are rejected with a clear

@@ -78,6 +78,13 @@ class RequestGate:
                 response = fetch()
             except AdapterFailure:
                 raise
+            except ValueError:
+                # Local validation failures (incompatible continuation, malformed
+                # target, absent credentials) are permanent request-contract
+                # errors.  Wrapping them as transient provider faults would both
+                # hide the root cause and invite automatic retries that can never
+                # succeed, so they propagate unchanged.
+                raise
             except BaseException as error:
                 raise sanitize_transport_error(error, "provider") from None
             retain(response)

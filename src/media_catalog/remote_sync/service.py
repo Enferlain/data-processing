@@ -211,6 +211,23 @@ class MetadataSyncService:
                 retry_after=error.retry_at,
                 diagnostic=error.public_message,
             )
+        except ValueError as error:
+            # Adapter request validation (e.g. an incompatible continuation
+            # version or scope) is a permanent local contract failure, never a
+            # transient provider fault.  Record the run failed with the root
+            # cause visible, then propagate so the caller cannot mistake it
+            # for a retryable outcome.
+            result = self._finish(
+                run_id,
+                operation,
+                target,
+                executor.budget,
+                status="failed",
+                outcome=AdapterOutcome.LOCAL_PERSISTENCE,
+                resumed_from_run_id=resume_from_run_id,
+                diagnostic=f"metadata request validation failed: {error}"[:200],
+            )
+            raise RuntimeError(result.diagnostic) from error
         except Exception as error:
             result = self._finish(
                 run_id,

@@ -1092,3 +1092,51 @@ class TestScopedContinuations:
         assert GelbooruAdapter._parse_listing_target("listing:0:50") is None
         assert GelbooruAdapter._parse_listing_target("listing:t:id-desc:backward:0:50") is None
         assert GelbooruAdapter._parse_listing_target(None) is None
+
+    def test_incompatible_continuation_version_material_rejected(self) -> None:
+        """A forged in-value continuation_version fails closed before network."""
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "continuation_version": "v0"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="continuation version is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_incompatible_adapter_version_material_rejected(self) -> None:
+        """A forged in-value adapter_version fails closed before network."""
+        adapter, client = self._adapter_with_unused_client()
+        base = _scoped_continuation()
+        continuation = Continuation(
+            "gelbooru", CONTINUATION_VERSION, {**base.value, "adapter_version": "old"}
+        )
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS, "test", continuation=continuation
+        )
+        with pytest.raises(ValueError, match="adapter version is incompatible"):
+            adapter.fetch(request)
+        client.get.assert_not_called()
+
+    def test_wrapped_list_with_non_dict_tail_does_not_crash(self) -> None:
+        """A provider body with a non-dict trailing entry is filtered, never a
+        crash: a still-full page yields a continuation from the last valid post."""
+        credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
+        limit = 1
+        valid = _dapi_post_body("9")["post"][0]
+        body = {"@attributes": {"limit": limit, "offset": 0, "count": 5}, "post": [valid, 5]}
+        client = _make_client([_mock_response(200, json.dumps(body).encode())])
+        adapter = GelbooruAdapter(client=client, credentials=credentials)
+        request = AdapterRequest(
+            AdapterOperation.LIST_ACCOUNT_POSTS,
+            "test",
+            continuation=_scoped_continuation(pid=1, last_pid=0, limit=limit),
+        )
+        page = adapter.normalize(adapter.fetch(request))
+        # The garbage entry is dropped; the page stays full (1 valid post,
+        # limit 1) so the continuation uses the valid post's id.
+        assert page.continuation is not None
+        assert page.continuation.value["last_id"] == 9

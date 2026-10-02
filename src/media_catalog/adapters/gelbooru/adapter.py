@@ -476,7 +476,10 @@ class GelbooruAdapter:
             if "post" in body:
                 post_value = body["post"]
                 if isinstance(post_value, list):
-                    return post_value
+                    # Non-dict entries are provider garbage; skip them exactly
+                    # like the bare-array shape so downstream consumers can
+                    # never crash on posts[-1].get(...).
+                    return [entry for entry in post_value if isinstance(entry, dict)]
                 if isinstance(post_value, dict):
                     return [post_value]
                 return []
