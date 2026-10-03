@@ -293,17 +293,13 @@ class HTTPTransferEngine:
             active_resume: ResumeState | None = None
             try:
                 self._check_control(deadline)
-                session, active_resume = self._open_session(
-                    storage, recipe, limits, current_resume
-                )
+                session, active_resume = self._open_session(storage, recipe, limits, current_resume)
                 headers = dict(_credential_headers(recipe, credential_resolver))
                 if active_resume is not None:
                     headers["Range"] = f"bytes={active_resume.partial.byte_count}-"
                     headers["If-Range"] = active_resume.strong_etag
 
-                response, redirects = self._request(
-                    recipe, headers, limits.max_redirects, deadline
-                )
+                response, redirects = self._request(recipe, headers, limits.max_redirects, deadline)
                 last_status = response.status_code
                 response_etag = response.headers.get("ETag")
                 retry_after = _retry_after_seconds(

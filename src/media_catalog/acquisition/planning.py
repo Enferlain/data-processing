@@ -456,3 +456,126 @@ def check_planned_item_current(
     if current.material_digest != planned_item.material_digest:
         return False, "stale_target"
     return True, None
+
+
+@dataclass(frozen=True, slots=True)
+class ExpansionAcquisitionPreview:
+    """Expansion-plan-scoped acquisition preview resolved offline from committed associations."""
+
+    library_plan_id: int
+    committed_post_count: int
+    details_required_post_count: int
+    unavailable_occurrence_count: int
+    excluded_by_limit: int
+    preview: AcquisitionPlanPreview
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "library_plan_id": self.library_plan_id,
+            "committed_posts": self.committed_post_count,
+            "details_required_posts": self.details_required_post_count,
+            "unavailable_occurrences": self.unavailable_occurrence_count,
+            "excluded_by_limit": self.excluded_by_limit,
+            **self.preview.as_dict(),
+        }
+
+
+def plan_expansion_acquisition(
+    database: CatalogDatabase | Path | str,
+    library_plan_id: int,
+    *,
+    variant: str | None = None,
+    availability: str = "available",
+    max_items: int,
+    clock: Callable[[], str] = _now,
+    policy_resolver: Callable[[str], PolicyIdentity | None] = policy_identity_for_platform,
+) -> ExpansionAcquisitionPreview:
+    """Resolve acquisition selections from a committed expansion plan's associations.
+
+    The occurrence set comes from the plan's committed expansion-to-post
+    associations across all of its executions, deduplicated by post; posts
+    whose listings committed no occurrences are counted as requiring detail
+    synchronization instead of being selected. The item limit caps the
+    selection and reports the remainder as excluded by limit rather than
+    raising, and the underlying planner still evaluates per-item eligibility
+    and exclusions offline.
+    """
+
+    if max_items <= 0:
+        raise ValueError("max items must be positive")
+    if library_plan_id <= 0:
+        raise ValueError("library expansion plan id must be positive")
+    if variant is not None and not variant.strip():
+        raise ValueError("variant must not be empty")
+    if isinstance(database, CatalogDatabase):
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        database.connection.backup(connection)
+        connection.execute("PRAGMA query_only = ON")
+        close = connection.close
+    else:
+        catalog = CatalogDatabase.open_read_only(Path(database))
+        connection = catalog.connection
+        close = catalog.close
+    try:
+        plan_row = connection.execute(
+            """SELECT library_expansion_plan_id FROM library_expansion_plans
+                WHERE library_expansion_plan_id = ?""",
+            (library_plan_id,),
+        ).fetchone()
+        if plan_row is None:
+            raise ValueError("library expansion plan not found")
+        rows = connection.execute(
+            """SELECT posts.post_id, mo.media_occurrence_id, mo.availability
+                 FROM (SELECT DISTINCT lep.post_id
+                         FROM library_expansion_posts lep
+                         JOIN library_expansion_executions exe
+                           ON exe.library_expansion_execution_id =
+                              lep.library_expansion_execution_id
+                        WHERE exe.library_expansion_plan_id = ?) posts
+                 LEFT JOIN media_occurrences mo ON mo.post_id = posts.post_id
+                ORDER BY posts.post_id, mo.media_occurrence_id""",
+            (library_plan_id,),
+        ).fetchall()
+        post_ids = {int(row["post_id"]) for row in rows}
+        details_required_post_ids = {
+            int(row["post_id"]) for row in rows if row["media_occurrence_id"] is None
+        }
+        occurrences = [
+            (int(row["media_occurrence_id"]), str(row["availability"]))
+            for row in rows
+            if row["media_occurrence_id"] is not None
+        ]
+        matching = [
+            occurrence_id
+            for occurrence_id, occurrence_availability in occurrences
+            if occurrence_availability == availability
+        ]
+        capped = matching[:max_items]
+        excluded_by_limit = len(matching) - len(capped)
+        items = tuple(
+            evaluate_occurrence_variant(
+                connection,
+                AcquisitionSelection(occurrence_id, variant or "primary"),
+                policy_resolver=policy_resolver,
+            )
+            for occurrence_id in capped
+        )
+    finally:
+        close()
+    preview = AcquisitionPlanPreview(
+        PLAN_VERSION,
+        _digest(
+            [[item.media_occurrence_id, item.variant_key, item.material_digest] for item in items]
+        ),
+        normalize_timestamp(clock()),
+        items,
+    )
+    return ExpansionAcquisitionPreview(
+        library_plan_id,
+        len(post_ids),
+        len(details_required_post_ids),
+        len(occurrences) - len(matching),
+        excluded_by_limit,
+        preview,
+    )

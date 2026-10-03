@@ -36,6 +36,7 @@ def _close_connection(connection: sqlite3.Connection, owned: bool) -> None:
     if owned:
         connection.close()
 
+
 def list_assets(
     database: CatalogDatabase | Path | str,
     *,
@@ -115,15 +116,11 @@ def legacy_assertion_summary(
                      GROUP BY assertion_kind ORDER BY assertion_kind"""
             )
         )
-        by_classification = {
-            str(row["assertion_kind"]): int(row["count"]) for row in rows
-        }
+        by_classification = {str(row["assertion_kind"]): int(row["count"]) for row in rows}
         return {
             "total": sum(by_classification.values()),
             "ambiguous": sum(
-                count
-                for kind, count in by_classification.items()
-                if kind == "ambiguous_asset_path"
+                count for kind, count in by_classification.items() if kind == "ambiguous_asset_path"
             ),
             "unassociated": sum(int(row["unassociated_count"] or 0) for row in rows),
             "by_classification": by_classification,
@@ -184,8 +181,7 @@ def get_asset_detail(
         fingerprints = [
             dict(row)
             for row in connection.execute(
-                "SELECT * FROM asset_fingerprints WHERE asset_id = ? "
-                "ORDER BY asset_fingerprint_id",
+                "SELECT * FROM asset_fingerprints WHERE asset_id = ? ORDER BY asset_fingerprint_id",
                 (asset_id,),
             )
         ]
@@ -229,9 +225,7 @@ def list_adoption_runs(
         _close_connection(connection, owned)
 
 
-def get_adoption_run(
-    database: CatalogDatabase | Path | str, run_id: int
-) -> dict[str, Any] | None:
+def get_adoption_run(database: CatalogDatabase | Path | str, run_id: int) -> dict[str, Any] | None:
     connection, owned = _connection(database)
     try:
         run = connection.execute(
@@ -242,8 +236,7 @@ def get_adoption_run(
         items = [
             dict(row)
             for row in connection.execute(
-                "SELECT * FROM adoption_items WHERE adoption_run_id = ? "
-                "ORDER BY adoption_item_id",
+                "SELECT * FROM adoption_items WHERE adoption_run_id = ? ORDER BY adoption_item_id",
                 (run_id,),
             )
         ]

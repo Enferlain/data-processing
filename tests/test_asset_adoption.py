@@ -159,12 +159,18 @@ def test_adoption_is_idempotent_and_persists_provenance(tmp_path: Path) -> None:
             database.connection.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0] == 1
         )
         assert database.connection.execute("SELECT COUNT(*) FROM adoption_items").fetchone()[0] == 2
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM asset_fingerprints WHERE fingerprint_kind = 'sha256'"
-        ).fetchone()[0] == 1
-        assert database.connection.execute(
-            "SELECT media_occurrence_id FROM occurrence_assets"
-        ).fetchone()[0] == occurrence_ids[0]
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM asset_fingerprints WHERE fingerprint_kind = 'sha256'"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            database.connection.execute(
+                "SELECT media_occurrence_id FROM occurrence_assets"
+            ).fetchone()[0]
+            == occurrence_ids[0]
+        )
 
 
 def test_partial_failure_continues_and_exact_duplicates_are_queryable(tmp_path: Path) -> None:

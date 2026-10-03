@@ -152,9 +152,10 @@ entity/attribute/value table for everything; that path ends in soup.
   table; kernel capability spec added and synced into the main specs; boundaries re-homed,
   absorbing the two persistence follow-ups. Storage-enforcement gaps filed as Bead
   `data-processing-ts5`.
-- **Phase C — reviewed-target workflow milestone (next):** the pipeline-gap workflow (carry a
-  reviewed target through metadata sync, browsing, and acquisition without manual identifier
-  translation) built against the named kernel.
+- **Phase C — reviewed-target workflow milestone (current; started 2026-10-03, change
+  `generalize-reviewed-target-workflow`):** the pipeline-gap workflow (carry a reviewed target
+  through metadata sync, browsing, and acquisition without manual identifier translation) built
+  against the named kernel.
 - **Phase D — work/version and relationship model plus matching research:** greenfield, designed in
   kernel terms; new data families join when concrete workflows justify them.
 

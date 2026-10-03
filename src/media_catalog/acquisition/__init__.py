@@ -3,9 +3,11 @@
 from media_catalog.acquisition.planning import (
     AcquisitionPlanPreview,
     AcquisitionSelection,
+    ExpansionAcquisitionPreview,
     PlannedAcquisitionItem,
     check_planned_item_current,
     plan_acquisition,
+    plan_expansion_acquisition,
 )
 from media_catalog.acquisition.policies import (
     AIBOORU_MEDIA_POLICY,
@@ -69,6 +71,7 @@ __all__ = [
     "CredentialReference",
     "DanbooruMediaPolicy",
     "E621MediaPolicy",
+    "ExpansionAcquisitionPreview",
     "HTTPTransferEngine",
     "MediaRequestPolicy",
     "PixivMediaPolicy",
@@ -92,6 +95,7 @@ __all__ = [
     "list_retryable_acquisition_items",
     "media_request_policy_for_platform",
     "plan_acquisition",
+    "plan_expansion_acquisition",
     "safe_failure_diagnostic",
     "validate_destination",
     "validate_redirect",

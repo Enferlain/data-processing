@@ -112,9 +112,7 @@ def test_remote_partial_detaches_and_reopens_only_after_prefix_verification(
         staged = resumed.finalize(source_label="remote.bin")
         assert staged.size == len(b"first-second")
         assert staged.sha256 == hashlib.sha256(b"first-second").hexdigest()
-        assert staged.md5 == hashlib.md5(
-            b"first-second", usedforsecurity=False
-        ).hexdigest()
+        assert staged.md5 == hashlib.md5(b"first-second", usedforsecurity=False).hexdigest()
     finally:
         second.close()
 

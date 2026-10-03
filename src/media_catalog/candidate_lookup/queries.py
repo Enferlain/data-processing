@@ -50,7 +50,7 @@ def list_lookup_runs(
         rows = connection.execute(
             f"""SELECT clr.*, platform.platform_key
                 FROM candidate_lookup_runs clr JOIN platforms platform USING(platform_id)
-                WHERE {' AND '.join(clauses)}
+                WHERE {" AND ".join(clauses)}
                 ORDER BY clr.candidate_lookup_run_id LIMIT ?""",
             (*params, limit + 1),
         ).fetchall()

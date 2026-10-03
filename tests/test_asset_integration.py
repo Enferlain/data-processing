@@ -101,9 +101,7 @@ def test_x_likes_paths_adopt_offline_without_changing_the_source(
         assert first.status == "complete"
         assert first.completed_count == 3
         assert catalog.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 2
-        assert (
-            catalog.connection.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0] == 2
-        )
+        assert catalog.connection.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0] == 2
         assert (
             catalog.connection.execute("SELECT COUNT(*) FROM occurrence_assets").fetchone()[0] == 3
         )
@@ -115,9 +113,7 @@ def test_x_likes_paths_adopt_offline_without_changing_the_source(
         assert second.status == "complete"
         assert set(second.outcomes) == {"existing"}
         assert catalog.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 2
-        assert (
-            catalog.connection.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0] == 2
-        )
+        assert catalog.connection.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0] == 2
         assert (
             catalog.connection.execute("SELECT COUNT(*) FROM occurrence_assets").fetchone()[0] == 3
         )
@@ -192,12 +188,15 @@ def test_x_likes_import_after_adoption_preserves_managed_verification(
             "SELECT declared_md5 FROM media_occurrences WHERE source_key = 'x-likes:0'"
         ).fetchone()[0]
         assert declared == "f" * 32
-        assert catalog.connection.execute(
-            """SELECT fingerprint_value FROM asset_fingerprints
+        assert (
+            catalog.connection.execute(
+                """SELECT fingerprint_value FROM asset_fingerprints
                 WHERE fingerprint_kind = 'md5' AND verification_status = 'legacy'
                   AND fingerprint_value = ?""",
-            ("f" * 32,),
-        ).fetchone()[0] == "f" * 32
+                ("f" * 32,),
+            ).fetchone()[0]
+            == "f" * 32
+        )
 
 
 def test_gallery_dl_output_remains_untrusted_until_normal_adoption_succeeds(

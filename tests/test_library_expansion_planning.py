@@ -295,3 +295,138 @@ def test_attribution_without_primary_name_is_not_executable(tmp_path: Path) -> N
 def test_limits_reject_invalid_values(factory: Callable[[], ExpansionLimits]) -> None:
     with pytest.raises(ValueError, match="library expansion"):
         factory()
+
+
+def _identity_candidate(
+    database: CatalogDatabase, subject_id: int, target_id: int, *, key: str
+) -> int:
+    cursor = database.connection.execute(
+        """INSERT INTO account_match_candidates (
+                   candidate_key, subject_account_id, target_account_id,
+                   relation_kind, current_state, score, score_version,
+                   score_components_json, evidence_generation, review_revision,
+                   created_at, updated_at
+               ) VALUES (?, ?, ?, 'same_identity', 'pending', 100, 'test-v1',
+                         '{}', 0, 0, ?, ?)""",
+        (key, subject_id, target_id, NOW, NOW),
+    )
+    assert cursor.lastrowid is not None
+    return cursor.lastrowid
+
+
+def test_unconfirmed_candidates_are_reported_ineligible_with_review_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_connect(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("network access attempted")
+
+    monkeypatch.setattr(socket.socket, "connect", fail_connect)
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            seed_id = _account(writer, "x", "9001", handle="not-a-target")
+            pending_account = _account(writer, "pixiv", "2001")
+            rejected_account = _account(writer, "pixiv", "2002")
+            pending_id = _identity_candidate(database, seed_id, pending_account, key="p" * 64)
+            rejected_id = _identity_candidate(database, seed_id, rejected_account, key="r" * 64)
+        DiscoveryService(database).review(f"account:{rejected_id}", "rejected")
+        plan = plan_library_expansion(database, f"account:{seed_id}")
+
+    reasons = {(item["source"], item["reason"]) for item in plan.exclusions}
+    assert (f"account_candidate:{pending_id}", "review_state_pending") in reasons
+    assert (f"account_candidate:{rejected_id}", "review_state_rejected") in reasons
+    assert plan.choices == ()
+    assert plan.executable is False
+
+
+def test_confirmed_candidate_stays_eligible_while_unconfirmed_are_reported(
+    tmp_path: Path,
+) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            seed_id = _account(writer, "x", "9001", handle="not-a-target")
+            confirmed_account = _account(writer, "pixiv", "2100")
+            pending_account = _account(writer, "pixiv", "2101")
+            confirmed_id = _identity_candidate(database, seed_id, confirmed_account, key="c" * 64)
+            _identity_candidate(database, seed_id, pending_account, key="q" * 64)
+        DiscoveryService(database).review(f"account:{confirmed_id}", "confirmed")
+        plan = plan_library_expansion(database, f"account:{seed_id}")
+
+    assert plan.selected is not None
+    assert plan.selected.target.catalog_id == confirmed_account
+    assert plan.selected.authority.mode.value == "confirmed"
+    assert any(item["reason"] == "review_state_pending" for item in plan.exclusions)
+
+
+def test_post_anchor_reports_unconfirmed_post_candidates_with_review_state(
+    tmp_path: Path,
+) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            author_id = _account(writer, "pixiv", "1001")
+            seed_post = writer.upsert_post(PostRecord("x", "55", NOW)).id
+            target_post = writer.upsert_post(PostRecord("pixiv", "77", NOW)).id
+            writer.add_participant(seed_post, author_id, "author")
+            cursor = database.connection.execute(
+                """INSERT INTO post_match_candidates (
+                           candidate_key, subject_post_id, target_post_id,
+                           relation_kind, current_state, score, score_version,
+                           score_components_json, evidence_generation, review_revision,
+                           created_at, updated_at
+                       ) VALUES (?, ?, ?, 'same_work', 'pending', 100, 'test-v1',
+                                 '{}', 0, 0, ?, ?)""",
+                ("w" * 64, seed_post, target_post, NOW, NOW),
+            )
+            assert cursor.lastrowid is not None
+            candidate_id = cursor.lastrowid
+        plan = plan_library_expansion(database, f"post:{seed_post}")
+
+    reasons = {(item["source"], item["reason"]) for item in plan.exclusions}
+    assert (f"post_candidate:{candidate_id}", "review_state_pending") in reasons
+    assert plan.selected is not None
+    assert plan.selected.target.catalog_id == author_id
+
+
+def test_reversed_candidate_is_reported_ineligible_with_review_state(
+    tmp_path: Path,
+) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            seed_id = _account(writer, "x", "9001", handle="not-a-target")
+            reversed_account = _account(writer, "pixiv", "2200")
+            candidate_id = _identity_candidate(database, seed_id, reversed_account, key="v" * 64)
+        review = DiscoveryService(database)
+        review.review(f"account:{candidate_id}", "confirmed")
+        review.review(f"account:{candidate_id}", "rejected")
+        plan = plan_library_expansion(database, f"account:{seed_id}")
+        decision_count = database.connection.execute(
+            "SELECT COUNT(*) FROM account_candidate_decisions WHERE account_candidate_id = ?",
+            (candidate_id,),
+        ).fetchone()[0]
+
+    reasons = {(item["source"], item["reason"]) for item in plan.exclusions}
+    assert (f"account_candidate:{candidate_id}", "review_state_rejected") in reasons
+    assert all(choice.target.catalog_id != reversed_account for choice in plan.choices)
+    assert decision_count == 2
+
+
+def test_post_anchor_reports_unconfirmed_account_candidates_of_participants(
+    tmp_path: Path,
+) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            author_id = _account(writer, "pixiv", "1001")
+            other_account = _account(writer, "pixiv", "1002")
+            seed_post = writer.upsert_post(PostRecord("x", "56", NOW)).id
+            writer.add_participant(seed_post, author_id, "author")
+            candidate_id = _identity_candidate(database, author_id, other_account, key="u" * 64)
+        plan = plan_library_expansion(database, f"post:{seed_post}")
+
+    reasons = {(item["source"], item["reason"]) for item in plan.exclusions}
+    assert (f"account_candidate:{candidate_id}", "review_state_pending") in reasons
+    assert plan.selected is not None
+    assert plan.selected.target.catalog_id == author_id

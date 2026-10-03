@@ -29,8 +29,10 @@ def _case(suite_name: str, case_name: str) -> FixtureCase:
 
 def _adapter(instance=DANBOORU, handler=None, credentials=None) -> DanbooruAdapter:
     if handler is None:
+
         def handler(request):
             return httpx.Response(500, json={"message": "unused"})
+
     return DanbooruAdapter(
         instance,
         client=httpx.Client(transport=httpx.MockTransport(handler)),

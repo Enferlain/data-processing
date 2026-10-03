@@ -364,7 +364,15 @@ the existing `catalog metadata pixiv-account-artworks` command as a separate exp
 ## Expand a reviewed artist library
 
 Library expansion connects a stable catalog account or provider attribution to bounded metadata
-enumeration. Planning is offline and read-only:
+enumeration. Check which enumeration operations apply to a stable target first — the capabilities
+view is offline and reports the provider, capability key and version, operation, and adapter and
+schema versions, or an explicit unsupported marker with a bounded reason:
+
+```bash
+uv run catalog library capabilities catalog-output/catalog.sqlite3 --target account:12 --json
+```
+
+Planning is offline and read-only:
 
 ```bash
 uv run catalog library plan catalog-output/catalog.sqlite3 account:12 --json
@@ -375,10 +383,13 @@ uv run catalog library plan catalog-output/catalog.sqlite3 post:42 \
 The plan reports the supported provider operation, target revision, confirmed-review or explicit
 authority, ambiguity, exclusions, limits, and any retained count estimate. It never searches by
 handle, display name, artist tag, alias, or free text, and it never treats a booru uploader as the
-artist. Multiple eligible targets require `--target`; an explicit override also requires a bounded
-selection note. A changed account snapshot, attribution record, review relationship, authorship
-record, or capability makes the old plan stale before a remote run is created. A later count probe
-is an observation, not a target change, so it does not invalidate an existing plan.
+artist. Related accounts or posts that are only pending or rejected match candidates appear in
+the exclusions with their review state (`review_state_pending`, `review_state_rejected`) instead of
+being silently omitted; they never become expansion targets. Multiple eligible targets require
+`--target`; an explicit override also requires a bounded selection note. A changed account
+snapshot, attribution record, review relationship, authorship record, or capability makes the old
+plan stale before a remote run is created. A later count probe is an observation, not a target
+change, so it does not invalidate an existing plan.
 
 Count probing and enumeration are separate explicit commands:
 
@@ -441,8 +452,19 @@ for that later observation.
 uv run catalog media list catalog-output/catalog.sqlite3 \
   --expansion-plan-id PLAN_ID --json
 uv run catalog assets download-plan catalog-output/catalog.sqlite3 \
+  --library-plan PLAN_ID --variant original --json
+uv run catalog assets download-plan catalog-output/catalog.sqlite3 \
   --select OCCURRENCE_ID:VARIANT --json
 ```
+
+`--library-plan` resolves the whole committed expansion offline: available occurrences are
+selected under the fixed criteria (`--variant`, `--availability`, `--max-items`), posts flagged
+`details_required` are counted instead of selected, and occurrences beyond the item limit are
+reported as `excluded_by_limit` rather than silently dropped. The preview's selection digest
+matches an equivalent explicit `--select` plan. e621 requires an explicit `--variant` of
+`original`, `sample`, or `preview`; its generic default is reported as an unsupported-variant
+exclusion per item. Planning stays offline, and `catalog assets download` remains the separate
+explicit network step.
 
 Normal output omits rendered artist queries, provider URLs, raw response bodies, credentials,
 signed media parameters, and private paths. Expansion does not choose quality, download files, or

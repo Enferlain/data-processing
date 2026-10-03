@@ -52,11 +52,7 @@ def _seed(database: CatalogDatabase, pixiv: bytes, danbooru: bytes | None = None
             hashlib.md5(pixiv, usedforsecurity=False).hexdigest(),
             len(pixiv),
             json.dumps(
-                {
-                    "variants": [
-                        {"role": "original", "url": "https://i.pximg.net/100_p0.png"}
-                    ]
-                }
+                {"variants": [{"role": "original", "url": "https://i.pximg.net/100_p0.png"}]}
             ),
             NOW,
         ),
@@ -86,11 +82,7 @@ def _seed(database: CatalogDatabase, pixiv: bytes, danbooru: bytes | None = None
             hashlib.md5(danbooru, usedforsecurity=False).hexdigest(),
             len(danbooru),
             json.dumps(
-                {
-                    "variants": [
-                        {"role": "original", "url": "https://cdn.donmai.us/200.png"}
-                    ]
-                }
+                {"variants": [{"role": "original", "url": "https://cdn.donmai.us/200.png"}]}
             ),
             NOW,
         ),
@@ -135,9 +127,7 @@ def test_executes_pixiv_and_danbooru_serially_with_shared_cas_deduplication(
                 database,
                 HTTPTransferEngine(client),
                 managed,
-                inspection_limits=InspectionLimits(
-                    max_bytes=5000, max_pixels=1000, max_frames=10
-                ),
+                inspection_limits=InspectionLimits(max_bytes=5000, max_pixels=1000, max_frames=10),
                 clock=lambda: NOW,
             ).execute(preview, _limits())
 
@@ -145,15 +135,18 @@ def test_executes_pixiv_and_danbooru_serially_with_shared_cas_deduplication(
         assert summary.completed_count == 2
         assert len(requests) == 2
         assert database.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 1
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM occurrence_assets"
-        ).fetchone()[0] == 2
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM asset_locations"
-        ).fetchone()[0] == 1
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM media_acquisition_attempts"
-        ).fetchone()[0] == 2
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM occurrence_assets").fetchone()[0] == 2
+        )
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0] == 1
+        )
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_attempts"
+            ).fetchone()[0]
+            == 2
+        )
         location = database.connection.execute(
             "SELECT relative_path FROM asset_locations"
         ).fetchone()[0]
@@ -250,9 +243,12 @@ def test_database_interruption_after_publication_reconciles_without_redownload(
         assert first.status == "failed"
         assert calls == 1
         assert database.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM media_acquisition_run_items WHERE sha256 IS NOT NULL"
-        ).fetchone()[0] == 1
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_run_items WHERE sha256 IS NOT NULL"
+            ).fetchone()[0]
+            == 1
+        )
 
         monkeypatch.setattr(publication_module, "_persist_asset", original_persist)
         with httpx.Client(transport=httpx.MockTransport(handler)) as client:
@@ -306,9 +302,12 @@ def test_retry_claims_durable_partial_and_resumes_with_range(tmp_path: Path) -> 
                 clock=lambda: NOW,
             ).execute(preview, AcquisitionLimits(1, 5000, 5000, 1, 30, 3, 5000))
         assert interrupted.outcome == "interrupted"
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM media_acquisition_partials WHERE state = 'active'"
-        ).fetchone()[0] == 1
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_partials WHERE state = 'active'"
+            ).fetchone()[0]
+            == 1
+        )
         resume_offset = int(
             database.connection.execute(
                 "SELECT byte_count FROM media_acquisition_partials WHERE state = 'active'"
@@ -326,9 +325,7 @@ def test_retry_claims_durable_partial_and_resumes_with_range(tmp_path: Path) -> 
                 headers={
                     "Content-Type": "image/png",
                     "Content-Length": str(len(payload) - resume_offset),
-                    "Content-Range": (
-                        f"bytes {resume_offset}-{len(payload) - 1}/{len(payload)}"
-                    ),
+                    "Content-Range": (f"bytes {resume_offset}-{len(payload) - 1}/{len(payload)}"),
                     "ETag": '"strong-v1"',
                 },
                 content=payload[resume_offset:],
@@ -340,12 +337,18 @@ def test_retry_claims_durable_partial_and_resumes_with_range(tmp_path: Path) -> 
             ).retry(interrupted.acquisition_run_id)
         assert recovered.complete
         assert len(requests) == 1
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM media_acquisition_attempts"
-        ).fetchone()[0] == 2
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM media_acquisition_partials WHERE state = 'active'"
-        ).fetchone()[0] == 0
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_attempts"
+            ).fetchone()[0]
+            == 2
+        )
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_partials WHERE state = 'active'"
+            ).fetchone()[0]
+            == 0
+        )
         predecessor = database.connection.execute(
             "SELECT resumed_from_run_id FROM media_acquisition_runs WHERE acquisition_run_id = ?",
             (recovered.acquisition_run_id,),
@@ -380,14 +383,15 @@ def test_retry_excludes_nonretryable_items_unless_explicit(tmp_path: Path) -> No
             failed = service.execute(preview, _limits())
             with pytest.raises(ValueError, match="no selected retry items"):
                 service.retry(failed.acquisition_run_id)
-            retried = service.retry(
-                failed.acquisition_run_id, include_nonretryable=True
-            )
+            retried = service.retry(failed.acquisition_run_id, include_nonretryable=True)
         assert retried.status == "failed"
         assert calls == 2
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM media_acquisition_attempts"
-        ).fetchone()[0] == 2
+        assert (
+            database.connection.execute(
+                "SELECT COUNT(*) FROM media_acquisition_attempts"
+            ).fetchone()[0]
+            == 2
+        )
 
 
 def test_midstream_budget_exhaustion_retains_partial_and_retries_by_default(
@@ -454,9 +458,7 @@ def test_midstream_budget_exhaustion_retains_partial_and_retries_by_default(
                 headers={
                     "Content-Type": "image/png",
                     "Content-Length": str(len(remainder)),
-                    "Content-Range": (
-                        f"bytes {resume_offset}-{len(payload) - 1}/{len(payload)}"
-                    ),
+                    "Content-Range": (f"bytes {resume_offset}-{len(payload) - 1}/{len(payload)}"),
                     "ETag": '"budget-v1"',
                 },
                 content=remainder,
@@ -522,9 +524,12 @@ def test_running_attempt_is_recovered_as_interrupted_before_retry(tmp_path: Path
                 "SELECT acquisition_run_id FROM media_acquisition_runs"
             ).fetchone()[0]
         )
-        assert database.connection.execute(
-            "SELECT state FROM media_acquisition_attempts"
-        ).fetchone()[0] == "running"
+        assert (
+            database.connection.execute("SELECT state FROM media_acquisition_attempts").fetchone()[
+                0
+            ]
+            == "running"
+        )
 
         calls = 0
 
@@ -545,10 +550,13 @@ def test_running_attempt_is_recovered_as_interrupted_before_retry(tmp_path: Path
             (run_id,),
         ).fetchone()
         assert tuple(predecessor) == ("partial", "interrupted")
-        assert database.connection.execute(
-            "SELECT state FROM media_acquisition_attempts "
-            "WHERE acquisition_run_item_id IN ("
-            "SELECT acquisition_run_item_id FROM media_acquisition_run_items "
-            "WHERE acquisition_run_id = ?)",
-            (run_id,),
-        ).fetchone()[0] == "interrupted"
+        assert (
+            database.connection.execute(
+                "SELECT state FROM media_acquisition_attempts "
+                "WHERE acquisition_run_item_id IN ("
+                "SELECT acquisition_run_item_id FROM media_acquisition_run_items "
+                "WHERE acquisition_run_id = ?)",
+                (run_id,),
+            ).fetchone()[0]
+            == "interrupted"
+        )

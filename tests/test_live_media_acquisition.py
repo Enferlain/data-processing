@@ -39,12 +39,13 @@ def _live_download(
         selected_url=url,
     )
     timeout = httpx.Timeout(10.0, read=20.0)
-    with httpx.Client(timeout=timeout) as client, AssetStorage.for_remote(
-        managed,
-        limits=InspectionLimits(
-            max_bytes=MAX_BYTES, max_pixels=100_000_000, max_frames=100
-        ),
-    ) as storage:
+    with (
+        httpx.Client(timeout=timeout) as client,
+        AssetStorage.for_remote(
+            managed,
+            limits=InspectionLimits(max_bytes=MAX_BYTES, max_pixels=100_000_000, max_frames=100),
+        ) as storage,
+    ):
         result = HTTPTransferEngine(client).transfer(
             recipe,
             storage,

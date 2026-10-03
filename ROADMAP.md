@@ -47,8 +47,7 @@ deliberately deferred.
 ## Current state
 
 The `add-artist-library-expansion` milestone is complete and archived. The `add-e621-metadata-adapter`
-OpenSpec change under Bead `data-processing-7cy` is complete and its remaining archive step is tracked
-separately.
+OpenSpec change under Bead `data-processing-7cy` is complete and archived.
 
 The `add-gelbooru-metadata-adapter` OpenSpec change under Bead `data-processing-fql` is complete and
 archived (2026-10-02): all 37 tasks implemented, two review passes addressed, delta specs synced into
@@ -64,6 +63,11 @@ plan's mapping is verified against migrations 0001-0011, the standalone `provena
 capability spec is synced into the main specs (now 15 capabilities), and the two persistence
 follow-ups are absorbed. Remaining storage-enforcement gaps are filed as Bead
 `data-processing-ts5`.
+
+The reviewed-target workflow milestone (kernel Phase C, Bead `data-processing-iso`) is complete
+and archived (2026-10-03): the OpenSpec change `generalize-reviewed-target-workflow` was
+implemented, reviewed by two independent review passes whose findings were folded in, and
+archived with its delta specs synced into the main specs. All quality gates green.
 
 Live task state can be checked with:
 
@@ -272,12 +276,34 @@ milestones build against a boundary instead of baking media assumptions deeper. 
 Explicitly excluded, as planned: table renames, data migration, adapter behavior changes, and
 speculative abstractions without a second consumer.
 
+## Completed milestone: reviewed-target workflow (kernel Phase C)
+
+Carried a reviewed target through the lower pipeline without manual identifier translation, by
+generalizing the existing `catalog library` engine rather than adding a second orchestration
+surface. Delivered (2026-10-03, Bead `data-processing-iso`, archived change
+`generalize-reviewed-target-workflow`):
+
+- reviewed-target resolution reports pending and rejected account and post candidates as
+  ineligible with their review state instead of silently filtering them, for account anchors and
+  post anchors alike;
+- an offline `catalog library capabilities` view reports the enumeration operations (or explicit
+  unsupported markers) for any stable account or attribution target;
+- `catalog assets download-plan --library-plan` resolves acquisition selections from a committed
+  expansion's associations offline under a fixed criteria set (variant, availability, eligibility,
+  item limit), with `details_required` and `excluded_by_limit` reporting and a selection digest
+  identical to an equivalent explicit `--select` plan;
+- provider-path proof complete for all four registered capabilities: Danbooru resume coverage and
+  AIBooru execution and resume coverage added, a per-provider pause/resume matrix across Pixiv,
+  Danbooru, AIBooru, and e621, all on the existing checkpoint contracts.
+
+The workflow terminal is a ready acquisition plan; downloads remain an explicit separate action.
+No new tables, engines, or provider primitives were added.
+
 ## Current milestone: none active
 
 Pick the next milestone from **Planned after the current milestone** when a concrete workflow
-justifies it — the leading candidate per the pipeline gap analysis is a cohesive workflow that
-carries a reviewed target through metadata sync, browsing, and acquisition without manual
-identifier translation between commands, now built against the named kernel.
+justifies it. `data-processing-ts5` (closing the provenance-kernel storage-enforcement gaps) is
+the filed follow-up ready to work.
 
 ## Planned after the current milestone
 

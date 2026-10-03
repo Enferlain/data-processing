@@ -170,12 +170,12 @@ def test_metadata_sync_retry_retention_and_result_json_remain_observable(tmp_pat
             "retry_after",
             "diagnostic",
         }
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM remote_requests"
-        ).fetchone()[0] == 2
-        assert database.connection.execute(
-            "SELECT COUNT(*) FROM raw_observations"
-        ).fetchone()[0] == 2
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM remote_requests").fetchone()[0] == 2
+        )
+        assert (
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 2
+        )
 
 
 def test_whole_page_admission_happens_before_page_commit() -> None:

@@ -212,25 +212,23 @@ def test_listing_is_keyset_paginated_and_filters_without_duplicate_rows(
         assert [row["media_occurrence_id"] for row in second["results"]] == [11]
 
         assert [
-            row["media_occurrence_id"]
-            for row in service.list(author="pixiv:10")["results"]
+            row["media_occurrence_id"] for row in service.list(author="pixiv:10")["results"]
         ] == [10, 11]
         assert [
-            row["media_occurrence_id"]
-            for row in service.list(post="pixiv:100")["results"]
+            row["media_occurrence_id"] for row in service.list(post="pixiv:100")["results"]
         ] == [10, 11]
         assert [
-            row["media_occurrence_id"]
-            for row in service.list(platform="danbooru")["results"]
+            row["media_occurrence_id"] for row in service.list(platform="danbooru")["results"]
         ] == [12]
         assert [
             row["media_occurrence_id"]
             for row in service.list(availability="unavailable")["results"]
         ] == [11]
         assert [row["media_occurrence_id"] for row in service.list(linked=True)["results"]] == [10]
-        assert [
-            row["media_occurrence_id"] for row in service.list(linked=False)["results"]
-        ] == [11, 12]
+        assert [row["media_occurrence_id"] for row in service.list(linked=False)["results"]] == [
+            11,
+            12,
+        ]
         assert [
             row["media_occurrence_id"]
             for row in service.list(
@@ -304,9 +302,9 @@ def test_detail_matches_planner_and_redacts_urls_payloads_and_paths(tmp_path: Pa
         malformed = get_media_occurrence(database, 11)
         assert malformed is not None
         assert malformed["occurrence"]["variants"][0]["eligibility"] == "excluded"
-        assert malformed["occurrence"]["variants"][0][
-            "exclusion_reason"
-        ] == "unavailable_occurrence"
+        assert (
+            malformed["occurrence"]["variants"][0]["exclusion_reason"] == "unavailable_occurrence"
+        )
         malformed_plan = plan_acquisition(
             database,
             [AcquisitionSelection(11, "primary")],
@@ -422,21 +420,22 @@ def test_variant_parity_covers_archive_ambiguous_booru_and_unsupported(
             by_key = {item.variant_key: item.as_dict() for item in planned.items}
             for variant in variants:
                 assert variant["eligibility"] == by_key[variant["key"]]["eligibility"]
-                assert variant["exclusion_reason"] == by_key[variant["key"]][
-                    "exclusion_reason"
-                ]
+                assert variant["exclusion_reason"] == by_key[variant["key"]]["exclusion_reason"]
         assert {
             item["key"] for item in get_media_occurrence(database, 13)["occurrence"]["variants"]
         } == {"archive", "primary"}
-        assert get_media_occurrence(database, 14)["occurrence"]["variants"][0][
-            "exclusion_reason"
-        ] == "ambiguous_variant"
-        assert get_media_occurrence(database, 15)["occurrence"]["variants"][0][
-            "exclusion_reason"
-        ] == "unsupported_provider"
-        assert get_media_occurrence(database, 16)["occurrence"]["variants"][0][
-            "exclusion_reason"
-        ] == "invalid_variants"
+        assert (
+            get_media_occurrence(database, 14)["occurrence"]["variants"][0]["exclusion_reason"]
+            == "ambiguous_variant"
+        )
+        assert (
+            get_media_occurrence(database, 15)["occurrence"]["variants"][0]["exclusion_reason"]
+            == "unsupported_provider"
+        )
+        assert (
+            get_media_occurrence(database, 16)["occurrence"]["variants"][0]["exclusion_reason"]
+            == "invalid_variants"
+        )
 
 
 def test_path_queries_are_read_only_and_do_not_create_sidecars(tmp_path: Path) -> None:

@@ -9,7 +9,11 @@ from media_catalog.library.contracts import (
     ExpansionTargetChoice,
     LibraryExpansionPlan,
 )
-from media_catalog.library.planning import plan_library_expansion, replan_library_execution
+from media_catalog.library.planning import (
+    plan_library_expansion,
+    replan_library_execution,
+    target_capabilities,
+)
 from media_catalog.library.probes import (
     CountProbeResult,
     LibraryCountProbeService,
@@ -42,4 +46,5 @@ __all__ = [
     "materialize_expansion_plan",
     "plan_library_expansion",
     "replan_library_execution",
+    "target_capabilities",
 ]

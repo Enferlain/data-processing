@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from media_catalog.adapters import AdapterOperation
-from media_catalog.adapters.danbooru import DANBOORU, DanbooruAdapter
+from media_catalog.adapters.danbooru import AIBOORU, DANBOORU, DanbooruAdapter
 from media_catalog.adapters.pixiv import PixivAdapter
 from media_catalog.database import CatalogDatabase
 from media_catalog.library import (
@@ -325,6 +325,185 @@ def test_origin_binding_failure_rolls_back_run_before_network(tmp_path: Path) ->
 
         assert database.connection.execute("SELECT COUNT(*) FROM remote_runs").fetchone()[0] == 0
     assert calls == 0
+
+
+def test_danbooru_attribution_expansion_pauses_and_resumes_from_committed_keyset(
+    tmp_path: Path,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        page = request.url.params.get("page")
+        if page is None:
+            return httpx.Response(200, json=[{"id": 5001}])
+        if page == "b5001":
+            return httpx.Response(200, json=[{"id": 5002}])
+        return httpx.Response(200, json=[])
+
+    limits = ExpansionLimits(requests=2, pages=4, records=10, seconds=60)
+
+    def danbooru_plan(database: CatalogDatabase, *, seed_id: int, attribution_id: int):
+        return plan_library_expansion(
+            database,
+            f"account:{seed_id}",
+            target=f"attribution:{attribution_id}",
+            selection_note="selected provider attribution",
+            limits=limits,
+        )
+
+    def danbooru_service(database: CatalogDatabase):
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        adapter = DanbooruAdapter(DANBOORU, client=client, clock=lambda: NOW)
+        return (
+            ArtistLibraryExpansionService(
+                database,
+                adapter,
+                minimum_interval_seconds=0,
+                maximum_retries=0,
+                clock=lambda: NOW,
+            ),
+            client,
+        )
+
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            seed_id = writer.upsert_account(AccountRecord("x", "9001", NOW)).id
+            attribution_id = writer.upsert_attribution(
+                AttributionRecord(
+                    "danbooru",
+                    "44",
+                    "danbooru-native-v1",
+                    NOW,
+                    primary_name="artist_a",
+                )
+            ).id
+        plan = danbooru_plan(database, seed_id=seed_id, attribution_id=attribution_id)
+        first_service, first_client = danbooru_service(database)
+        try:
+            first = first_service.run(plan)
+        finally:
+            first_client.close()
+        later = danbooru_plan(database, seed_id=seed_id, attribution_id=attribution_id)
+        assert later.digest == plan.digest
+        second_service, second_client = danbooru_service(database)
+        try:
+            second = second_service.resume(later, first.library_expansion_execution_id)
+        finally:
+            second_client.close()
+        posts = database.connection.execute(
+            "SELECT native_post_id FROM posts ORDER BY native_post_id"
+        ).fetchall()
+        lineage = database.connection.execute(
+            """SELECT execution_kind, predecessor_execution_id
+                 FROM library_expansion_executions
+                ORDER BY library_expansion_execution_id"""
+        ).fetchall()
+        origins = database.connection.execute(
+            "SELECT origin_reference FROM remote_runs ORDER BY remote_run_id"
+        ).fetchall()
+
+    assert first.sync.status == "paused"
+    assert first.sync.budget_boundary == "request"
+    assert second.sync.status == "complete"
+    assert [row[0] for row in posts] == ["5001", "5002"]
+    assert tuple(lineage[0]) == ("initial", None)
+    assert tuple(lineage[1]) == ("resume", first.library_expansion_execution_id)
+    assert [row[0] for row in origins] == [plan.digest, plan.digest]
+    assert len(requests) == 3
+    assert requests[0].url.params.get("page") is None
+    assert requests[1].url.params["page"] == "b5001"
+    assert requests[2].url.params["page"] == "b5002"
+    assert requests[0].url.params["tags"] == "artist_a"
+
+
+def test_aibooru_attribution_expansion_executes_pauses_and_resumes(
+    tmp_path: Path,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        page = request.url.params.get("page")
+        if page is None:
+            return httpx.Response(200, json=[{"id": 7001}])
+        if page == "b7001":
+            return httpx.Response(200, json=[{"id": 7002}])
+        return httpx.Response(200, json=[])
+
+    limits = ExpansionLimits(requests=2, pages=4, records=10, seconds=60)
+
+    def aibooru_plan(database: CatalogDatabase, *, seed_id: int, attribution_id: int):
+        return plan_library_expansion(
+            database,
+            f"account:{seed_id}",
+            target=f"attribution:{attribution_id}",
+            selection_note="selected provider attribution",
+            limits=limits,
+        )
+
+    def aibooru_service(database: CatalogDatabase):
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        adapter = DanbooruAdapter(AIBOORU, client=client, clock=lambda: NOW)
+        return (
+            ArtistLibraryExpansionService(
+                database,
+                adapter,
+                minimum_interval_seconds=0,
+                maximum_retries=0,
+                clock=lambda: NOW,
+            ),
+            client,
+        )
+
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            seed_id = writer.upsert_account(AccountRecord("x", "9100", NOW)).id
+            attribution_id = writer.upsert_attribution(
+                AttributionRecord(
+                    "aibooru",
+                    "55",
+                    "aibooru-native-v1",
+                    NOW,
+                    primary_name="artist_b",
+                )
+            ).id
+        plan = aibooru_plan(database, seed_id=seed_id, attribution_id=attribution_id)
+        first_service, first_client = aibooru_service(database)
+        try:
+            first = first_service.run(plan)
+        finally:
+            first_client.close()
+        later = aibooru_plan(database, seed_id=seed_id, attribution_id=attribution_id)
+        assert later.digest == plan.digest
+        second_service, second_client = aibooru_service(database)
+        try:
+            second = second_service.resume(later, first.library_expansion_execution_id)
+        finally:
+            second_client.close()
+        posts = database.connection.execute(
+            "SELECT native_post_id FROM posts ORDER BY native_post_id"
+        ).fetchall()
+        lineage = database.connection.execute(
+            """SELECT execution_kind, predecessor_execution_id
+                 FROM library_expansion_executions
+                ORDER BY library_expansion_execution_id"""
+        ).fetchall()
+
+    assert first.sync.status == "paused"
+    assert first.sync.budget_boundary == "request"
+    assert second.sync.status == "complete"
+    assert [row[0] for row in posts] == ["7001", "7002"]
+    assert tuple(lineage[0]) == ("initial", None)
+    assert tuple(lineage[1]) == ("resume", first.library_expansion_execution_id)
+    assert len(requests) == 3
+    assert requests[0].url.params.get("page") is None
+    assert requests[1].url.params["page"] == "b7001"
+    assert requests[2].url.params["page"] == "b7002"
+    assert requests[0].url.params["tags"] == "artist_b"
+    assert requests[0].url.host == "aibooru.online"
 
 
 def test_danbooru_attribution_renders_retained_primary_name_privately(tmp_path: Path) -> None:

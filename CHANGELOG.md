@@ -17,6 +17,21 @@ Rules:
 
 ### Added
 
+- **The reviewed-target workflow lands (kernel Phase C)** — OpenSpec change
+  `generalize-reviewed-target-workflow`: a new offline `catalog library capabilities` view reports
+  the enumeration operations (or explicit unsupported markers) for any stable account or
+  attribution target; target resolution now reports pending/rejected candidates as ineligible
+  with their review state instead of silently filtering them; `catalog assets download-plan
+  --library-plan` resolves acquisition selections from a committed expansion's associations
+  offline under a fixed criteria set (variant, availability, eligibility, item limit), reporting
+  `details_required` posts and `excluded_by_limit` counts, with the preview matching an equivalent
+  explicit `--select` plan; and provider-path proof is complete for all four registered
+  capabilities — new Danbooru and AIBooru checkpoint/resume coverage plus a per-provider
+  pause/resume matrix test alongside the already-proven Pixiv and e621 paths. Upgrade note:
+  resolution now emits `review_state_*` exclusions for unconfirmed candidates, which changes
+  replan digests for seeds with such candidates — paused expansions created before the upgrade
+  fail closed as stale on resume and must be re-planned and re-run.
+
 - **The provenance-kernel direction is adopted** — a new `docs/plans/provenance-kernel.md` defines
   the domain-neutral vocabulary (source, source object, observation, provenance event, blob,
   representation,

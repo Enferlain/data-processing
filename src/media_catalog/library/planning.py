@@ -86,6 +86,56 @@ def expansion_capability(
     return _CAPABILITIES.get((provider, target_kind))
 
 
+def target_capabilities(database: DatabaseSource, target: str) -> dict[str, object]:
+    """Offline enumeration-capability view for one stable account or attribution target."""
+    connection, owns_connection = _connection(database)
+    try:
+        kind, database_id = _parse_reference(target, label="capabilities target")
+        if kind == "post":
+            raise ValueError("capabilities target must use account:ID or attribution:ID")
+        if kind == "account":
+            row = connection.execute(
+                """SELECT a.availability, p.platform_key
+                     FROM accounts a JOIN platforms p USING(platform_id)
+                    WHERE a.account_id = ?""",
+                (database_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("capabilities target account not found")
+        else:
+            row = connection.execute(
+                """SELECT ae.availability, p.platform_key
+                     FROM attribution_entities ae JOIN platforms p USING(platform_id)
+                    WHERE ae.attribution_entity_id = ?""",
+                (database_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("capabilities target attribution not found")
+        provider = str(row["platform_key"])
+        target_kind = (
+            ExpansionTargetKind.ACCOUNT if kind == "account" else ExpansionTargetKind.ATTRIBUTION
+        )
+        capability = expansion_capability(provider, target_kind)
+        view: dict[str, object] = {
+            "target": {
+                "kind": kind,
+                "catalog_id": database_id,
+                "provider": provider,
+                "availability": str(row["availability"]),
+                "reference": f"{kind}:{database_id}",
+            },
+            "supported": capability is not None,
+        }
+        if capability is None:
+            view["reason"] = f"no enumeration capability for {kind} targets on {provider}"
+        else:
+            view["capability"] = capability.as_dict()
+        return view
+    finally:
+        if owns_connection:
+            connection.close()
+
+
 def _connection(database: DatabaseSource) -> tuple[sqlite3.Connection, bool]:
     if isinstance(database, CatalogDatabase):
         snapshot = sqlite3.connect(":memory:")
@@ -469,6 +519,21 @@ def _candidate_choices(
     choices: list[ExpansionTargetChoice] = []
     exclusions: list[dict[str, str]] = []
     if seed_kind == "account":
+        for row in connection.execute(
+            """SELECT account_candidate_id, current_state
+                 FROM account_match_candidates
+                WHERE relation_kind = 'same_identity'
+                  AND current_state IN ('pending', 'rejected')
+                  AND (subject_account_id = ? OR target_account_id = ?)
+                ORDER BY account_candidate_id""",
+            (seed_id, seed_id),
+        ):
+            exclusions.append(
+                {
+                    "source": f"account_candidate:{row['account_candidate_id']}",
+                    "reason": f"review_state_{row['current_state']}",
+                }
+            )
         try:
             choices.append(
                 _choice(
@@ -513,6 +578,38 @@ def _candidate_choices(
                 )
             )
     else:
+        for row in connection.execute(
+            """SELECT account_candidate_id, current_state
+                 FROM account_match_candidates
+                WHERE relation_kind = 'same_identity'
+                  AND current_state IN ('pending', 'rejected')
+                  AND (subject_account_id IN (SELECT account_id FROM post_participants
+                                               WHERE post_id = ?)
+                    OR target_account_id IN (SELECT account_id FROM post_participants
+                                              WHERE post_id = ?))
+                ORDER BY account_candidate_id""",
+            (seed_id, seed_id),
+        ):
+            exclusions.append(
+                {
+                    "source": f"account_candidate:{row['account_candidate_id']}",
+                    "reason": f"review_state_{row['current_state']}",
+                }
+            )
+        for row in connection.execute(
+            """SELECT post_candidate_id, current_state
+                 FROM post_match_candidates
+                WHERE current_state IN ('pending', 'rejected')
+                  AND (subject_post_id = ? OR target_post_id = ?)
+                ORDER BY post_candidate_id""",
+            (seed_id, seed_id),
+        ):
+            exclusions.append(
+                {
+                    "source": f"post_candidate:{row['post_candidate_id']}",
+                    "reason": f"review_state_{row['current_state']}",
+                }
+            )
         for row in connection.execute(
             """SELECT account_id, role, raw_observation_id
                  FROM post_participants

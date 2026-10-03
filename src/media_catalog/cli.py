@@ -13,6 +13,7 @@ from media_catalog.acquisition import (
     AcquisitionService,
     HTTPTransferEngine,
     plan_acquisition,
+    plan_expansion_acquisition,
 )
 from media_catalog.adapters import AdapterOperation, LookupPlanConfiguration
 from media_catalog.adapters.danbooru import (
@@ -46,6 +47,7 @@ from media_catalog.library import (
     LibraryExpansionQueryService,
     plan_library_expansion,
     replan_library_execution,
+    target_capabilities,
 )
 from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
@@ -269,12 +271,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     download_plan = asset_commands.add_parser("download-plan")
     download_plan.add_argument("catalog", type=Path)
-    download_plan.add_argument(
+    selection = download_plan.add_mutually_exclusive_group(required=True)
+    selection.add_argument(
         "--select",
         action="append",
-        required=True,
         metavar="OCCURRENCE[:VARIANT]",
     )
+    selection.add_argument("--library-plan", type=int, metavar="PLAN_ID")
+    download_plan.add_argument("--variant")
+    download_plan.add_argument("--availability")
     download_plan.add_argument("--max-items", type=int, default=100)
     _add_json(download_plan)
 
@@ -427,6 +432,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     library = commands.add_parser("library")
     library_commands = library.add_subparsers(dest="library_command", required=True)
+    library_capabilities = library_commands.add_parser("capabilities")
+    library_capabilities.add_argument("catalog", type=Path)
+    library_capabilities.add_argument(
+        "--target", metavar="ACCOUNT:ID|ATTRIBUTION:ID", required=True
+    )
+    _add_json(library_capabilities)
     for name in ("plan", "probe", "run"):
         _add_library_plan_arguments(library_commands.add_parser(name))
     library_resume = library_commands.add_parser("resume")
@@ -572,11 +583,22 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.command == "assets":
         catalog_label = public_path(arguments.catalog)
         if arguments.asset_command == "download-plan":
-            preview = plan_acquisition(
-                arguments.catalog,
-                _parse_acquisition_selections(arguments.select),
-                max_items=arguments.max_items,
-            )
+            if arguments.library_plan is not None:
+                preview = plan_expansion_acquisition(
+                    arguments.catalog,
+                    arguments.library_plan,
+                    variant=arguments.variant,
+                    availability=arguments.availability or "available",
+                    max_items=arguments.max_items,
+                )
+            else:
+                if arguments.variant is not None or arguments.availability is not None:
+                    raise ValueError("--variant/--availability require --library-plan")
+                preview = plan_acquisition(
+                    arguments.catalog,
+                    _parse_acquisition_selections(arguments.select),
+                    max_items=arguments.max_items,
+                )
             return {"catalog": catalog_label, "status": "planned", **preview.as_dict()}
         if arguments.asset_command in {"download-runs", "download-run-show"}:
             queries = AcquisitionQueryService(arguments.catalog)
@@ -863,6 +885,11 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             return _execute_lookup(arguments, catalog_label, service, limits)
     if arguments.command == "library":
         catalog_label = public_path(arguments.catalog)
+        if arguments.library_command == "capabilities":
+            return {
+                "catalog": catalog_label,
+                **target_capabilities(arguments.catalog, arguments.target),
+            }
         if arguments.library_command in {"runs", "show"}:
             queries = LibraryExpansionQueryService(arguments.catalog)
             if arguments.library_command == "runs":

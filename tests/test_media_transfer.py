@@ -59,9 +59,10 @@ def test_streams_fixed_chunks_into_descriptor_bound_staging(tmp_path: Path) -> N
             content=b"abcdef",
         )
 
-    with _storage(tmp_path / "managed") as storage, httpx.Client(
-        transport=httpx.MockTransport(handler)
-    ) as client:
+    with (
+        _storage(tmp_path / "managed") as storage,
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+    ):
         result = HTTPTransferEngine(client).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
         )
@@ -85,9 +86,10 @@ def test_manual_redirects_validate_each_hop_before_request(tmp_path: Path) -> No
             return httpx.Response(302, headers={"Location": "/next.jpg"})
         return httpx.Response(200, headers={"Content-Type": "image/jpeg"}, content=b"ok")
 
-    with _storage(tmp_path / "allowed") as storage, httpx.Client(
-        transport=httpx.MockTransport(allowed_handler)
-    ) as client:
+    with (
+        _storage(tmp_path / "allowed") as storage,
+        httpx.Client(transport=httpx.MockTransport(allowed_handler)) as client,
+    ):
         result = HTTPTransferEngine(client).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
         )
@@ -106,9 +108,10 @@ def test_manual_redirects_validate_each_hop_before_request(tmp_path: Path) -> No
             headers={"Location": "https://example.com/private.jpg?token=leak"},
         )
 
-    with _storage(tmp_path / "blocked") as storage, httpx.Client(
-        transport=httpx.MockTransport(blocked_handler)
-    ) as client:
+    with (
+        _storage(tmp_path / "blocked") as storage,
+        httpx.Client(transport=httpx.MockTransport(blocked_handler)) as client,
+    ):
         result = HTTPTransferEngine(client).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
         )
@@ -143,12 +146,11 @@ def test_retries_respect_retry_after_attempt_limit_and_observer(tmp_path: Path) 
             return httpx.Response(429, headers={"Retry-After": "2"})
         return httpx.Response(200, headers={"Content-Type": "image/png"}, content=b"yes")
 
-    with _storage(tmp_path / "managed") as storage, httpx.Client(
-        transport=httpx.MockTransport(handler)
-    ) as client:
-        result = HTTPTransferEngine(
-            client, clock=fake.clock, sleeper=fake.sleep
-        ).transfer(
+    with (
+        _storage(tmp_path / "managed") as storage,
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+    ):
+        result = HTTPTransferEngine(client, clock=fake.clock, sleeper=fake.sleep).transfer(
             _recipe(),
             storage,
             limits=_limits(max_attempts=2),
@@ -179,12 +181,13 @@ def test_retries_respect_retry_after_attempt_limit_and_observer(tmp_path: Path) 
         (503, "transient_provider", True),
     ],
 )
-def test_typed_http_outcomes(
-    tmp_path: Path, status: int, outcome: str, retryable: bool
-) -> None:
-    with _storage(tmp_path / str(status)) as storage, httpx.Client(
-        transport=httpx.MockTransport(lambda _request: httpx.Response(status))
-    ) as client:
+def test_typed_http_outcomes(tmp_path: Path, status: int, outcome: str, retryable: bool) -> None:
+    with (
+        _storage(tmp_path / str(status)) as storage,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(status))
+        ) as client,
+    ):
         result = HTTPTransferEngine(client).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
         )
@@ -203,9 +206,10 @@ def test_content_length_and_chunked_bodies_obey_both_budgets(tmp_path: Path) -> 
             content=b"",
         )
 
-    with _storage(tmp_path / "length") as storage, httpx.Client(
-        transport=httpx.MockTransport(oversized_length)
-    ) as client:
+    with (
+        _storage(tmp_path / "length") as storage,
+        httpx.Client(transport=httpx.MockTransport(oversized_length)) as client,
+    ):
         result = HTTPTransferEngine(client).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(1000)
         )
@@ -218,13 +222,16 @@ def test_content_length_and_chunked_bodies_obey_both_budgets(tmp_path: Path) -> 
             yield b"123"
             yield b"456"
 
-    with _storage(tmp_path / "budget") as storage, httpx.Client(
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(
-                200, headers={"Content-Type": "image/jpeg"}, stream=ChunkedStream()
+    with (
+        _storage(tmp_path / "budget") as storage,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    200, headers={"Content-Type": "image/jpeg"}, stream=ChunkedStream()
+                )
             )
-        )
-    ) as client:
+        ) as client,
+    ):
         budget = TransferBudget(5)
         result = HTTPTransferEngine(client).transfer(
             _recipe(), storage, limits=_limits(), budget=budget
@@ -306,9 +313,7 @@ def test_interrupted_strong_etag_resumes_only_with_coherent_206(tmp_path: Path) 
         {"Content-Range": "bytes 3-4/6", "ETag": '"strong-v1"'},
     ],
 )
-def test_invalid_resume_responses_never_append(
-    tmp_path: Path, headers: dict[str, str]
-) -> None:
+def test_invalid_resume_responses_never_append(tmp_path: Path, headers: dict[str, str]) -> None:
     with _storage(tmp_path / "managed") as storage:
         session = storage.begin_remote_staging(_recipe().request_identity, max_bytes=100)
         session.write(b"abc")
@@ -373,13 +378,16 @@ def test_weak_or_missing_etag_interruption_discards_partial(tmp_path: Path) -> N
         headers = {"Content-Type": "image/jpeg", "Content-Length": "6"}
         if etag:
             headers["ETag"] = etag
-        with _storage(tmp_path / f"managed-{index}") as storage, httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _request, headers=headers: httpx.Response(
-                    200, headers=headers, stream=_FailingStream()
+        with (
+            _storage(tmp_path / f"managed-{index}") as storage,
+            httpx.Client(
+                transport=httpx.MockTransport(
+                    lambda _request, headers=headers: httpx.Response(
+                        200, headers=headers, stream=_FailingStream()
+                    )
                 )
-            )
-        ) as client:
+            ) as client,
+        ):
             result = HTTPTransferEngine(client).transfer(
                 _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
             )
@@ -400,18 +408,19 @@ def test_elapsed_deadline_and_cancellation_are_checked_between_chunks(
             cancelled = True
             yield b"def"
 
-    with _storage(tmp_path / "managed") as storage, httpx.Client(
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(
-                200,
-                headers={"Content-Type": "image/jpeg", "ETag": '"v1"'},
-                stream=ControlledStream(),
+    with (
+        _storage(tmp_path / "managed") as storage,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    200,
+                    headers={"Content-Type": "image/jpeg", "ETag": '"v1"'},
+                    stream=ControlledStream(),
+                )
             )
-        )
-    ) as client:
-        result = HTTPTransferEngine(
-            client, clock=fake.clock, cancelled=lambda: cancelled
-        ).transfer(
+        ) as client,
+    ):
+        result = HTTPTransferEngine(client, clock=fake.clock, cancelled=lambda: cancelled).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
         )
         assert result.outcome == "cancelled"
@@ -431,15 +440,18 @@ def test_elapsed_deadline_stops_between_chunks_and_retains_strong_partial(
             fake.value = 31.0
             yield b"def"
 
-    with _storage(tmp_path / "managed") as storage, httpx.Client(
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(
-                200,
-                headers={"Content-Type": "image/jpeg", "ETag": '"v1"'},
-                stream=DeadlineStream(),
+    with (
+        _storage(tmp_path / "managed") as storage,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    200,
+                    headers={"Content-Type": "image/jpeg", "ETag": '"v1"'},
+                    stream=DeadlineStream(),
+                )
             )
-        )
-    ) as client:
+        ) as client,
+    ):
         result = HTTPTransferEngine(client, clock=fake.clock).transfer(
             _recipe(), storage, limits=_limits(), budget=TransferBudget(10)
         )
@@ -462,9 +474,7 @@ def test_changed_request_identity_discards_old_partial_and_starts_at_zero(
 
         def handler(request: httpx.Request) -> httpx.Response:
             seen_headers.append(request.headers)
-            return httpx.Response(
-                200, headers={"Content-Type": "image/jpeg"}, content=b"new"
-            )
+            return httpx.Response(200, headers={"Content-Type": "image/jpeg"}, content=b"new")
 
         with httpx.Client(transport=httpx.MockTransport(handler)) as client:
             result = HTTPTransferEngine(client).transfer(
@@ -515,12 +525,11 @@ def test_redirect_and_retry_backoff_cannot_cross_elapsed_deadline(tmp_path: Path
         calls += 1
         return httpx.Response(503, headers={"Retry-After": "30"})
 
-    with _storage(tmp_path / "managed") as storage, httpx.Client(
-        transport=httpx.MockTransport(handler)
-    ) as client:
-        result = HTTPTransferEngine(
-            client, clock=fake.clock, sleeper=fake.sleep
-        ).transfer(
+    with (
+        _storage(tmp_path / "managed") as storage,
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+    ):
+        result = HTTPTransferEngine(client, clock=fake.clock, sleeper=fake.sleep).transfer(
             _recipe(),
             storage,
             limits=_limits(max_attempts=3, max_seconds=10.0),

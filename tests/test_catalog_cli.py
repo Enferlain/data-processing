@@ -1594,3 +1594,107 @@ def test_gelbooru_cli_dapi_requires_credentials_before_network(
     monkeypatch.setattr(cli_module, "GelbooruAdapter", NeverAdapter)
     with pytest.raises(SystemExit):
         main(["metadata", "gelbooru-dapi-post", str(catalog), "12370900"])
+
+
+def test_library_capabilities_cli_reports_supported_and_unsupported_targets_offline(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        writer = CatalogWriter(database)
+        pixiv_id = writer.upsert_account(AccountRecord("pixiv", "1001", NOW)).id
+        x_id = writer.upsert_account(AccountRecord("x", "9001", NOW)).id
+        e621_attribution_id = writer.upsert_attribution(
+            AttributionRecord("e621", "tag:12345", "e621-native-v1", NOW)
+        ).id
+    before_bytes = catalog.read_bytes()
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network attempted")),
+    )
+
+    main(
+        [
+            "library",
+            "capabilities",
+            str(catalog),
+            "--target",
+            f"account:{pixiv_id}",
+            "--json",
+        ]
+    )
+    account_view = json.loads(capsys.readouterr().out)
+    assert account_view["supported"] is True
+    assert account_view["target"] == {
+        "kind": "account",
+        "catalog_id": pixiv_id,
+        "provider": "pixiv",
+        "availability": "available",
+        "reference": f"account:{pixiv_id}",
+    }
+    assert account_view["capability"]["key"] == "pixiv-account-artworks"
+    assert account_view["capability"]["operation"] == "list_account_posts"
+    assert account_view["capability"]["count_probe_supported"] is True
+
+    main(
+        [
+            "library",
+            "capabilities",
+            str(catalog),
+            "--target",
+            f"attribution:{e621_attribution_id}",
+            "--json",
+        ]
+    )
+    attribution_view = json.loads(capsys.readouterr().out)
+    assert attribution_view["supported"] is True
+    assert attribution_view["target"]["provider"] == "e621"
+    assert attribution_view["capability"]["key"] == "e621-attribution-posts"
+
+    main(
+        [
+            "library",
+            "capabilities",
+            str(catalog),
+            "--target",
+            f"account:{x_id}",
+            "--json",
+        ]
+    )
+    unsupported_view = json.loads(capsys.readouterr().out)
+    assert unsupported_view["supported"] is False
+    assert unsupported_view["target"]["provider"] == "x"
+    assert "no enumeration capability" in unsupported_view["reason"]
+
+    assert catalog.read_bytes() == before_bytes
+
+
+def test_library_capabilities_cli_reports_unsupported_attribution_kind(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        writer = CatalogWriter(database)
+        attribution_id = writer.upsert_attribution(
+            AttributionRecord("gelbooru", "g-1", "gelbooru-native-v1", NOW)
+        ).id
+
+    main(
+        [
+            "library",
+            "capabilities",
+            str(catalog),
+            "--target",
+            f"attribution:{attribution_id}",
+            "--json",
+        ]
+    )
+    view = json.loads(capsys.readouterr().out)
+
+    assert view["supported"] is False
+    assert view["target"]["provider"] == "gelbooru"
+    assert view["reason"] == "no enumeration capability for attribution targets on gelbooru"

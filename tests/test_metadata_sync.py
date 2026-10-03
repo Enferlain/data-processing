@@ -114,8 +114,7 @@ def test_sync_retains_raw_then_atomically_persists_page_and_public_run(tmp_path:
         assert database.connection.execute("SELECT title FROM posts").fetchone()[0] == "Title"
         assert database.connection.execute("SELECT COUNT(*) FROM tags").fetchone()[0] == 1
         assert (
-            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0]
-            == 1
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 1
         )
         assert (
             database.connection.execute("SELECT object_kind FROM raw_observations").fetchone()[0]
@@ -143,8 +142,7 @@ def test_normalization_failure_retains_raw_without_normalized_state(tmp_path: Pa
         )
         assert result.outcome == "malformed_response"
         assert (
-            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0]
-            == 1
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 1
         )
         assert database.connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0] == 0
         assert (
@@ -179,9 +177,7 @@ def test_oversized_page_pauses_without_partial_records_or_checkpoint(tmp_path: P
 
 
 def test_listing_resume_uses_only_committed_compatible_checkpoint(tmp_path: Path) -> None:
-    first = NormalizedPage(
-        (_post("1"),), Continuation("pixiv", "fixture-schema-v1", {"offset": 1})
-    )
+    first = NormalizedPage((_post("1"),), Continuation("pixiv", "fixture-schema-v1", {"offset": 1}))
     second = NormalizedPage((_post("2"),))
     path = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(path) as database:
