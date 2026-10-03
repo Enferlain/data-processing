@@ -1,6 +1,6 @@
 # Cross-platform media catalog plan
 
-Status: proposed
+Status: accepted — media-family domain plan under the provenance kernel
 Last updated: 2026-10-03
 Runtime: Python 3.13
 Initial storage: SQLite plus a content-addressed media directory
@@ -153,7 +153,8 @@ work. Re-encodes and crops have different exact assets even when they depict the
 
 Why the catalog knows about a record, for example `liked`, `bookmarked`, `quoted`, `imported`,
 `discovered`, or `crawled`. Observations are append-only provenance rather than flags overwritten
-on the post.
+on the post. (Kernel term: provenance event — in kernel vocabulary the unqualified word
+"observation" always means the source report.)
 
 ### Evidence
 

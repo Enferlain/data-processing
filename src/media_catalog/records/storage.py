@@ -3,20 +3,68 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from media_catalog.records.common import (
+    _validate_choice,
     _validate_nonempty,
     _validate_positive_id,
     normalize_timestamp,
-    validate_adoption_outcome,
-    validate_adoption_state,
-    validate_fingerprint_kind,
-    validate_fingerprint_status,
     validate_hash,
-    validate_location_kind,
-    validate_root_kind,
-    validate_source_kind,
-    validate_storage_kind,
     validate_version,
 )
+
+STORAGE_KINDS = frozenset({"managed", "legacy_reference", "external", "unknown"})
+ROOT_KINDS = frozenset({"source", "managed"})
+LOCATION_KINDS = frozenset({"managed", "external", "legacy"})
+SOURCE_KINDS = frozenset({"legacy_local", "managed", "external"})
+FINGERPRINT_KINDS = frozenset({"sha256", "md5", "phash"})
+FINGERPRINT_STATUSES = frozenset({"legacy", "calculated", "verified", "mismatch", "unavailable"})
+ADOPTION_STATES = frozenset({"running", "complete", "partial", "failed", "cancelled"})
+ADOPTION_OUTCOMES = frozenset(
+    {
+        "adopted",
+        "adopted_exact_only",
+        "existing",
+        "missing",
+        "unsafe_path",
+        "unreadable",
+        "source_changed",
+        "limit_exceeded",
+        "hash_mismatch",
+        "inspection_failed",
+        "storage_integrity_failed",
+    }
+)
+
+
+def validate_storage_kind(value: str) -> str:
+    return _validate_choice(value, STORAGE_KINDS, "storage kind")
+
+
+def validate_root_kind(value: str) -> str:
+    return _validate_choice(value, ROOT_KINDS, "root kind")
+
+
+def validate_location_kind(value: str) -> str:
+    return _validate_choice(value, LOCATION_KINDS, "location kind")
+
+
+def validate_source_kind(value: str) -> str:
+    return _validate_choice(value, SOURCE_KINDS, "source kind")
+
+
+def validate_fingerprint_kind(value: str) -> str:
+    return _validate_choice(value, FINGERPRINT_KINDS, "fingerprint kind")
+
+
+def validate_fingerprint_status(value: str) -> str:
+    return _validate_choice(value, FINGERPRINT_STATUSES, "fingerprint status")
+
+
+def validate_adoption_state(value: str) -> str:
+    return _validate_choice(value, ADOPTION_STATES, "adoption state")
+
+
+def validate_adoption_outcome(value: str) -> str:
+    return _validate_choice(value, ADOPTION_OUTCOMES, "adoption outcome")
 
 
 @dataclass(frozen=True, slots=True)

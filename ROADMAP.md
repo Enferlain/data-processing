@@ -58,8 +58,12 @@ the main `gelbooru-metadata-adapter` capability spec plus additions to `media-ca
 On 2026-10-03 the provenance-kernel direction was adopted: the north star broadened from a
 cross-platform media catalog to a source-aware gathering and provenance system with media as the
 first data family. Existing schema, data, and tools are unaffected — the kernel is a naming, spec,
-and boundary change for concepts the schema already implements. The next milestone is the
-provenance-kernel architectural pass.
+and boundary change for concepts the schema already implements. The provenance-kernel
+architectural pass (Bead `data-processing-u1d`) is complete and archived the same day: the kernel
+plan's mapping is verified against migrations 0001-0011, the standalone `provenance-kernel`
+capability spec is synced into the main specs (now 15 capabilities), and the two persistence
+follow-ups are absorbed. Remaining storage-enforcement gaps are filed as Bead
+`data-processing-ts5`.
 
 Live task state can be checked with:
 
@@ -247,27 +251,33 @@ Expected outcomes:
 This milestone should improve orchestration and usability rather than introduce a second crawler,
 downloader, candidate ledger, or asset store.
 
-## Next milestone: provenance-kernel architectural pass
+## Completed milestone: provenance-kernel architectural pass
 
 Name, verify, and spec the domain-neutral core that the schema already implements, so later
-milestones build against a boundary instead of baking media assumptions deeper. Bounded to
-documentation, specification, and cheap re-homing:
+milestones build against a boundary instead of baking media assumptions deeper. Delivered
+(2026-10-03):
 
-- verify the kernel-to-schema mapping in the kernel plan against the actual migrations, per table;
-- add an OpenSpec kernel capability spec covering source and source-object identity, observation
-  retention and revisions, the run/checkpoint contract, the evidence and review ledger, blobs, and
-  typed relationships with epistemic status (`observed`, `verified`, `derived`, `inferred`,
-  `reviewed`);
-- re-home or name module and spec boundaries where cheap, absorbing the two ready persistence
-  follow-ups (the `adoption_items` read move and single-family vocabulary colocation);
-- reconcile the `observations` versus `raw_observations` naming in the kernel vocabulary.
+- the kernel-to-schema mapping verified per table against migrations 0001-0011, with corrections
+  folded into the kernel plan;
+- a standalone `provenance-kernel` capability spec (twelve requirements) covering source and
+  source-object identity, observation retention, provenance events, blobs, declared/verified
+  comparisons, typed relationships with epistemic status, evidence and review ledgers, the bounded
+  run contract, storage-enforced audit immutability, and projections — review-corrected so
+  enforcement claims match what the schema actually guarantees;
+- the two persistence follow-ups absorbed: all adoption SQL in StorageWrites, and single-family
+  vocabularies colocated with their record family modules with the facade surface unchanged;
+- the kernel vocabulary resolving `observations` (provenance events) versus `raw_observations`
+  (source reports), and the spec boundary decided as a standalone capability.
 
-Explicitly out of scope: table renames, data migration, adapter behavior changes, and speculative
-abstractions without a second consumer.
+Explicitly excluded, as planned: table renames, data migration, adapter behavior changes, and
+speculative abstractions without a second consumer.
 
-The milestone after this remains the leading candidate from the pipeline gap analysis: a cohesive
-workflow that carries a reviewed target through metadata sync, browsing, and acquisition without
-manual identifier translation between commands.
+## Current milestone: none active
+
+Pick the next milestone from **Planned after the current milestone** when a concrete workflow
+justifies it — the leading candidate per the pipeline gap analysis is a cohesive workflow that
+carries a reviewed target through metadata sync, browsing, and acquisition without manual
+identifier translation between commands, now built against the named kernel.
 
 ## Planned after the current milestone
 

@@ -393,14 +393,7 @@ class CatalogWriter:
         return self._storage.record_adoption_attempt(record)
 
     def adoption_items(self, run_id: int | None = None) -> list[dict[str, object]]:
-        if run_id is None:
-            rows = self.connection.execute("SELECT * FROM adoption_items ORDER BY adoption_item_id")
-        else:
-            rows = self.connection.execute(
-                "SELECT * FROM adoption_items WHERE adoption_run_id = ? ORDER BY adoption_item_id",
-                (run_id,),
-            )
-        return [dict(row) for row in rows]
+        return self._storage.adoption_items(run_id)
 
     def create_acquisition_plan(self, record: AcquisitionPlanRecord) -> int:
         return self._acquisition.create_acquisition_plan(record)

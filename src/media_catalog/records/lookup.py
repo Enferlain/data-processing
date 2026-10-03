@@ -5,18 +5,75 @@ from dataclasses import dataclass
 
 from media_catalog.records.common import (
     INSTANCE_PATTERN,
+    _validate_choice,
     _validate_nonempty,
     _validate_positive_id,
     normalize_timestamp,
     validate_hash,
-    validate_lookup_match_mode,
-    validate_lookup_outcome,
-    validate_lookup_request_state,
-    validate_lookup_result_kind,
-    validate_lookup_strategy,
     validate_platform,
     validate_secret_free_identity,
 )
+
+LOOKUP_STRATEGIES = frozenset(
+    {
+        "source_post_url",
+        "external_post_id",
+        "declared_md5",
+        "verified_md5",
+        "artist_exact_name",
+        "artist_alias",
+        "artist_text",
+    }
+)
+LOOKUP_RUN_STATUSES = frozenset({"running", "complete", "paused", "failed"})
+LOOKUP_REQUEST_STATES = frozenset({"running", "complete", "failed"})
+LOOKUP_OUTCOMES = frozenset(
+    {
+        "success",
+        "unavailable",
+        "deleted",
+        "authentication_required",
+        "authorization_denied",
+        "rate_limited",
+        "transient_provider",
+        "malformed_response",
+        "budget_exhausted",
+        "local_persistence",
+    }
+)
+LOOKUP_BUDGET_BOUNDARIES = frozenset({"request", "page", "result", "time"})
+LOOKUP_RESULT_KINDS = frozenset(
+    {"post_match", "account_match", "attribution", "weak_lead", "inconclusive"}
+)
+LOOKUP_MATCH_MODES = frozenset({"exact", "alias", "handle", "display_name", "text"})
+
+
+def validate_lookup_strategy(value: str) -> str:
+    return _validate_choice(value, LOOKUP_STRATEGIES, "lookup strategy")
+
+
+def validate_lookup_run_status(value: str) -> str:
+    return _validate_choice(value, LOOKUP_RUN_STATUSES, "lookup run status")
+
+
+def validate_lookup_request_state(value: str) -> str:
+    return _validate_choice(value, LOOKUP_REQUEST_STATES, "lookup request state")
+
+
+def validate_lookup_outcome(value: str) -> str:
+    return _validate_choice(value, LOOKUP_OUTCOMES, "lookup outcome")
+
+
+def validate_lookup_budget_boundary(value: str) -> str:
+    return _validate_choice(value, LOOKUP_BUDGET_BOUNDARIES, "lookup budget boundary")
+
+
+def validate_lookup_result_kind(value: str) -> str:
+    return _validate_choice(value, LOOKUP_RESULT_KINDS, "lookup result kind")
+
+
+def validate_lookup_match_mode(value: str) -> str:
+    return _validate_choice(value, LOOKUP_MATCH_MODES, "lookup match mode")
 
 
 @dataclass(frozen=True, slots=True)

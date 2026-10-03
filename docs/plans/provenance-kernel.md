@@ -27,26 +27,49 @@ present view. Interpretation can improve later.
 
 ## 2. The kernel already exists latently
 
-This is a naming, specification, and boundary change, not a reimplementation. The mapping below is
-concept-level as of 2026-10-03, drawn from the schema inventory and plan documents; the
-architectural pass verifies it per table against the migrations.
+This is a naming, specification, and boundary change, not a reimplementation. The mapping below was
+verified against migrations 0001-0011 on 2026-10-03.
 
 | Kernel concept | Current home | Status | Action |
 | --- | --- | --- | --- |
 | Source | `platforms`; the source dimension of `import_runs` and `remote_runs` | Partial | Treat "source" as the kernel term; `platforms` stays the remote-provider specialization |
 | Source object | `(platform, native_id)` keys on `accounts`, `posts`, `tags`, `attribution_entities` | Strong as a pattern | Keep per-kind tables; name the pattern in the kernel spec |
-| Observation (source report) | `raw_observations`, `raw_payloads`, `observation_revisions` | Strong | Recognize as the kernel observation; no change |
-| Observation (provenance event) | `observations` (`liked`, `bookmarked`, `imported`, `discovered`) | Strong | Recognize as assertions whose source is local user activity |
+| Observation (source report) | `raw_observations`, `raw_payloads` | Strong | Recognize as the kernel observation; append-only, payload-deduplicated, anchored to an import run or a remote request, or — for lookups and probes — to the requesting row itself; never revised in place |
+| Provenance event | `observations` plus `observation_revisions` (`liked`, `bookmarked`, `foldered`, `imported`, `discovered`, `crawled`) | Strong | Recognize as assertions whose source is local user activity; revisions attach here, not to source reports; `subject_kind` is post-only today |
 | Blob | `assets` (verified SHA-256 CAS) plus `asset_fingerprints` | Strong | `assets` is the kernel blob; image facts layered on it are domain |
 | Representation | `media_occurrences`, named variants, `occurrence_assets` | Strong, media-named | Domain naming stays; the pattern is named in the kernel spec |
-| Assertion | declared-vs-verified hash fields; adapter-run source pointers; the Gelbooru current-projection policy | Emergent | No universal assertion table; model field-level assertions only where sources disagree and it matters |
-| Relationship | `post_relations`; account/post match candidates; `occurrence_assets` | Partial, scattered | One typed relationship model with epistemic status, designed with the work/version model |
-| Evidence | `account_candidate_evidence`, `post_candidate_evidence`, `match_evidence` | Strong, candidate-scoped | Extend attachment scope as relationships generalize |
-| Acquisition | `media_acquisition_plans`, `adoption_runs`, download `remote_runs` | Strong, media-named | Name the staging/quarantine/CAS-publication pattern in the kernel spec |
-| Run | `import_runs`, `discovery_runs`, `remote_runs` + `remote_checkpoints`, `candidate_lookup_runs` + checkpoints, `adoption_runs` | Strong, five similar families | Unify the contract (spec and boundary); not necessarily the tables |
-| Review | `account_candidate_decisions`, `post_candidate_decisions` | Strong | Recognize as the kernel review-ledger pattern |
+| Assertion | declared-vs-verified columns; `media_acquisition_verifications` (claim kind, declared value, verified value, comparison result); the Gelbooru current-projection policy | Established in places | No universal assertion table; the declared/verified/comparison pattern is the template for contested fields |
+| Relationship | `post_relations`; account/post match candidates with `relation_kind` and pending/confirmed/rejected state; `post_candidate_characteristics` (resized, reencoded, meaningful_edit, progression); `occurrence_assets` | Partial, scattered | One typed relationship model with epistemic status, designed with the work/version model |
+| Evidence | `match_evidence` (stance supports/contradicts/neutral, direction, strength, detector and version) plus the two candidate join tables | Strong, candidate-scoped | Extend attachment scope as relationships generalize |
+| Acquisition | `media_acquisition_plans` + immutable plan items, `adoption_runs`, `media_acquisition_runs` with attempts, partials, verifications, quarantine | Strong, media-named | Name the staging/quarantine/CAS-publication pattern in the kernel spec |
+| Run | `import_runs`, `discovery_runs`, `adoption_runs`, `remote_runs` + `remote_checkpoints`/`remote_requests`, `candidate_lookup_runs` + checkpoints/requests, `media_acquisition_runs` | Strong, six similar families | Unify the contract (spec and boundary), not the tables; library expansion adds a plan-plus-lineage pattern over the shared `remote_runs` table instead of a seventh family |
+| Review | `account_candidate_decisions`, `post_candidate_decisions` | Strong | Recognize as the kernel review-ledger pattern; append-only with prior state |
 | Artifact / work | not built | Greenfield | Design in kernel terms when the work/version model lands |
 | Projection | Gelbooru current-projection policy; search and stats; planned exports | Nascent | Name the concept and its policy; exports become projections |
+
+Verification also confirmed three cross-cutting disciplines the kernel spec should name:
+
+- Audit immutability is largely enforced at the storage layer: plans, probes, execution lineage,
+  tag, tag-alias, and post metadata observations, terminal candidate-lookup requests, and
+  terminal acquisition attempts are immutable or append-only via triggers. Where append-only
+  still rests on writer convention — source reports (`raw_observations`), `remote_requests`,
+  `adoption_attempts`, `post_tag_observations`, and the review/evidence ledger — bringing them
+  under storage enforcement is tracked follow-up work.
+- A shared typed-outcome vocabulary (`success`, `unavailable`, `deleted`,
+  `authentication_required`, `authorization_denied`, `rate_limited`, `transient_provider`,
+  `malformed_response`, `budget_exhausted`, `local_persistence`) fully covers remote and lookup
+  runs and requests; probes omit `budget_exhausted` and add `unsupported`; acquisition runs and
+  items use a family-specific subset plus extensions.
+- The remote and candidate-lookup run families carry explicit request/page/record/time budgets, a
+  budget-boundary marker, retry-after guidance, and resumable checkpoints with continuation
+  versions. Acquisition runs instead declare item/byte/time budgets and resume through staged
+  partials plus run lineage. Input immutability is trigger-enforced for lookup and acquisition
+  runs; `remote_runs` enforces it only for its origin columns today.
+
+Partial epistemic vocabulary is already in the schema: `post_participants.review_state` defaults
+to `observed`; `asset_fingerprints.verification_status` spans
+`legacy`/`calculated`/`verified`/`mismatch`/`unavailable`; `platform_references.identifier_kind`
+separates stable ids from handles, slugs, hashes, and opaque identifiers.
 
 ## 3. Kernel vocabulary
 
@@ -55,8 +78,14 @@ architectural pass verifies it per table against the migrations.
   imports are distinguished by run kind.
 - **Source object** — a stable provider-native identity, `(platform, object kind, native id)`. Each
   object kind keeps its own typed table; the kernel defines the pattern, not a shared table.
-- **Observation** — what a source reported about an object at a time, with the raw payload
-  retained append-only and revisable through revisions. Observations never overwrite each other.
+- **Observation (source report)** — what a source reported about an object at a time, with the
+  raw payload retained append-only and deduplicated by content; stored as `raw_observations`. A
+  source report is never revised in place — a later report is a new observation.
+- **Provenance event** — why the catalog holds a record (`liked`, `bookmarked`, `foldered`,
+  `imported`, `discovered`, `crawled`); stored as `observations`, with re-observations retained
+  in `observation_revisions`. In kernel terms a provenance event is an assertion whose source is
+  local user activity. This resolves the schema's `observations` versus `raw_observations`
+  collision: the unqualified kernel word "observation" always means the source report.
 - **Blob** — exact bytes: verified SHA-256, size, MIME. Content-addressed, immutable, deduplicated.
 - **Representation** — one observed representation of an artifact at a source: remote URL, variant
   role, dimensions, availability. May exist before any bytes are acquired.
@@ -118,12 +147,14 @@ entity/attribute/value table for everything; that path ends in soup.
 
 - **Phase A — direction documents (done 2026-10-03):** this plan, the roadmap adjustment, and the
   catalog-plan annotation. No code or schema change.
-- **Phase B — architectural pass (next milestone, Bead `data-processing-u1d`):** verify the mapping
-  per table; add an OpenSpec kernel capability spec; re-home or name boundaries where cheap,
-  absorbing the two ready persistence follow-ups.
-- **Phase C — reviewed-target workflow milestone:** the pipeline-gap workflow (carry a reviewed
-  target through metadata sync, browsing, and acquisition without manual identifier translation)
-  built against the named kernel.
+- **Phase B — architectural pass (done 2026-10-03; archived change
+  `2026-10-03-add-provenance-kernel-spec`, Bead `data-processing-u1d`):** mapping verified per
+  table; kernel capability spec added and synced into the main specs; boundaries re-homed,
+  absorbing the two persistence follow-ups. Storage-enforcement gaps filed as Bead
+  `data-processing-ts5`.
+- **Phase C — reviewed-target workflow milestone (next):** the pipeline-gap workflow (carry a
+  reviewed target through metadata sync, browsing, and acquisition without manual identifier
+  translation) built against the named kernel.
 - **Phase D — work/version and relationship model plus matching research:** greenfield, designed in
   kernel terms; new data families join when concrete workflows justify them.
 
@@ -143,10 +174,18 @@ entity/attribute/value table for everything; that path ends in soup.
 
 ## 8. Open questions for the architectural pass
 
-- Per-table verification of the section 2 mapping against the actual migrations.
-- Naming reconciliation for `observations` (provenance events) versus `raw_observations` (source
-  reports) in kernel vocabulary.
+Answered on 2026-10-03:
+
+- The section 2 mapping is verified against migrations 0001-0011, including the correction that
+  `observation_revisions` revises provenance events, not source reports.
+- Kernel vocabulary resolves the `observations` versus `raw_observations` collision: the kernel
+  word "observation" means the source report (`raw_observations`); the `observations` table is
+  named "provenance event" in kernel terms.
+- The kernel spec boundary is a standalone `provenance-kernel` capability spec in OpenSpec. The
+  kernel is domain-neutral and cross-cutting; `media-catalog-core` remains the media capability
+  and references the kernel rather than containing it.
+
+Still open:
+
 - Whether local imports need a source-kind generalization of `platforms`, or a view suffices.
 - The shape of the unified run contract: a protocol, a shared persistence component, or both.
-- Where the kernel spec boundary lives in OpenSpec: a standalone capability spec or sections of
-  `media-catalog-core`.

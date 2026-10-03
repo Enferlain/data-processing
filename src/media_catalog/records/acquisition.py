@@ -3,22 +3,126 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from media_catalog.records.common import (
+    _validate_choice,
     _validate_nonempty,
     _validate_opaque_leaf,
     _validate_positive_id,
     normalize_timestamp,
-    validate_acquisition_attempt_state,
-    validate_acquisition_claim_kind,
-    validate_acquisition_comparison_result,
-    validate_acquisition_item_state,
-    validate_acquisition_outcome,
-    validate_acquisition_partial_state,
-    validate_acquisition_plan_eligibility,
-    validate_acquisition_quarantine_reason,
-    validate_acquisition_quarantine_state,
     validate_hash,
     validate_version,
 )
+
+ACQUISITION_PLAN_ELIGIBILITIES = frozenset({"eligible", "already_satisfied", "excluded"})
+ACQUISITION_RUN_STATUSES = frozenset({"running", "complete", "partial", "failed", "cancelled"})
+ACQUISITION_RUN_OUTCOMES = frozenset(
+    {
+        "success",
+        "partial",
+        "failed",
+        "cancelled",
+        "budget_exhausted",
+        "interrupted",
+        "quarantined",
+        "stale",
+    }
+)
+ACQUISITION_ITEM_STATES = frozenset(
+    {
+        "pending",
+        "running",
+        "complete",
+        "failed",
+        "quarantined",
+        "stale",
+        "deferred",
+        "interrupted",
+        "satisfied",
+    }
+)
+ACQUISITION_OUTCOMES = frozenset(
+    {
+        "downloaded",
+        "downloaded_exact_only",
+        "existing",
+        "already_satisfied",
+        "policy_failure",
+        "authentication_required",
+        "authorization_denied",
+        "unavailable",
+        "rate_limited",
+        "transient_provider",
+        "timeout",
+        "response_too_large",
+        "invalid_content",
+        "source_changed",
+        "interrupted",
+        "storage_failure",
+        "hash_mismatch",
+        "inspection_failure",
+        "storage_integrity_failure",
+        "stale_target",
+        "budget_exhausted",
+        "cancelled",
+    }
+)
+ACQUISITION_ATTEMPT_STATES = frozenset({"running", "complete", "failed", "interrupted"})
+ACQUISITION_PARTIAL_STATES = frozenset({"active", "discarded", "quarantined", "consumed"})
+ACQUISITION_CLAIM_KINDS = frozenset({"sha256", "md5", "file_size", "mime_type", "width", "height"})
+ACQUISITION_COMPARISON_RESULTS = frozenset({"matched", "mismatched", "not_comparable"})
+ACQUISITION_QUARANTINE_REASONS = frozenset(
+    {
+        "hash_mismatch",
+        "source_changed",
+        "invalid_content",
+        "unsafe_partial",
+        "storage_integrity_failure",
+    }
+)
+ACQUISITION_QUARANTINE_STATES = frozenset({"retained", "missing"})
+
+
+def validate_acquisition_plan_eligibility(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_PLAN_ELIGIBILITIES, "acquisition eligibility")
+
+
+def validate_acquisition_run_status(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_RUN_STATUSES, "acquisition run status")
+
+
+def validate_acquisition_run_outcome(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_RUN_OUTCOMES, "acquisition run outcome")
+
+
+def validate_acquisition_item_state(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_ITEM_STATES, "acquisition item state")
+
+
+def validate_acquisition_outcome(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_OUTCOMES, "acquisition outcome")
+
+
+def validate_acquisition_attempt_state(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_ATTEMPT_STATES, "acquisition attempt state")
+
+
+def validate_acquisition_partial_state(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_PARTIAL_STATES, "acquisition partial state")
+
+
+def validate_acquisition_claim_kind(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_CLAIM_KINDS, "acquisition claim kind")
+
+
+def validate_acquisition_comparison_result(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_COMPARISON_RESULTS, "comparison result")
+
+
+def validate_acquisition_quarantine_reason(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_QUARANTINE_REASONS, "quarantine reason")
+
+
+def validate_acquisition_quarantine_state(value: str) -> str:
+    return _validate_choice(value, ACQUISITION_QUARANTINE_STATES, "quarantine state")
 
 
 @dataclass(frozen=True, slots=True)

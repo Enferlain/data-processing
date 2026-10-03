@@ -291,3 +291,13 @@ class StorageWrites:
                 (record.adoption_item_id, record.attempt_number),
             ).fetchone()[0]
         )
+
+    def adoption_items(self, run_id: int | None = None) -> list[dict[str, object]]:
+        if run_id is None:
+            rows = self.connection.execute("SELECT * FROM adoption_items ORDER BY adoption_item_id")
+        else:
+            rows = self.connection.execute(
+                "SELECT * FROM adoption_items WHERE adoption_run_id = ? ORDER BY adoption_item_id",
+                (run_id,),
+            )
+        return [dict(row) for row in rows]

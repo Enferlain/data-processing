@@ -18,14 +18,40 @@ Rules:
 ### Added
 
 - **The provenance-kernel direction is adopted** — a new `docs/plans/provenance-kernel.md` defines
-  the domain-neutral vocabulary (source, source object, observation, blob, representation,
+  the domain-neutral vocabulary (source, source object, observation, provenance event, blob,
+  representation,
   assertion, relationship, evidence, acquisition, run, review, projection) with uniform epistemic
   statuses (`observed`, `verified`, `derived`, `inferred`, `reviewed`), and maps every concept onto
   the existing catalog schema with status and action. The kernel is latent in today's tables, so
   this is a naming, spec, and boundary change — no data migration is planned. Milestone tracked as
   Bead `data-processing-u1d`.
 
+- **The provenance-kernel capability spec is implemented** — OpenSpec change
+  `add-provenance-kernel-spec` adds a standalone `provenance-kernel` capability with twelve
+  requirements covering source identity, append-only source reports, provenance events,
+  content-addressed blobs, declared/verified comparisons, typed relationships with epistemic
+  status, the evidence ledger, append-only reversible review, the bounded run contract,
+  storage-enforced audit immutability, projections, and kernel-invariant preservation. A
+  schema-accuracy review corrected enforcement overstatements in the spec and the kernel plan's
+  verified-mapping claims (immutability triggers cover only
+  the listed tables; `remote_runs` inputs are immutable by convention today; acquisition runs use
+  item/byte budgets with partial-based resume), added a precedence statement over domain-altitude
+  capability specs, and neutralized media vocabulary in the provenance-event requirement;
+  remaining storage-enforcement gaps are filed as Bead `data-processing-ts5`. The change is
+  archived with the spec synced into the main specs, and the roadmap records the architectural
+  pass complete.
+
 ### Changed
+
+- **All adoption SQL now lives in StorageWrites** — the `adoption_items` read moved off the
+  CatalogWriter facade into the persistence component (Bead `data-processing-v4i`); the facade
+  method now delegates and no callers changed.
+
+- **Single-family vocabularies and validators colocate with their record family modules** —
+  acquisition, lookup, library (minus the cross-family origin-kind pair), and storage/adoption
+  vocabulary-validator pairs moved from `records.common` into their family modules with the
+  facade re-export surface unchanged (Bead `data-processing-ee0`); `records.common` now holds
+  only cross-family primitives.
 
 - **The roadmap's goal broadened** from a cross-platform media catalog to a source-aware gathering
   and provenance system with media as the first data family. The next milestone is the bounded

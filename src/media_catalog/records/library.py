@@ -4,20 +4,59 @@ import json
 from dataclasses import dataclass
 
 from media_catalog.records.common import (
+    _validate_choice,
     _validate_nonempty,
     _validate_positive_id,
     normalize_timestamp,
     validate_hash,
     validate_instance,
-    validate_library_authority_mode,
-    validate_library_estimate_source,
-    validate_library_estimate_state,
-    validate_library_execution_kind,
-    validate_library_probe_outcome,
-    validate_library_target_kind,
     validate_platform,
     validate_secret_free_identity,
 )
+
+LIBRARY_TARGET_KINDS = frozenset({"account", "attribution"})
+LIBRARY_AUTHORITY_MODES = frozenset({"confirmed", "explicit"})
+LIBRARY_ESTIMATE_STATES = frozenset({"count", "unknown"})
+LIBRARY_ESTIMATE_SOURCES = frozenset({"retained_probe", "provider_estimate"})
+LIBRARY_PROBE_OUTCOMES = frozenset(
+    {
+        "success",
+        "unsupported",
+        "unavailable",
+        "deleted",
+        "authentication_required",
+        "authorization_denied",
+        "rate_limited",
+        "transient_provider",
+        "malformed_response",
+        "local_persistence",
+    }
+)
+LIBRARY_EXECUTION_KINDS = frozenset({"initial", "resume"})
+
+
+def validate_library_target_kind(value: str) -> str:
+    return _validate_choice(value, LIBRARY_TARGET_KINDS, "library target kind")
+
+
+def validate_library_authority_mode(value: str) -> str:
+    return _validate_choice(value, LIBRARY_AUTHORITY_MODES, "library authority mode")
+
+
+def validate_library_estimate_state(value: str) -> str:
+    return _validate_choice(value, LIBRARY_ESTIMATE_STATES, "library estimate state")
+
+
+def validate_library_estimate_source(value: str) -> str:
+    return _validate_choice(value, LIBRARY_ESTIMATE_SOURCES, "library estimate source")
+
+
+def validate_library_probe_outcome(value: str) -> str:
+    return _validate_choice(value, LIBRARY_PROBE_OUTCOMES, "library probe outcome")
+
+
+def validate_library_execution_kind(value: str) -> str:
+    return _validate_choice(value, LIBRARY_EXECUTION_KINDS, "library execution kind")
 
 
 @dataclass(frozen=True, slots=True)
