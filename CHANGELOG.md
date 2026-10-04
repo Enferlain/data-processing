@@ -17,6 +17,14 @@ Rules:
 
 ### Added
 
+- **The audit-immutability sweep is completed (Bead `data-processing-5de`)** — migration 0013
+  adds deletion guards for the pre-0012 update-only surfaces (expansion plans, probes,
+  executions, and post associations; candidate-lookup requests; media-acquisition attempts),
+  full immutability for acquisition verification records and source-report payloads (payloads
+  previously protected only transitively; verifications previously unguarded), and primary-key guards on the recreated 0006/0007
+  immutable-inputs triggers, matching 0012's stronger pattern. The mutation sweep again found
+  zero delete statements on every guarded surface; the full suite passes under the triggers.
+
 - **Kernel storage enforcement is closed (Bead `data-processing-ts5`)** — migration 0012 brings
   every audit surface the provenance-kernel spec names under storage-level enforcement: source
   reports, post-tag observations, provenance-event revisions, and review decisions are immutable

@@ -62,7 +62,7 @@ architectural pass (Bead `data-processing-u1d`) is complete and archived the sam
 plan's mapping is verified against migrations 0001-0011, the standalone `provenance-kernel`
 capability spec is synced into the main specs (now 15 capabilities), and the two persistence
 follow-ups are absorbed. Its remaining storage-enforcement gaps were closed on 2026-10-04
-(Bead `data-processing-ts5`, migration 0012).
+(Beads `data-processing-ts5` and `data-processing-5de`, migrations 0012-0013).
 
 The reviewed-target workflow milestone (kernel Phase C, Bead `data-processing-iso`) is complete
 and archived (2026-10-03): the OpenSpec change `generalize-reviewed-target-workflow` was
@@ -275,7 +275,7 @@ milestones build against a boundary instead of baking media assumptions deeper. 
 
 Explicitly excluded, as planned: table renames, data migration, adapter behavior changes, and
 speculative abstractions without a second consumer. Its storage-enforcement follow-up closed
-2026-10-04 via migration 0012; see Current state.
+2026-10-04 via migrations 0012-0013; see Current state.
 
 ## Completed milestone: reviewed-target workflow (kernel Phase C)
 
@@ -302,8 +302,8 @@ No new tables, engines, or provider primitives were added.
 
 ## Current milestone: none active
 
-The provenance-kernel storage-enforcement gaps are closed (Bead `data-processing-ts5`, 2026-10-04,
-migration 0012). Pick the next milestone from **Planned after the current milestone** when a
+The provenance-kernel storage-enforcement gaps are closed (Beads `data-processing-ts5` and
+`data-processing-5de`, 2026-10-04, migrations 0012-0013). Pick the next milestone from **Planned after the current milestone** when a
 concrete workflow justifies it.
 
 ## Planned after the current milestone

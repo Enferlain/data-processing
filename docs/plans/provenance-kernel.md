@@ -49,11 +49,12 @@ verified against migrations 0001-0012 (0012 enforcement recorded 2026-10-04).
 
 Verification also confirmed three cross-cutting disciplines the kernel spec should name:
 
-- Audit immutability is enforced at the storage layer across all kernel surfaces (migration
-  0012): source reports; tag, tag-alias, post-tag, flag, pool, and post metadata observations;
-  provenance-event revisions; execution lineage; and review decisions are immutable and
-  undeletable; expansion plans, probes, terminal lookup requests, and terminal acquisition
-  attempts reject updates (their deletion guards remain follow-up work); provenance events,
+- Audit immutability is enforced at the storage layer across all kernel surfaces (migrations
+  0012-0013): source reports and their payload content; tag, tag-alias, post-tag, flag, pool,
+  and post metadata observations; provenance-event revisions; execution lineage; review
+  decisions; and acquisition verification records are immutable and undeletable; expansion
+  plans, probes, execution lineage rows and post associations, terminal lookup requests, and
+  terminal acquisition attempts reject updates and cannot be deleted; provenance events,
   adoption attempts, candidates, evidence, and evidence links are never deleted while their
   current fields may update; remote requests are undeletable and immutable after insert except
   attaching — never swapping or detaching — their retained source report; and remote-run inputs
@@ -155,8 +156,8 @@ entity/attribute/value table for everything; that path ends in soup.
 - **Phase B — architectural pass (done 2026-10-03; archived change
   `2026-10-03-add-provenance-kernel-spec`, Bead `data-processing-u1d`):** mapping verified per
   table; kernel capability spec added and synced into the main specs; boundaries re-homed,
-  absorbing the two persistence follow-ups. Storage-enforcement gaps closed by migration 0012
-  (Bead `data-processing-ts5`, 2026-10-04).
+  absorbing the two persistence follow-ups. Storage-enforcement gaps closed by migrations 0012-0013
+  (Beads `data-processing-ts5` and `data-processing-5de`, 2026-10-04).
 - **Phase C — reviewed-target workflow milestone (done 2026-10-03; archived change
   `generalize-reviewed-target-workflow`):** the pipeline-gap workflow (carry a reviewed target
   through metadata sync, browsing, and acquisition without manual identifier translation) built

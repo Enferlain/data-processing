@@ -51,6 +51,10 @@ class CatalogDatabase:
             self.connection.execute("PRAGMA foreign_keys = ON")
             self.connection.execute("PRAGMA busy_timeout = 5000")
             self.connection.execute("PRAGMA journal_mode = WAL")
+            # REPLACE-style writes must fire delete triggers; without this, SQLite's
+            # default lets INSERT OR REPLACE delete conflicting rows silently, bypassing
+            # the storage-enforced audit immutability guards.
+            self.connection.execute("PRAGMA recursive_triggers = ON")
             if migrate:
                 self.migrate()
             self.search_backend = self._initialize_search()
