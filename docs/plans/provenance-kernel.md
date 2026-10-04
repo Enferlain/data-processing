@@ -162,7 +162,8 @@ entity/attribute/value table for everything; that path ends in soup.
   `generalize-reviewed-target-workflow`):** the pipeline-gap workflow (carry a reviewed target
   through metadata sync, browsing, and acquisition without manual identifier translation) built
   against the named kernel.
-- **Phase D — work/version and relationship model plus matching research:** greenfield, designed in
+- **Phase D — work/version and relationship model plus matching research (next candidate;
+  leading per the roadmap, entered through the research spike first):** greenfield, designed in
   kernel terms; new data families join when concrete workflows justify them.
 
 ## 7. Guardrails

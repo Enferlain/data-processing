@@ -40,6 +40,12 @@ Rules:
   audited write path breaks — the full suite passes under the triggers. Known consequence: a
   future purge/redaction feature must supersede or tombstone rows rather than delete history.
 
+### Changed
+
+- **The roadmap names the work and relationship model (kernel Phase D) as the leading next
+  milestone**, entered through the supervised matching research spike before any schema work,
+  with practical workflows free to take priority; the Phase D milestone bead is filed unclaimed.
+
 ## [2026-10-03]
 
 ### Added

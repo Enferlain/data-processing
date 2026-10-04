@@ -303,8 +303,22 @@ No new tables, engines, or provider primitives were added.
 ## Current milestone: none active
 
 The provenance-kernel storage-enforcement gaps are closed (Beads `data-processing-ts5` and
-`data-processing-5de`, 2026-10-04, migrations 0012-0013). Pick the next milestone from **Planned after the current milestone** when a
-concrete workflow justifies it.
+`data-processing-5de`, 2026-10-04, migrations 0012-0013). The leading candidate for the next
+milestone is the **work and relationship model (kernel Phase D)**, entered through its research
+door:
+
+1. run the supervised matching research spike first — curate a fixture set of real originals,
+   recompressions, mirrors, and crops from the already-synced catalog and measure which signals
+   (exact hashes, perceptual hashes, dimensions, chronology) actually separate them, so
+   thresholds and false-positive rates are evidence rather than guesses;
+2. then design the artifact/work entities and the uniform typed-relationship model carrying
+   epistemic status — the first schema consumer of the kernel's epistemic vocabulary — with
+   review-gated conclusions and no metric silently establishing identity, authorship, or
+   same-work.
+
+A concrete practical workflow — export projections, metadata refresh, a specific provider — may
+take priority instead; see **Planned after the current milestone**. The candidate is tracked as
+Bead `data-processing-8nj` (unclaimed).
 
 ## Planned after the current milestone
 
@@ -343,7 +357,8 @@ concrete workflow justifies it.
 ## Later research: supervised media and work matching
 
 Image similarity is useful for proposing review candidates, but it is not reliable enough to be an
-automatic truth mechanism. This work follows the artist-library workflow rather than blocking it.
+automatic truth mechanism. This research is the entry door of the Phase D milestone and is eligible now that the
+reviewed-target workflow milestone is complete.
 
 Research should compare multiple signals and tools, including approaches used by czkawka and
 similar duplicate finders:
