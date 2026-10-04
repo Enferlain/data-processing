@@ -1,7 +1,7 @@
 # Provenance kernel plan
 
 Status: accepted direction, implementation pending
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 
 Related: the [media catalog plan](cross-platform-media-catalog.md) is the media-family domain plan
 under this framing; the [roadmap](../../ROADMAP.md) tracks milestone state; the discussion that
@@ -28,7 +28,7 @@ present view. Interpretation can improve later.
 ## 2. The kernel already exists latently
 
 This is a naming, specification, and boundary change, not a reimplementation. The mapping below was
-verified against migrations 0001-0011 on 2026-10-03.
+verified against migrations 0001-0012 (0012 enforcement recorded 2026-10-04).
 
 | Kernel concept | Current home | Status | Action |
 | --- | --- | --- | --- |
@@ -49,12 +49,16 @@ verified against migrations 0001-0011 on 2026-10-03.
 
 Verification also confirmed three cross-cutting disciplines the kernel spec should name:
 
-- Audit immutability is largely enforced at the storage layer: plans, probes, execution lineage,
-  tag, tag-alias, and post metadata observations, terminal candidate-lookup requests, and
-  terminal acquisition attempts are immutable or append-only via triggers. Where append-only
-  still rests on writer convention — source reports (`raw_observations`), `remote_requests`,
-  `adoption_attempts`, `post_tag_observations`, and the review/evidence ledger — bringing them
-  under storage enforcement is tracked follow-up work.
+- Audit immutability is enforced at the storage layer across all kernel surfaces (migration
+  0012): source reports; tag, tag-alias, post-tag, flag, pool, and post metadata observations;
+  provenance-event revisions; execution lineage; and review decisions are immutable and
+  undeletable; expansion plans, probes, terminal lookup requests, and terminal acquisition
+  attempts reject updates (their deletion guards remain follow-up work); provenance events,
+  adoption attempts, candidates, evidence, and evidence links are never deleted while their
+  current fields may update; remote requests are undeletable and immutable after insert except
+  attaching — never swapping or detaching — their retained source report; and remote-run inputs
+  (including transport identity) are immutable. A future purge/redaction feature must supersede
+  or tombstone rows rather than delete history.
 - A shared typed-outcome vocabulary (`success`, `unavailable`, `deleted`,
   `authentication_required`, `authorization_denied`, `rate_limited`, `transient_provider`,
   `malformed_response`, `budget_exhausted`, `local_persistence`) fully covers remote and lookup
@@ -63,8 +67,9 @@ Verification also confirmed three cross-cutting disciplines the kernel spec shou
 - The remote and candidate-lookup run families carry explicit request/page/record/time budgets, a
   budget-boundary marker, retry-after guidance, and resumable checkpoints with continuation
   versions. Acquisition runs instead declare item/byte/time budgets and resume through staged
-  partials plus run lineage. Input immutability is trigger-enforced for lookup and acquisition
-  runs; `remote_runs` enforces it only for its origin columns today.
+  partials plus run lineage. Input immutability is trigger-enforced for all
+  three network run families (`remote_runs` fully since migration 0012, alongside its origin
+  guards).
 
 Partial epistemic vocabulary is already in the schema: `post_participants.review_state` defaults
 to `observed`; `asset_fingerprints.verification_status` spans
@@ -150,9 +155,9 @@ entity/attribute/value table for everything; that path ends in soup.
 - **Phase B — architectural pass (done 2026-10-03; archived change
   `2026-10-03-add-provenance-kernel-spec`, Bead `data-processing-u1d`):** mapping verified per
   table; kernel capability spec added and synced into the main specs; boundaries re-homed,
-  absorbing the two persistence follow-ups. Storage-enforcement gaps filed as Bead
-  `data-processing-ts5`.
-- **Phase C — reviewed-target workflow milestone (current; started 2026-10-03, change
+  absorbing the two persistence follow-ups. Storage-enforcement gaps closed by migration 0012
+  (Bead `data-processing-ts5`, 2026-10-04).
+- **Phase C — reviewed-target workflow milestone (done 2026-10-03; archived change
   `generalize-reviewed-target-workflow`):** the pipeline-gap workflow (carry a reviewed target
   through metadata sync, browsing, and acquisition without manual identifier translation) built
   against the named kernel.

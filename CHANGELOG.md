@@ -13,6 +13,25 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-04]
+
+### Added
+
+- **Kernel storage enforcement is closed (Bead `data-processing-ts5`)** — migration 0012 brings
+  every audit surface the provenance-kernel spec names under storage-level enforcement: source
+  reports, post-tag observations, provenance-event revisions, and review decisions are immutable
+  and undeletable; provenance events, adoption attempts, candidates, evidence rows, and evidence
+  links are never deleted but keep their legitimate current-field updates (event projection
+  refresh, attempt re-recording, review state, rematerialized digests); remote requests are
+  undeletable and immutable after insert except attaching — never swapping or detaching — their
+  retained source report; and remote-run declared inputs (including transport identity) are
+  immutable while state and counters advance. The change is archived as
+  `close-kernel-storage-enforcement-gaps` with its requirement synced into the main
+  provenance-kernel spec. A
+  two-part writer audit (mutation statements and upserts) shaped the enforcement strengths so no
+  audited write path breaks — the full suite passes under the triggers. Known consequence: a
+  future purge/redaction feature must supersede or tombstone rows rather than delete history.
+
 ## [2026-10-03]
 
 ### Added
