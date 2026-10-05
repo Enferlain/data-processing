@@ -33,6 +33,7 @@ the other project records:
 | Source | Responsibility |
 | --- | --- |
 | This roadmap | Current direction, completed capabilities, next milestone, and later work |
+| [Raw capability requirements](docs/plans/raw_requirements.md) | The user's requirement set all work must support: cross-database item matching (recorded and not), hash-based matching, item relationships, tested similarity with deepest-source preference, and existing-methods-first duplicate/similarity tooling |
 | [Provenance kernel plan](docs/plans/provenance-kernel.md) | Domain-neutral north star, kernel vocabulary, current-schema mapping, and generalization path |
 | [Detailed catalog plan](docs/plans/cross-platform-media-catalog.md) | Media-family architecture, data model, policies, research, risks, and long-term design |
 | OpenSpec | Requirements and design for the active implementation change |
@@ -304,21 +305,23 @@ No new tables, engines, or provider primitives were added.
 
 The provenance-kernel storage-enforcement gaps are closed (Beads `data-processing-ts5` and
 `data-processing-5de`, 2026-10-04, migrations 0012-0013). The leading candidate for the next
-milestone is the **work and relationship model (kernel Phase D)**, entered through its research
-door:
+milestone is the **work and relationship model (kernel Phase D)** — artifact/work entities and
+the uniform typed-relationship model carrying epistemic status, the first schema consumer of the
+kernel's epistemic vocabulary, with review-gated conclusions and no metric silently establishing
+identity, authorship, or same-work. Tracked as Bead `data-processing-t08` (unclaimed).
 
-1. run the supervised matching research spike first — curate a fixture set of real originals,
-   recompressions, mirrors, and crops from the already-synced catalog and measure which signals
-   (exact hashes, perceptual hashes, dimensions, chronology) actually separate them, so
-   thresholds and false-positive rates are evidence rather than guesses;
-2. then design the artifact/work entities and the uniform typed-relationship model carrying
-   epistemic status — the first schema consumer of the kernel's epistemic vocabulary — with
-   review-gated conclusions and no metric silently establishing identity, authorship, or
-   same-work.
+The supervised matching research spike — curating fixtures of real originals, recompressions,
+mirrors, and crops from the already-synced catalog and measuring which signals (exact hashes,
+perceptual hashes, dimensions, chronology) actually separate them, so thresholds and
+false-positive rates are evidence rather than guesses — is split into its own lower-priority
+Bead `data-processing-8nj` (2026-10-04). It is required only before fuzzy matchers propose
+relationships; it does not gate the schema work.
 
 A concrete practical workflow — export projections, metadata refresh, a specific provider — may
-take priority instead; see **Planned after the current milestone**. The candidate is tracked as
-Bead `data-processing-8nj` (unclaimed).
+take priority instead; see **Planned after the current milestone**. A 2026-10-04 gap analysis
+against [raw_future_plan.md](docs/plans/raw_future_plan.md) found the export-projection layer to
+be the other half of the remaining distance and the highest-leverage non-Phase-D work; it is
+tracked as Bead `data-processing-1oi` (unclaimed).
 
 ## Planned after the current milestone
 
@@ -358,7 +361,11 @@ Bead `data-processing-8nj` (unclaimed).
 
 Image similarity is useful for proposing review candidates, but it is not reliable enough to be an
 automatic truth mechanism. This research is the entry door of the Phase D milestone and is eligible now that the
-reviewed-target workflow milestone is complete.
+reviewed-target workflow milestone is complete. The first measured evidence is in
+[matching-spike-evidence.md](docs/plans/matching-spike-evidence.md) (2026-10-05): over 133
+labeled real-data pairs, every same-image/same-work positive sat at phash@8 distance ≤ 10 and
+every unrelated negative at ≥ 22, with provider-labeled re-encodes, thumbnails, mirrors, and a
+three-variation candidate group measured; thresholds stay proposal evidence, never conclusions.
 
 Research should compare multiple signals and tools, including approaches used by czkawka and
 similar duplicate finders:

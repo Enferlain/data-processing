@@ -13,6 +13,40 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-05]
+
+### Fixed
+
+- **e621 candidate lookups no longer reject the provider's response envelope (Bead
+  `data-processing-7lt`)** — e621's `/posts.json` search wraps results in a `{"posts":
+  [...]}` object while the lookup parser accepted only bare lists, so every e621 post lookup
+  reported `malformed_response` regardless of results. The parser now unwraps the envelope
+  (tag and alias endpoints keep their bare-list shape); fixture tests cover empty and
+  populated envelopes, and the live probe seed that previously failed now returns a clean
+  bounded page.
+
+- **Link discovery no longer aborts on metadata-sync-attached links (Bead
+  `data-processing-815`)** — discovery's end-of-run garbage collection deleted
+  `external_links` that lacked discovery observations, but metadata sync legitimately
+  attaches links through `post_external_references` and `account_external_links` without
+  observations; after any provider metadata sync the whole `discover-links` run failed with
+  a foreign-key violation. The collection now spares links referenced by any attach point,
+  verified by a regression test and on the live catalog.
+
+### Added
+
+- **The supervised matching research spike is delivered (Bead `data-processing-8nj`)** —
+  a bounded, manifest-driven research harness under `scripts/matching-spike/` (seeds,
+  manifest builder, host-allowlisted fetcher, measurement runner) with private fixtures
+  under `private-exports/matching-spike/`, and the redacted
+  [matching spike evidence](docs/plans/matching-spike-evidence.md): 133 labeled pairs
+  measured from real data — positives at phash@8 distance ≤ 10, negatives ≥ 22, two
+  byte-identical cross-provider mirrors, thumbnails visually identical to originals at
+  phash@8, and an empty same-artist false-positive class flagged as the key gap. Per the
+  maintainer decision recorded in the evidence document, these measurements are research
+  evidence only: catalog hashes remain identification metadata, and no similarity
+  mechanism enters a product surface unless a generic, evidence-backed one is proven.
+
 ## [2026-10-04]
 
 ### Added
@@ -40,11 +74,20 @@ Rules:
   audited write path breaks — the full suite passes under the triggers. Known consequence: a
   future purge/redaction feature must supersede or tombstone rows rather than delete history.
 
+- **The export-projections milestone candidate is filed (Bead `data-processing-1oi`)** — bounded
+  JSONL/CSV export projections over the evidence layer, an attribution-disagreement report, and
+  per-field-source exports. A gap analysis against `docs/plans/raw_future_plan.md` found the
+  catalog CLI has no export surface today and named this the highest-leverage non-Phase-D work
+  toward the raw plan.
+
 ### Changed
 
 - **The roadmap names the work and relationship model (kernel Phase D) as the leading next
-  milestone**, entered through the supervised matching research spike before any schema work,
-  with practical workflows free to take priority; the Phase D milestone bead is filed unclaimed.
+  milestone**, with practical workflows free to take priority. A gap analysis against
+  `docs/plans/raw_future_plan.md` split the milestone into independently landable halves: the
+  schema half (artifact/work entities and the typed-relationship model, Bead
+  `data-processing-t08`) and the supervised matching research spike, which gates only fuzzy
+  matcher proposals and is rescoped to its own lower-priority bead (`data-processing-8nj`, P3).
 
 ## [2026-10-03]
 
