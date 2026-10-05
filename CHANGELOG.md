@@ -15,6 +15,19 @@ Rules:
 
 ## [2026-10-05]
 
+### Added
+
+- **The hosted-source metadata audit is delivered (Bead `data-processing-a3t`)** —
+  [docs/plans/metadata-audit.md](docs/plans/metadata-audit.md) consolidates, per provider
+  (danbooru/aibooru, gelbooru, e621, pixiv, X), what each source exposes (mined from
+  gallery-dl and Grabber) against what the repo retains and normalizes, with every gap
+  classified reprocess-able vs refetch. Headline findings: the strongest identification
+  bridge (danbooru's first-class `pixiv_id` field and `pixiv_id:` metatag lookup) is
+  already wired but never exercised; gelbooru has zero lookup capability despite
+  server-side md5/source/id/parent search support; danbooru's adapter skips
+  score/flag/pool fields the persistence layer already accepts; pixiv series and
+  related-works are unnormalized relationship surfaces. Worklist filed as six beads.
+
 ### Fixed
 
 - **e621 candidate lookups no longer reject the provider's response envelope (Bead
