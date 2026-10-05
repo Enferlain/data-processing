@@ -49,6 +49,146 @@ def _public_headers(headers: httpx.Headers) -> dict[str, str]:
     }
 
 
+def _optional_integer(body: Mapping[str, Any], name: str) -> int | None:
+    """Read an optional provider integer fact, failing closed on a bad shape."""
+
+    value = body.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, f"post {name} is malformed")
+    return value
+
+
+def _optional_flag(body: Mapping[str, Any], name: str) -> bool | None:
+    value = body.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, f"post {name} is malformed")
+    return value
+
+
+def _post_fact_data(body: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract engagement and status facts in the shared page writer's vocabulary.
+
+    Danbooru reports these as flat post fields; the shared writer persists them as
+    post metadata observations (score components, favorite count) and one flag
+    observation per status flag (deleted/pending/flagged/banned).
+    """
+
+    score = {
+        "up": _optional_integer(body, "up_score"),
+        # Danbooru reports down_score as a negative offset (score = up + down);
+        # the neutral vocabulary stores the non-negative downvote count.
+        "down": (
+            abs(value) if (value := _optional_integer(body, "down_score")) is not None else None
+        ),
+        "total": _optional_integer(body, "score"),
+    }
+    flags = {
+        name: value
+        for name, value in (
+            ("deleted", _optional_flag(body, "is_deleted")),
+            ("pending", _optional_flag(body, "is_pending")),
+            ("flagged", _optional_flag(body, "is_flagged")),
+            ("banned", _optional_flag(body, "is_banned")),
+        )
+        if value is not None
+    }
+    data: dict[str, Any] = {}
+    if any(value is not None for value in score.values()):
+        data["score"] = score
+    favorite_count = _optional_integer(body, "fav_count")
+    if favorite_count is not None:
+        data["fav_count"] = favorite_count
+    if flags:
+        data["flags"] = flags
+    return data
+
+
+def _media_asset_entries(body: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Index the media asset's variant entries by provider type, failing closed."""
+
+    asset = body.get("media_asset")
+    if asset is None:
+        return {}
+    if not isinstance(asset, dict):
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "post media_asset is malformed")
+    entries = asset.get("variants")
+    if entries is None:
+        return {}
+    if not isinstance(entries, list):
+        raise AdapterFailure(
+            AdapterOutcome.MALFORMED_RESPONSE, "post media_asset variants are malformed"
+        )
+    indexed: dict[str, Mapping[str, Any]] = {}
+    for entry in entries:
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("type"), str)
+            or not entry["type"]
+        ):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "post media_asset variants are malformed"
+            )
+        indexed[entry["type"]] = entry
+    return indexed
+
+
+def _variant_fields(role: str, url: str, entry: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Render one media variant, carrying media-asset dimensions when available."""
+
+    variant: dict[str, Any] = {"role": role, "url": url}
+    if entry is None:
+        return variant
+    for name in ("width", "height"):
+        value = entry.get(name)
+        if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "media_asset variant dimensions are malformed"
+            )
+        variant[name] = value
+    extension = entry.get("file_ext")
+    if extension is not None and (not isinstance(extension, str) or not extension):
+        raise AdapterFailure(
+            AdapterOutcome.MALFORMED_RESPONSE, "media_asset variant extension is malformed"
+        )
+    if extension:
+        variant["ext"] = extension
+        variant["mime_type"] = mimetypes.guess_type(f"file.{extension}")[0]
+    return variant
+
+
+def _media_variants(body: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Merge post URL fields with media-asset variant dimensions.
+
+    The post's file/large/preview URLs remain the source of the
+    original/sample/preview roles; the media asset contributes each variant's
+    dimensions plus the provider-native intermediate sizes (180x180, 360x360,
+    720x720, ...) under their own provider names, so acquisition role resolution
+    keeps its existing URL mapping.
+    """
+
+    asset = _media_asset_entries(body)
+    variants: list[dict[str, Any]] = []
+    for role, key in (
+        ("original", "file_url"),
+        ("sample", "large_file_url"),
+        ("preview", "preview_file_url"),
+    ):
+        url = body.get(key)
+        if isinstance(url, str) and url:
+            variants.append(_variant_fields(role, url, asset.get(role)))
+    for name, entry in asset.items():
+        if name in {"original", "sample", "preview"}:
+            continue
+        url = entry.get("url")
+        if isinstance(url, str) and url:
+            variants.append(_variant_fields(name, url, entry))
+    return variants
+
+
 @dataclass(frozen=True, slots=True)
 class DanbooruCredentials:
     login: str = field(repr=False)
@@ -469,6 +609,7 @@ class DanbooruAdapter:
                     "rating": body.get("rating"),
                     "status": "deleted" if deleted else "available",
                     "availability": "deleted" if deleted else "available",
+                    **_post_fact_data(body),
                 },
             )
         ]
@@ -540,11 +681,7 @@ class DanbooruAdapter:
         mime_type = (
             mimetypes.guess_type(f"file.{extension}")[0] if isinstance(extension, str) else None
         )
-        variants = [
-            {"role": role, "url": value}
-            for role, value in (("original", original), ("sample", sample), ("preview", preview))
-            if isinstance(value, str) and value
-        ]
+        variants = _media_variants(body)
         return NormalizedItem(
             "media_occurrence",
             f"{post_id}:primary",
@@ -646,6 +783,22 @@ class DanbooruAdapter:
             isinstance(name, str) for name in other_names
         ):
             raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "artist aliases are malformed")
+        group_name = body.get("group_name")
+        if group_name is not None and (not isinstance(group_name, str) or not group_name):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist group name is malformed"
+            )
+        is_banned = body.get("is_banned")
+        if is_banned is not None and not isinstance(is_banned, bool):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "artist banned state is malformed"
+            )
+        for name in ("created_at", "updated_at"):
+            value = body.get(name)
+            if value is not None and not isinstance(value, str):
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE, f"artist {name} is malformed"
+                )
         return NormalizedItem(
             "attribution",
             artist_id,
@@ -658,6 +811,10 @@ class DanbooruAdapter:
                 "deleted": bool(body.get("is_deleted")),
                 "is_deprecated": bool(body.get("is_deprecated", False)),
                 "replacement_id": body.get("replacement_id"),
+                "group_name": group_name,
+                "is_banned": is_banned,
+                "created_at": body.get("created_at"),
+                "updated_at": body.get("updated_at"),
                 "account": False,
             },
         )

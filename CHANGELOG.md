@@ -17,6 +17,19 @@ Rules:
 
 ### Added
 
+- **Danbooru-family post and artist fact normalization catches up (Bead
+  `data-processing-unp`, OpenSpec change `extend-danbooru-post-artist-facts`)** — the
+  adapter now emits fields the persistence layer already supported but no provider fed it:
+  post score components (danbooru's negative `down_score` translated to the neutral
+  downvote count), favorite count, and status flags as post metadata and flag
+  observations; per-variant dimensions from `media_asset.variants` including the
+  provider-native intermediate sizes (180x180/360x360/720x720) on the occurrence's
+  variant metadata; and artist `group_name`/`is_banned`/created/updated on attribution
+  snapshots. Malformed shapes for the new fields fail closed. Findings recorded in the
+  metadata audit: danbooru post payloads carry no pool ids (pool grouping split out to a
+  dedicated pools-surface bead), and `tag_count_*`/`has_children` are derivable from
+  already-normalized tags and relations.
+
 - **The identification-bridge hardening unit is completed (Bead `data-processing-zos`)** —
   e621's `external_post_id` now renders both known pixiv source URL spellings (bare and
   `/en/`) as separate bounded requests walked by the existing alias continuation, pinned by

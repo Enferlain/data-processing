@@ -15,7 +15,7 @@
       "operation": "fetch_post",
       "target": "3001",
       "request_identity": "aibooru:fetch_post:3001",
-      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 3001, "rating": "s", "md5": "fedcba9876543210fedcba9876543210", "file_url": "https://aibooru.online/data/original.png", "tag_string_artist": "artist_b", "tag_string_character": "", "tag_string_copyright": "", "tag_string_general": "ai-generated", "tag_string_meta": ""}},
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 3001, "rating": "s", "md5": "fedcba9876543210fedcba9876543210", "file_url": "https://aibooru.online/data/original.png", "score": 3, "up_score": 3, "down_score": 0, "fav_count": 2, "is_deleted": false, "is_pending": false, "is_flagged": false, "is_banned": false, "media_asset": {"id": 7001, "file_ext": "png", "status": "active", "variants": [{"type": "original", "url": "https://aibooru.online/data/original.png", "width": 800, "height": 600, "file_ext": "png"}]}, "tag_string_artist": "artist_b", "tag_string_character": "", "tag_string_copyright": "", "tag_string_general": "ai-generated", "tag_string_meta": ""}},
       "expected": {"outcome": "success", "platform": "aibooru", "post_ids": ["3001"], "declared_md5": "fedcba9876543210fedcba9876543210"}
     },
     {

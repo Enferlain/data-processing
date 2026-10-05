@@ -97,15 +97,15 @@ or adapter work) · n/a not exposed.
 | parent_id + children | ✓ | ✓ (`parent_of`) | relationships (req 3) |
 | tags × 5 categories | ✓ | ✓ | ordering/identity evidence |
 | uploader (id, name via include) | ✓ | ✓ id only | — |
-| **score / fav_count / up/down** | ✓ | **R** | ordering, quality signals |
-| **is_flagged / is_pending (+bit_flags)** | ✓ | **R** | revisit/freshness workflows |
-| **pools / favgroups (post_ids)** | ✓ | **R** (per-post pool ids unverified; collections need `/pools/{id}.json`) | **work-grouping relationships (req 3)** |
-| **tag_count_\*** | ✓ | **R** | cheap ordering |
-| **has_children / has_active/visible** | ✓ | **R** | traversal hints |
+| **score / fav_count / up/down** | ✓ | ✓ (2026-10-05, bead `unp`) | ordering, quality signals |
+| **is_flagged / is_pending (+bit_flags)** | ✓ | ✓ flags as observations (bit_flags stays raw) | revisit/freshness workflows |
+| **pools / favgroups (post_ids)** | ✓ | ✗ from post payloads — verified absent on live payloads 2026-10-05; needs the `/pools/{id}.json` collection surface | **work-grouping relationships (req 3)** |
+| **tag_count_\*** | ✓ | derivable (post-tag observations per category) | cheap ordering |
+| **has_children / has_active/visible** | ✓ | derivable (parent/child relations) | traversal hints |
 | **description / artist_commentary / notes** (includes) | opt-in | ✗ (never requested) | provenance/context |
 | **ugoira frames** (`media_metadata`) | opt-in | ✗ | animation support |
-| **media_asset (variants w/ dims, pixel_hash, duration, file_key)** | ✓ | **R** | variant fidelity |
-| artist `group_name`, `is_banned`, canonical_url, created/updated | ✓ | **R** (partial: name/other_names/urls/active/deprecated/replacement ✓) | artist identity evidence |
+| **media_asset (variants w/ dims, pixel_hash, duration, file_key)** | ✓ | ✓ variant dims per provider-native size (pixel_hash/duration/file_key stay raw) | variant fidelity |
+| artist `group_name`, `is_banned`, canonical_url, created/updated | ✓ | ✓ group_name/is_banned/created/updated (canonical_url not exposed by the artist payload) alongside name/other_names/urls/active/deprecated/replacement | artist identity evidence |
 
 The persistence layer already writes `PostMetadataObservation`, `PostFlagObservation`, and
 `PostPoolObservation` for e621 — the danbooru adapter simply does not emit those keys, so
@@ -191,10 +191,11 @@ order of reliability:
 
 Filed as beads, in requirement-impact order:
 
-1. **Danbooru-family normalization catch-up** — emit score/fav/up/down, flag
-   observations, pool observations (verify per-post pool ids), tag counts, has_children,
-   media_asset variant dims, artist group_name/is_banned/canonical_url; reprocess-able;
-   unlocks ordering metadata + pool relationships.
+1. **Danbooru-family normalization catch-up** — *(Done 2026-10-05, bead
+   `data-processing-unp`)* emit score/fav/up/down ✓, flag observations ✓, media_asset
+   variant dims ✓, artist group_name/is_banned/created/updated ✓; per-post pool ids
+   verified absent (pool grouping needs the pools collection surface, still open);
+   tag counts and has_children are derivable from already-normalized data.
 2. **Gelbooru lookup + relations** — declare bounded lookup capabilities (md5:, source:,
    id:, parent:) with the dapi transport (verify favorites dispute), normalize
    parent_id/has_children/title, typed tags via `fields=tag_info`; unlocks req 1+2 for

@@ -7,7 +7,7 @@
     "adapter_version": "danbooru-fixture-v1",
     "schema_version": "danbooru-json-v1",
     "redactions": ["names replaced", "URLs reduced to representative public examples", "credentials removed"],
-    "source": "minimal redacted contract derived from Danbooru API documentation and gallery-dl 1.32.2"
+    "source": "minimal redacted contract derived from Danbooru API documentation and gallery-dl 1.32.2; engagement, status-flag, and media_asset fields extended 2026-10-05 against a live post response shape (score family, fav_count, is_pending/is_flagged/is_banned, media_asset.variants with per-variant dimensions)"
   },
   "cases": [
     {
@@ -18,7 +18,7 @@
       "response": {
         "status_code": 200,
         "headers": {"content-type": "application/json", "x-rate-limit": "10;w=1"},
-        "body": {"id": 3001, "created_at": "2026-01-03T00:00:00.000Z", "updated_at": "2026-01-04T00:00:00.000Z", "rating": "s", "md5": "0123456789abcdef0123456789abcdef", "file_size": 123456, "image_width": 1400, "image_height": 1000, "file_ext": "jpg", "file_url": "https://cdn.donmai.us/original.jpg", "large_file_url": "https://cdn.donmai.us/sample.jpg", "preview_file_url": "https://cdn.donmai.us/preview.jpg", "source": "https://www.pixiv.net/artworks/2001", "pixiv_id": 2001, "uploader_id": 17, "parent_id": 2999, "has_children": true, "tag_string_artist": "artist_a", "tag_string_character": "character_a", "tag_string_copyright": "series_a", "tag_string_general": "solo", "tag_string_meta": "translated"}
+        "body": {"id": 3001, "created_at": "2026-01-03T00:00:00.000Z", "updated_at": "2026-01-04T00:00:00.000Z", "rating": "s", "md5": "0123456789abcdef0123456789abcdef", "file_size": 123456, "image_width": 1400, "image_height": 1000, "file_ext": "jpg", "file_url": "https://cdn.donmai.us/original.jpg", "large_file_url": "https://cdn.donmai.us/sample.jpg", "preview_file_url": "https://cdn.donmai.us/preview.jpg", "source": "https://www.pixiv.net/artworks/2001", "pixiv_id": 2001, "uploader_id": 17, "parent_id": 2999, "has_children": true, "score": 12, "up_score": 14, "down_score": -2, "fav_count": 11, "is_deleted": false, "is_pending": false, "is_flagged": false, "is_banned": false, "media_asset": {"id": 9001, "md5": "0123456789abcdef0123456789abcdef", "file_ext": "jpg", "status": "active", "variants": [{"type": "180x180", "url": "https://cdn.donmai.us/180x180.jpg", "width": 252, "height": 180, "file_ext": "jpg"}, {"type": "360x360", "url": "https://cdn.donmai.us/360x360.jpg", "width": 504, "height": 360, "file_ext": "jpg"}, {"type": "720x720", "url": "https://cdn.donmai.us/720x720.webp", "width": 1008, "height": 720, "file_ext": "webp"}, {"type": "sample", "url": "https://cdn.donmai.us/sample.jpg", "width": 1190, "height": 850, "file_ext": "jpg"}, {"type": "original", "url": "https://cdn.donmai.us/original.jpg", "width": 1400, "height": 1000, "file_ext": "jpg"}]}, "tag_string_artist": "artist_a", "tag_string_character": "character_a", "tag_string_copyright": "series_a", "tag_string_general": "solo", "tag_string_meta": "translated"}
       },
       "expected": {"outcome": "success", "post_ids": ["3001"], "uploader_ids": ["17"], "tag_categories": ["artist", "character", "copyright", "general", "meta"], "declared_md5": "0123456789abcdef0123456789abcdef", "verified_md5": null, "pixiv_reference": "2001"}
     },
@@ -30,7 +30,7 @@
       "response": {
         "status_code": 200,
         "headers": {"content-type": "application/json"},
-        "body": {"id": 4001, "name": "artist_a", "other_names": ["artist-a", "別名"], "is_active": true, "is_deleted": false, "urls": [{"url": "https://www.pixiv.net/users/1001", "is_active": true}, {"url": "https://x.com/artist_a", "is_active": true}]}
+        "body": {"id": 4001, "name": "artist_a", "other_names": ["artist-a", "別名"], "is_active": true, "is_deleted": false, "is_banned": false, "group_name": "circle_a", "created_at": "2025-06-01T00:00:00.000Z", "updated_at": "2026-01-02T00:00:00.000Z", "urls": [{"url": "https://www.pixiv.net/users/1001", "is_active": true}, {"url": "https://x.com/artist_a", "is_active": true}]}
       },
       "expected": {"outcome": "success", "attribution_ids": ["4001"], "account_ids": [], "url_count": 2}
     },
@@ -47,7 +47,7 @@
       "operation": "fetch_post",
       "target": "3998",
       "request_identity": "danbooru:fetch_post:3998",
-      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 3998, "is_deleted": true, "tag_string_artist": "", "tag_string_character": "", "tag_string_copyright": "", "tag_string_general": "", "tag_string_meta": ""}},
+      "response": {"status_code": 200, "headers": {"content-type": "application/json"}, "body": {"id": 3998, "is_deleted": true, "is_pending": false, "is_flagged": false, "is_banned": false, "score": 0, "up_score": 0, "down_score": 0, "fav_count": 0, "tag_string_artist": "", "tag_string_character": "", "tag_string_copyright": "", "tag_string_general": "", "tag_string_meta": ""}},
       "expected": {"outcome": "deleted", "post_ids": ["3998"], "media_source_keys": []}
     },
     {

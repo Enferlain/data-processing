@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -60,11 +61,38 @@ def test_post_normalization_keeps_uploader_tags_hash_references_and_relations_se
     media = by_kind["media_occurrence"][0].data
     assert media["declared_md5"] == "0123456789abcdef0123456789abcdef"
     assert "verified_md5" not in media
+    # Original/sample/preview keep their post-field URLs; the media asset adds
+    # per-variant dimensions and the provider-native intermediate sizes.
     assert [variant["role"] for variant in media["variants"]] == [
         "original",
         "sample",
         "preview",
+        "180x180",
+        "360x360",
+        "720x720",
     ]
+    original_variant = media["variants"][0]
+    assert original_variant["url"] == "https://cdn.donmai.us/original.jpg"
+    assert (original_variant["width"], original_variant["height"]) == (1400, 1000)
+    assert original_variant["ext"] == "jpg"
+    assert original_variant["mime_type"] == "image/jpeg"
+    assert media["variants"][3] == {
+        "role": "180x180",
+        "url": "https://cdn.donmai.us/180x180.jpg",
+        "width": 252,
+        "height": 180,
+        "ext": "jpg",
+        "mime_type": "image/jpeg",
+    }
+    post = by_kind["post"][0].data
+    assert post["score"] == {"up": 14, "down": 2, "total": 12}
+    assert post["fav_count"] == 11
+    assert post["flags"] == {
+        "deleted": False,
+        "pending": False,
+        "flagged": False,
+        "banned": False,
+    }
     refs = by_kind["external_reference"]
     assert any(item.data.get("target_platform") == "pixiv" for item in refs)
     assert all(item.data["evidence_only"] is True for item in refs)
@@ -89,6 +117,10 @@ def test_artist_is_attribution_and_never_materialized_as_account() -> None:
         "https://www.pixiv.net/users/1001",
         "https://x.com/artist_a",
     ]
+    assert artist.data["group_name"] == "circle_a"
+    assert artist.data["is_banned"] is False
+    assert artist.data["created_at"] == "2025-06-01T00:00:00.000Z"
+    assert artist.data["updated_at"] == "2026-01-02T00:00:00.000Z"
 
 
 def test_listing_uses_opaque_keyset_continuation_and_validates_its_version() -> None:
@@ -239,6 +271,101 @@ def test_danbooru_catalog_integration_keeps_metadata_evidence_separate(
         assert database.connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
         assert database.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
         assert result.status == "complete"
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    (
+        ("score", "twelve"),
+        ("fav_count", True),
+        ("is_flagged", "yes"),
+        ("media_asset", "asset-ref"),
+        ("media_asset", {"variants": [{"type": "180x180", "url": "https://x", "width": "big"}]}),
+    ),
+)
+def test_malformed_engagement_and_asset_fields_fail_closed(field: str, value: object) -> None:
+    # The engagement/flag/media-asset fields fail closed as malformed responses
+    # (the sync service retains raw) instead of silently dropping provider values.
+    case = _case("danbooru.json", "post_with_attribution")
+    envelope = case.response
+    body = json.loads(envelope.payload)
+    body[field] = value
+    mutated = replace(envelope, payload=json.dumps(body).encode())
+    with pytest.raises(AdapterFailure) as failure:
+        _adapter().normalize(mutated)
+    assert failure.value.outcome is AdapterOutcome.MALFORMED_RESPONSE
+
+
+def test_danbooru_post_and_artist_facts_persist_idempotently(tmp_path: Path) -> None:
+    # OpenSpec extend-danbooru-post-artist-facts: engagement facts land as post
+    # metadata observations, status flags as flag observations, media-asset
+    # dimensions enrich the occurrence variants, and artist group/ban state
+    # persists on the attribution snapshot -- and unchanged re-observation does
+    # not duplicate rows.
+    post_case = _case("danbooru.json", "post_with_attribution")
+    post_body = json.loads(post_case.response.payload)
+    artist_case = _case("danbooru.json", "artist_record")
+    artist_body = json.loads(artist_case.response.payload)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = artist_body if "artists" in str(request.url) else post_body
+        return httpx.Response(200, headers=post_case.response.headers, json=body, request=request)
+
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        service = MetadataSyncService(
+            database,
+            _adapter(handler=handler),
+            minimum_interval_seconds=0,
+            maximum_retries=0,
+            monotonic=lambda: 0.0,
+            sleep=lambda _seconds: None,
+            clock=lambda: NOW,
+        )
+        for _ in range(2):
+            assert (
+                service.synchronize(
+                    AdapterOperation.FETCH_POST, "3001", limits=SyncLimits(1, 1, 50, 10)
+                ).status
+                == "complete"
+            )
+            assert (
+                service.synchronize(
+                    AdapterOperation.FETCH_ATTRIBUTION, "4001", limits=SyncLimits(1, 1, 50, 10)
+                ).status
+                == "complete"
+            )
+        connection = database.connection
+        assert [
+            tuple(row)
+            for row in connection.execute(
+                """SELECT score_up, score_down, score_total, favorite_count,
+                          flag_deleted, flag_pending, flag_flagged
+                     FROM post_metadata_observations"""
+            )
+        ] == [(14, 2, 12, 11, False, False, False)]
+        assert {
+            tuple(row)
+            for row in connection.execute(
+                "SELECT flag_name, flag_value FROM post_flag_observations"
+            )
+        } == {("deleted", 0), ("pending", 0), ("flagged", 0), ("banned", 0)}
+        variants = json.loads(
+            connection.execute("SELECT variants_json FROM media_occurrences").fetchone()[0]
+        )
+        assert variants["version"] == "provider-variants-v1"
+        by_role = {variant["role"]: variant for variant in variants["variants"]}
+        assert (by_role["original"]["width"], by_role["original"]["height"]) == (1400, 1000)
+        assert (by_role["180x180"]["width"], by_role["180x180"]["height"]) == (252, 180)
+        assert by_role["180x180"]["url"] == "https://cdn.donmai.us/180x180.jpg"
+        artist = connection.execute(
+            "SELECT group_name, is_banned FROM attribution_snapshots"
+        ).fetchone()
+        assert tuple(artist) == ("circle_a", 0)
+        # Unchanged re-observation kept one row per distinct fact digest.
+        assert (
+            connection.execute("SELECT COUNT(*) FROM post_metadata_observations").fetchone()[0] == 1
+        )
+        assert connection.execute("SELECT COUNT(*) FROM post_flag_observations").fetchone()[0] == 4
 
 
 def test_full_danbooru_page_fits_default_top_level_record_budget(tmp_path: Path) -> None:
