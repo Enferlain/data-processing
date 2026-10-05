@@ -87,6 +87,48 @@ def test_offline_discovery_preserves_provenance_contexts_and_is_idempotent(
             bytes(database.connection.execute("SELECT payload FROM raw_payloads").fetchone()[0])
             == raw_before
         )
+
+
+def test_discovery_keeps_sync_attached_links_without_observations(tmp_path: Path) -> None:
+    # Metadata sync attaches declared source URLs through
+    # post_external_references without creating discovery observations; the
+    # end-of-run garbage collection must spare those links instead of
+    # failing the whole run on their foreign key.
+    with _catalog(tmp_path / "catalog.sqlite3") as database:
+        connection = database.connection
+        post_id = connection.execute(
+            "SELECT post_id FROM posts ORDER BY post_id LIMIT 1"
+        ).fetchone()[0]
+        raw_observation_id = connection.execute(
+            "SELECT raw_observation_id FROM raw_observations ORDER BY raw_observation_id LIMIT 1"
+        ).fetchone()[0]
+        with database.transaction():
+            connection.execute(
+                """INSERT INTO external_links (
+                       canonical_url, canonicalization_version, resolution_state
+                   ) VALUES (
+                       'https://www.pixiv.net/artworks/133416234', 'url-canonicalizer-v1',
+                       'recognized'
+                   )"""
+            )
+            link_id = connection.execute(
+                "SELECT external_link_id FROM external_links "
+                "WHERE canonical_url = 'https://www.pixiv.net/artworks/133416234'"
+            ).fetchone()[0]
+            connection.execute(
+                """INSERT INTO post_external_references (
+                       post_id, external_link_id, reference_kind, raw_observation_id, observed_at
+                   ) VALUES (?, ?, 'source_url', ?, ?)""",
+                (post_id, link_id, raw_observation_id, NOW),
+            )
+
+        result = DiscoveryService(database).discover()
+
+        assert result.status == "complete"
+        surviving = connection.execute(
+            "SELECT COUNT(*) FROM external_links WHERE external_link_id = ?", (link_id,)
+        ).fetchone()[0]
+        assert surviving == 1
         contexts = {
             row[0]
             for row in database.connection.execute("SELECT source_context FROM link_observations")

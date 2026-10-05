@@ -519,6 +519,38 @@ def test_malformed_lookup_shapes_fail_typed(payload: object) -> None:
         adapter.normalize_lookup(adapter.fetch_lookup(request), request)
 
 
+@pytest.mark.parametrize("posts", [(), ("populated",)])
+def test_posts_envelope_lookup_response_is_unwrapped(posts: tuple[str, ...]) -> None:
+    post = {
+        "id": 5001,
+        "sources": ["https://www.pixiv.net/artworks/9001"],
+        "uploader_id": 42,
+        "file": {
+            "md5": "abcdef0123456789abcdef0123456789",
+            "ext": "jpg",
+            "size": 10,
+            "width": 20,
+            "height": 30,
+            "url": None,
+        },
+        "score": {"total": 5},
+        "rating": "s",
+        "tags": {"artist": ["artist_a"]},
+        "flags": {"deleted": False},
+    }
+    entries = [post] if posts else []
+    adapter = _lookup_adapter({"posts": entries})
+    request = LookupRequest(LookupStrategy.SOURCE_POST_URL, "https://x.com/a/status/7")
+
+    page = adapter.normalize_lookup(adapter.fetch_lookup(request), request)
+
+    if entries:
+        assert page.results[0].result_kind == "post"
+        assert page.results[0].native_id == "5001"
+    else:
+        assert page.results == ()
+
+
 def test_artist_tag_lookup_requires_exact_current_artist_category() -> None:
     adapter = _lookup_adapter(
         [

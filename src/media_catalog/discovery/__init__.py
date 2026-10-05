@@ -96,11 +96,21 @@ class DiscoveryService:
                         self._generate_candidate(occurrence, stored.id, reference_id, now)
                 except (TypeError, ValueError, json.JSONDecodeError):
                     counts["failed"] += 1
+            # A link is garbage only when nothing references it. Metadata sync
+            # attaches links through post_external_references and
+            # account_external_links without discovery observations, so those
+            # attach points must spare a link just like observations do.
             self.connection.execute(
                 """DELETE FROM external_link_references
                    WHERE NOT EXISTS (
                        SELECT 1 FROM link_observations lo
                        WHERE lo.external_link_id = external_link_references.external_link_id
+                   ) AND NOT EXISTS (
+                       SELECT 1 FROM post_external_references per
+                       WHERE per.external_link_id = external_link_references.external_link_id
+                   ) AND NOT EXISTS (
+                       SELECT 1 FROM account_external_links ael
+                       WHERE ael.external_link_id = external_link_references.external_link_id
                    )"""
             )
             self.connection.execute(
@@ -111,6 +121,12 @@ class DiscoveryService:
                    ) AND NOT EXISTS (
                        SELECT 1 FROM external_link_references elr
                        WHERE elr.external_link_id = external_links.external_link_id
+                   ) AND NOT EXISTS (
+                       SELECT 1 FROM post_external_references per
+                       WHERE per.external_link_id = external_links.external_link_id
+                   ) AND NOT EXISTS (
+                       SELECT 1 FROM account_external_links ael
+                       WHERE ael.external_link_id = external_links.external_link_id
                    )"""
             )
             self.writer.finish_discovery(

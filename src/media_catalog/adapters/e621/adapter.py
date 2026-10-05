@@ -442,6 +442,10 @@ class E621Adapter:
             raise AdapterFailure(
                 AdapterOutcome.MALFORMED_RESPONSE, "provider returned invalid JSON"
             ) from error
+        if isinstance(body, dict) and isinstance(body.get("posts"), list):
+            # e621's /posts.json search wraps results in a posts envelope; the
+            # tag and tag-alias endpoints return bare lists.
+            body = body["posts"]
         if not isinstance(body, list):
             raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "lookup response is not a list")
 
