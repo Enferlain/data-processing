@@ -17,6 +17,17 @@ Rules:
 
 ### Added
 
+- **Discovery-found references now seed stable-ID lookups (Bead `data-processing-zos`,
+  partial)** — lookup planning read only sync-written `post_external_references`, so a
+  pixiv URL discovered in a bookmark's text was invisible to the `external_post_id`
+  strategy; the material query now unions the discovery chain
+  (`link_observations` → `external_link_references` → `platform_references`), with a
+  regression test. The live positive control then completed the first end-to-end
+  identification hop: an X bookmark → discovery-found pixiv reference → Danbooru
+  `pixiv_id:` metatag search → one result, landing as a pending review candidate.
+
+### Fixed
+
 - **The hosted-source metadata audit is delivered (Bead `data-processing-a3t`)** —
   [docs/plans/metadata-audit.md](docs/plans/metadata-audit.md) consolidates, per provider
   (danbooru/aibooru, gelbooru, e621, pixiv, X), what each source exposes (mined from

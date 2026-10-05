@@ -56,6 +56,45 @@ def _lookup_payload() -> bytes:
     ).encode()
 
 
+def test_discovery_found_pixiv_references_seed_external_post_id_material(
+    tmp_path: Path,
+) -> None:
+    # References discovered in post text (link_observations -> external_link
+    # -> platform_reference) must feed lookup material just like the
+    # sync-written post_external_references path; a pixiv URL found in a
+    # bookmark's text is otherwise invisible to external_post_id planning.
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database, database.transaction():
+        post_id = (
+            CatalogWriter(database)
+            .upsert_post(
+                PostRecord(
+                    "x",
+                    "1950567258528547071",
+                    "2026-10-05T00:00:00Z",
+                    canonical_url="https://x.com/yyqw7151/status/1950567258528547071",
+                    text="source https://www.pixiv.net/artworks/145476258",
+                )
+            )
+            .id
+        )
+    with CatalogDatabase(path) as database:
+        DiscoveryService(database).discover()
+
+    plan = plan_candidate_lookup(
+        path,
+        f"post:{post_id}",
+        DANBOORU,
+        (LookupStrategy.EXTERNAL_POST_ID,),
+        limits=LookupLimits(requests=1, pages=1, results=5, seconds=30),
+    )
+
+    assert len(plan.items) == 1
+    assert plan.items[0].material.values == ("145476258",)
+    assert plan.items[0].material.platform == "pixiv"
+    assert plan.exclusions == ()
+
+
 def test_plan_is_read_only_redacted_and_bounded(tmp_path: Path) -> None:
     path = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(path) as database:

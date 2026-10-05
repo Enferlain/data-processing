@@ -200,8 +200,17 @@ def _post_materials(
             WHERE per.post_id = ? AND pr.object_kind = 'post'
               AND pr.identifier_kind = 'stable_id'
               AND target.platform_key = 'pixiv'
+            UNION
+            SELECT DISTINCT target.platform_key, pr.native_identifier
+             FROM link_observations lo
+             JOIN external_link_references elr ON elr.external_link_id = lo.external_link_id
+             JOIN platform_references pr ON pr.platform_reference_id = elr.platform_reference_id
+             JOIN platforms target ON target.platform_id = pr.platform_id
+            WHERE lo.subject_post_id = ? AND pr.object_kind = 'post'
+              AND pr.identifier_kind = 'stable_id'
+              AND target.platform_key = 'pixiv'
             ORDER BY target.platform_key, pr.native_identifier""",
-        (post_id,),
+        (post_id, post_id),
     ):
         materials[LookupStrategy.EXTERNAL_POST_ID].append(
             LookupQueryMaterial(
