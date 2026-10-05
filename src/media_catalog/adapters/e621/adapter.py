@@ -227,9 +227,10 @@ class E621Adapter:
         else:
             alias_index = 0
             page = None
-        if alias_index >= len(material.values):
+        tokens = _lookup_query_tokens(material)
+        if alias_index >= len(tokens):
             raise ValueError("lookup continuation alias index is out of range")
-        value = material.values[alias_index]
+        value = tokens[alias_index]
         strategy = request.strategy
         limit = min(request.limit, self.instance.page_size)
         params: dict[str, str | int]
@@ -238,7 +239,7 @@ class E621Adapter:
             params = {"tags": f"source:{value}", "limit": limit}
             endpoint = "/posts.json"
         elif strategy is LookupStrategy.EXTERNAL_POST_ID:
-            params = {"tags": f"source:{_external_post_source(material, value)}", "limit": limit}
+            params = {"tags": f"source:{value}", "limit": limit}
             endpoint = "/posts.json"
         elif strategy in {LookupStrategy.DECLARED_MD5, LookupStrategy.VERIFIED_MD5}:
             params = {"tags": f"md5:{value}", "limit": limit}
@@ -733,9 +734,10 @@ class E621Adapter:
                 f"b{last_id}",
                 alias_index,
             )
-        if request.strategy is LookupStrategy.SOURCE_POST_URL and alias_index + 1 < len(
-            request.material.values
-        ):
+        # A short (non-full) page ends the current query token; when the
+        # material expands into more tokens (URL aliases, pixiv source
+        # spellings) the continuation moves to the next one on its own request.
+        if alias_index + 1 < len(_lookup_query_tokens(request.material)):
             return LookupContinuation(
                 self.provider_key,
                 self.schema_version,
@@ -1380,21 +1382,47 @@ def _exact_source_lookup_text(value: str) -> None:
         raise ValueError("e621 source post URL must be one exact source token")
 
 
-def _external_post_source(material: LookupQueryMaterial, value: str) -> str:
-    """Render the e621 exact source query for an external post-id material.
+def _external_post_sources(material: LookupQueryMaterial, value: str) -> tuple[str, ...]:
+    """Render the e621 exact source queries for an external post-id material.
 
     e621 exposes no per-platform external-id metatag; its only exact match for a
-    foreign post is the ``source:`` metatag against the canonical source URL.
-    Only the stable, documented pixiv artwork URL is constructed; any other
-    platform (or a non-numeric id) fails closed before any request.
+    foreign post is the ``source:`` metatag against the source URL as the
+    uploader entered (or e621 normalized) it.  Pixiv artwork sources appear on
+    e621 in both the bare and the ``/en/`` localized spelling, and one does not
+    substring-match the other, so every known spelling is tried, each as its own
+    bounded request.  Any other platform (or a non-numeric id) fails closed
+    before any request.
     """
 
     platform = material.platform
     if platform == "pixiv":
         if not value.isdecimal() or int(value) < 1:
             raise ValueError("external pixiv post id must be a positive numeric id")
-        return f"https://www.pixiv.net/artworks/{int(value)}"
+        identifier = int(value)
+        return (
+            f"https://www.pixiv.net/artworks/{identifier}",
+            f"https://www.pixiv.net/en/artworks/{identifier}",
+        )
     raise ValueError(f"e621 lookup does not support external platform {platform!r}")
+
+
+def _lookup_query_tokens(material: LookupQueryMaterial) -> tuple[str, ...]:
+    """Expand a lookup material into the exact query tokens the adapter tries.
+
+    Most strategies iterate the planner's material values directly (URL aliases
+    for ``source_post_url``); an external post-id material is a stable foreign
+    id, which e621 can only reach through the ``source:`` metatag, so it expands
+    into that id's known pixiv source spellings.  Continuations walk the same
+    token sequence, so ``alias_index`` stays a valid cursor for every strategy.
+    """
+
+    if material.strategy is LookupStrategy.EXTERNAL_POST_ID:
+        return tuple(
+            source
+            for value in material.values
+            for source in _external_post_sources(material, value)
+        )
+    return material.values
 
 
 def _mime_type(extension: object) -> str | None:

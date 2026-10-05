@@ -148,10 +148,64 @@ def test_lookup_external_post_id_renders_exact_pixiv_source_query() -> None:
     adapter = _adapter(handler=handler)
 
     material = LookupQueryMaterial(LookupStrategy.EXTERNAL_POST_ID, "9001", platform="pixiv")
-    adapter.fetch_lookup(LookupRequest(LookupStrategy.EXTERNAL_POST_ID, material))
+    request = LookupRequest(LookupStrategy.EXTERNAL_POST_ID, material)
+    envelope = adapter.fetch_lookup(request)
+    page = adapter.normalize_lookup(envelope, request)
 
+    # The bare artwork spelling goes first; an empty short page hands the
+    # continuation to the localized /en/ spelling, which is its own bounded
+    # request with its own request identity.
     assert requests[0].url.path == "/posts.json"
     assert dict(requests[0].url.params)["tags"] == "source:https://www.pixiv.net/artworks/9001"
+    assert page.continuation is not None
+    assert page.continuation.alias_index == 1
+    assert page.continuation.page is None
+
+    second = LookupRequest(
+        LookupStrategy.EXTERNAL_POST_ID, material, continuation=page.continuation
+    )
+    second_envelope = adapter.fetch_lookup(second)
+    final = adapter.normalize_lookup(second_envelope, second)
+
+    assert len(requests) == 2
+    assert dict(requests[1].url.params)["tags"] == "source:https://www.pixiv.net/en/artworks/9001"
+    assert second_envelope.request_identity != envelope.request_identity
+    assert final.continuation is None
+
+
+def test_external_post_id_full_page_keysets_before_advancing_spelling() -> None:
+    # A full page for one spelling must keep that spelling's keyset boundary
+    # (b<ID> at the same alias index) before the walk may advance to /en/.
+    requests: list[httpx.Request] = []
+    post = {
+        "id": 7700,
+        "sources": ["https://www.pixiv.net/artworks/9001"],
+        "uploader_id": 42,
+        "file": {
+            "md5": "abcdef0123456789abcdef0123456789",
+            "ext": "jpg",
+            "size": 10,
+            "width": 20,
+            "height": 30,
+            "url": None,
+        },
+        "tags": {"artist": ["artist_a"], "general": ["solo"]},
+        "flags": {"deleted": False},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=[post], request=request)
+
+    adapter = _adapter(handler=handler)
+    material = LookupQueryMaterial(LookupStrategy.EXTERNAL_POST_ID, "9001", platform="pixiv")
+    request = LookupRequest(LookupStrategy.EXTERNAL_POST_ID, material, limit=1)
+    page = adapter.normalize_lookup(adapter.fetch_lookup(request), request)
+
+    assert dict(requests[0].url.params)["tags"] == "source:https://www.pixiv.net/artworks/9001"
+    assert page.continuation is not None
+    assert page.continuation.page == "b7700"
+    assert page.continuation.alias_index == 0
 
 
 def test_lookup_artist_strategies_use_exact_metadata_not_fuzzy_text() -> None:

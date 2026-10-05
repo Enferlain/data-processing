@@ -17,6 +17,17 @@ Rules:
 
 ### Added
 
+- **The identification-bridge hardening unit is completed (Bead `data-processing-zos`)** —
+  e621's `external_post_id` now renders both known pixiv source URL spellings (bare and
+  `/en/`) as separate bounded requests walked by the existing alias continuation, pinned by
+  adapter tests and verified live through the mirrored control (danbooru post 12320097 →
+  pixiv 150422897 → e621: two distinct requests, honest zero — not mirrored).
+  `source_post_url` is demoted to weak evidence with the 0/10 probe result in the catalog
+  guide's strategy-strength note, and the non-recorded-seed entry point is decided as a
+  materialize-a-seed operation that ingests the full evidence bundle available at the time
+  (innate image metadata first, supplied references at declared/asserted status) — recorded
+  in the catalog plan §12 and the metadata audit.
+
 - **Discovery-found references now seed stable-ID lookups (Bead `data-processing-zos`,
   partial)** — lookup planning read only sync-written `post_external_references`, so a
   pixiv URL discovered in a bookmark's text was invisible to the `external_post_id`

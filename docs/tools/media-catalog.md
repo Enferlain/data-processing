@@ -317,6 +317,15 @@ uv run catalog lookup plan catalog-output/catalog.sqlite3 account:7 \
   --provider aibooru --strategy artist_exact_name --search-term selected_artist_name
 ```
 
+Strategy strength is uneven, so prefer stronger bridges first: `external_post_id` (a provider's
+first-class foreign-ID field, such as Danbooru's `pixiv_id:` metatag) is the strongest;
+`declared_md5`/`verified_md5` are exact-content matches; `source_post_url` is the weakest — an
+exact string match against uploader-entered URLs that handle volatility and spelling variance
+defeat (0 of 10 probed bookmarks matched on Danbooru, 2026-10-05). Treat its hits as weak evidence
+only, never the sole basis for a review decision. e621 has no foreign-ID metatag, so its
+`external_post_id` renders the known pixiv source URL spellings (bare and `/en/`) as separate
+bounded `source:` requests.
+
 Execute only after reviewing the finite plan inputs:
 
 ```bash

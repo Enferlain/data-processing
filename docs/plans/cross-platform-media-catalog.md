@@ -737,6 +737,33 @@ canonical source/post ID
   -> reviewable post/work/account proposals
 ```
 
+### Non-recorded item entry: materialize-a-seed
+
+Decided 2026-10-05 (Bead `data-processing-zos`): requirement 1's non-recorded half gets an
+explicit materialize-a-seed operation, not an ad-hoc lookup surface. Lookup seeds stay catalog
+entities so candidates, evidence, and review keep one attachment model; a report-only surface
+would strand results with no subject to decide against, and adopting a hit would need the same
+materialization afterward anyway.
+
+The interface takes the full evidence bundle present at the time, in decreasing order of trust:
+
+1. **Innate image metadata — preferred, the item's own identity proof.** Local bytes run through
+   the existing hashing/inspection machinery, yielding verified SHA-256/MD5, detected MIME,
+   dimensions, and a versioned perceptual hash at verified status. These remain identity evidence
+   even when the bytes were altered downstream, because alteration surfaces as a derivative
+   signal rather than being lost.
+2. **Supplied-alongside references.** URLs (artwork/post/profile), provider-declared hashes,
+   dimensions, and platform IDs from wherever the item was obtained — recorded at declared or
+   operator-asserted status with their source, never silently promoted to verified.
+3. **The seed assertion itself.** A provenance event marking the stub operator-materialized,
+   availability unknown, with no snapshots or media claims until a real observation fills them.
+
+The materialized stub is then a normal seed for every lookup strategy — hash, URL, and
+external-ID material feed planning exactly as for any recorded post — and cross-catalog matching
+runs against existing items. Later real observations upsert enrichment in place; the stub never
+blocks or impersonates them. Operator-asserted stubs stay distinguishable in queries so recorded
+and asserted-only items never silently mix.
+
 ### Choosing a better-quality occurrence
 
 Quality selection is evidence-based and reversible. Prefer, in order of confidence:

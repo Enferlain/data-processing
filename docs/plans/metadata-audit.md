@@ -171,9 +171,10 @@ order of reliability:
 2. **Hash matching (`md5:`)** — declared-MD5 lookups wired on danbooru/aibooru/e621;
    needs local verified bytes (or cross-provider declared-MD5 equality after sync).
    Gelbooru blocked only by its missing lookup capability.
-3. **e621 `external_post_id`** — rendered as a constructed pixiv source URL (no pixiv_id
-   field on e621); URL-spelling sensitive; should try the known spellings
-   (`pixiv.net/artworks/{id}`, `/en/`) rather than one.
+3. **e621 `external_post_id`** — rendered as constructed pixiv source URLs (no pixiv_id
+   field on e621); URL-spelling sensitive, so both known spellings
+   (`pixiv.net/artworks/{id}`, `/en/`) are tried as separate bounded requests
+   (2026-10-05, verified live: two distinct requests, clean zero for the control pair).
 4. **`source_post_url`** — weakest: exact string match against uploader-entered URLs;
    handle volatility and spelling variance make it evidence-grade only. Keep, but demote
    in ordering/docs. (0/10 bookmarks matched on danbooru, 2026-10-05.)
@@ -182,8 +183,9 @@ order of reliability:
    record via these is the reviewed-target path that makes library expansion the real
    X→booru bridge (already supported by discovery + review).
 6. **Non-recorded items have no entry point** — lookup seeds must be catalog entities.
-   Closing req 1 for non-recorded items needs an explicit design (materialize-a-seed
-   operation or an ad-hoc lookup surface). Open decision.
+   Decided 2026-10-05: a materialize-a-seed operation that ingests the full evidence bundle
+   available at the time (innate image metadata first, supplied-alongside references second at
+   declared/asserted status) — see the catalog plan §12 "Non-recorded item entry".
 
 ## Ordered normalization worklist
 
@@ -204,7 +206,9 @@ Filed as beads, in requirement-impact order:
 5. **Bridge hardening + positive controls** — exercise `external_post_id`
    (pixiv_id metatag) end-to-end with a known pair; e621 multi-spelling pixiv source
    URLs; demote source_post_url in docs to weak evidence; decide the non-recorded-seed
-   design.
+   design. *(Done 2026-10-05 — bead `data-processing-zos`: positive control completed the
+   first end-to-end hop; e621 now tries both pixiv source spellings; source_post_url
+   demoted in the catalog guide; materialize-a-seed decided, catalog plan §12.)*
 6. **Notes/commentary includes** (danbooru, e621) — promoted 2026-10-05: live pages show
    danbooru artist commentary is the artist's own cross-posted caption and e621
    descriptions embed the full source-post text ("From source:") — retained source
