@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -54,6 +55,7 @@ from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.records import AcquisitionLimits
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
 from media_catalog.remote_sync import MetadataSyncService, SyncLimits
+from media_catalog.seeding import SeedMaterializationService
 from media_catalog.storage.adoption import adopt_assets, plan_adoption
 from media_catalog.storage.cas import AssetStorageError, InspectionLimits
 from media_catalog.storage.queries import (
@@ -114,6 +116,10 @@ def _add_acquisition_limits(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-redirects", type=int, default=5)
     parser.add_argument("--max-quarantine-bytes", type=int, default=128 * 1024 * 1024)
     parser.add_argument("--concurrency", type=int, choices=(1,), default=1)
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _add_lookup_limits(parser: argparse.ArgumentParser) -> None:
@@ -435,6 +441,17 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_show.add_argument("--result-limit", type=int, default=100)
     lookup_show.add_argument("--result-after", type=int)
     _add_json(lookup_show)
+
+    seed = commands.add_parser("seed")
+    seed_commands = seed.add_subparsers(dest="seed_command", required=True)
+    seed_create = seed_commands.add_parser("create")
+    seed_create.add_argument("catalog", type=Path)
+    seed_create.add_argument(
+        "--url", metavar="URL", action="append", required=True, help="where the item was found"
+    )
+    seed_create.add_argument("--note", help="private operator note retained with the bundle")
+    seed_create.add_argument("--declared-md5", help="declared 32-character hex MD5")
+    _add_json(seed_create)
 
     library = commands.add_parser("library")
     library_commands = library.add_subparsers(dest="library_command", required=True)
@@ -901,6 +918,16 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 minimum_interval_seconds=instance.minimum_interval_seconds,
             )
             return _execute_lookup(arguments, catalog_label, service, limits)
+    if arguments.command == "seed":
+        catalog_label = public_path(arguments.catalog)
+        with CatalogDatabase(arguments.catalog) as database:
+            result = SeedMaterializationService(database).materialize(
+                arguments.url,
+                note=arguments.note,
+                declared_md5=arguments.declared_md5,
+                observed_at=_utc_now(),
+            )
+        return {"catalog": catalog_label, **result}
     if arguments.command == "library":
         catalog_label = public_path(arguments.catalog)
         if arguments.library_command == "capabilities":

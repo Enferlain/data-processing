@@ -17,6 +17,18 @@ Rules:
 
 ### Added
 
+- **Non-recorded items gain a materialize-a-seed entry point (Bead `data-processing-8b2`,
+  phase 1, OpenSpec change `add-materialize-seed`)** — the decided design's first half:
+  `catalog seed create` ingests the operator's evidence bundle (one or more URLs where the
+  item was found, optional note, optional declared MD5; all URLs must resolve to stable,
+  pairwise-consistent post identities) and materializes a provenance-recorded stub post —
+  the bundle retained as raw `operator_seed` import evidence, availability `unknown`, every
+  URL as a `source_url` link and typed `provider_id` reference. The stub is an ordinary
+  lookup seed (`external_post_id` planning accepts it exactly like a synced post),
+  materialization is idempotent and decides nothing, and later real syncs enrich the stub
+  in place. The local-bytes phase (hashing a held file into verified asset facts) remains
+  open on the bead.
+
 - **Gelbooru gains bounded reverse lookup and relationship normalization (Bead
   `data-processing-o6y`, OpenSpec change `add-gelbooru-bounded-lookup`)** — the last
   adapted provider with zero lookup capability now declares `source_post_url`,

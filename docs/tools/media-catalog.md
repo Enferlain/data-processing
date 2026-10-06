@@ -377,6 +377,27 @@ observations land artist/character/copyright/general/meta categories instead of 
 listings stay flat. Gelbooru post `parent_id` and `title` normalize like the Danbooru family
 (directional `parent_of` relation, post title).
 
+## Materialize a seed for a non-recorded item
+
+Items that were never synced still need a lookup entry point. `catalog seed create` ingests the
+evidence bundle you have — one or more URLs where the item was found, an optional note, an
+optional declared MD5 — and materializes a provenance-recorded stub post:
+
+```bash
+uv run catalog seed create catalog-output/catalog.sqlite3 \
+  --url https://www.pixiv.net/artworks/150422897 \
+  --url https://x.com/yyqw7151/status/1950567258528547071 --json
+```
+
+Every URL must resolve to a stable post identity, and URLs for one platform must agree on the
+id. The bundle is retained as raw `operator_seed` import evidence; the stub carries
+availability `unknown`, each URL as a `source_url` link and a typed `provider_id` reference,
+and nothing else — no candidates, relations, or identity claims. The stub is then an ordinary
+lookup seed (`catalog lookup plan ... post:<ID> --strategy external_post_id`), and a later real
+sync of the same platform item enriches the stub in place. Re-running the same bundle is
+idempotent. A local-bytes phase (hashing a file you hold into verified asset facts) is the
+next step on this surface.
+
 A provider source URL may support a directed `sourced_from` candidate. An MD5 calculated from
 verified bytes may support `same_work` plus `exact_bytes`; provider-declared MD5 remains weaker
 declared evidence. Names, aliases, tags, and uploaders never establish identity or authorship.
