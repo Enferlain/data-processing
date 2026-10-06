@@ -149,6 +149,9 @@ class TestRequestShapes:
         assert params["q"] == "index"
         assert params["json"] == "1"
         assert params["id"] == "12370900"
+        # Detail fetches request typed tag info (Grabber details-endpoint
+        # evidence); listings stay unfiltered.
+        assert params["fields"] == "tag_info"
         assert params["user_id"] == "12345"
         assert params["api_key"] == "abcdef1234567890abcdef1234567890"
         assert envelope.request_identity == "gelbooru:dapi_json:post:12370900"
@@ -618,6 +621,111 @@ class TestIdempotentNormalization:
         tags = [item for item in page.items if item.object_kind == "post_tag"]
         assert len(tags) == 23  # fixture has 23 tags
         assert all(tag.data["category"] == "unknown" for tag in tags)
+
+
+# ── Typed tags, parent relations, and title (add-gelbooru-bounded-lookup) ──
+
+
+class TestTypedTagsParentAndTitle:
+    """fields=tag_info details, parent references, and titles normalize."""
+
+    def _normalize_case(self, case_name: str = "post_typed_tags_parent_title_synth"):
+        adapter = GelbooruAdapter(client=None, credentials=None)
+        case = _load_dapi_case(case_name)
+
+        from media_catalog.adapters.contracts import ResponseEnvelope
+
+        envelope = ResponseEnvelope(
+            provider="gelbooru",
+            instance="gelbooru",
+            operation=AdapterOperation.FETCH_POST,
+            request_identity=f"gelbooru:dapi_json:post:{case.target}",
+            status_code=200,
+            headers={"content-type": "application/json"},
+            payload=case.response.payload,
+            observed_at="2026-10-06T00:00:00Z",
+            adapter_version=ADAPTER_VERSION,
+            schema_version=DAPI_SCHEMA_VERSION,
+            transport_key=DAPI_TRANSPORT_VERSION,
+            transport_version=DAPI_TRANSPORT_VERSION,
+            request_target=f"post:{case.target}",
+        )
+        return adapter.normalize(envelope)
+
+    def test_tag_info_normalizes_under_neutral_categories(self) -> None:
+        page = self._normalize_case()
+        categories = {
+            item.data["spelling"]: item.data["category"]
+            for item in page.items
+            if item.object_kind == "post_tag"
+        }
+        assert categories == {
+            "artist_a": "artist",
+            "character_b": "character",
+            "copyright_c": "copyright",
+            "solo": "general",
+            "high_res": "meta",
+            "undocumented_tag": "unknown",
+        }
+
+    def test_parent_reference_becomes_directional_relation(self) -> None:
+        page = self._normalize_case()
+        relations = [item for item in page.items if item.object_kind == "post_relation"]
+        assert len(relations) == 1
+        assert relations[0].data == {
+            "platform": "gelbooru",
+            "source_post_id": "12370900",
+            "target_post_id": "87654321",
+            "relation_type": "parent_of",
+        }
+
+    def test_title_lands_on_the_post_item(self) -> None:
+        page = self._normalize_case()
+        post = next(item for item in page.items if item.object_kind == "post")
+        assert post.data["title"] == "sample typed post"
+
+    def test_captured_posts_without_parent_keep_no_relation(self) -> None:
+        page = self._normalize_case("post_12370900")
+        assert not [item for item in page.items if item.object_kind == "post_relation"]
+        post = next(item for item in page.items if item.object_kind == "post")
+        assert post.data["title"] is None
+
+    def test_malformed_tag_info_fails_closed(self) -> None:
+        adapter = GelbooruAdapter(client=None, credentials=None)
+        body = json.dumps(
+            {
+                "@attributes": {"limit": 1, "offset": 0, "count": 1},
+                "post": [
+                    {
+                        "id": 7,
+                        "created_at": "2026-01-01 00:00:00",
+                        "tags": "solo",
+                        "tag_info": [{"tag": "solo", "type": 3}],
+                    }
+                ],
+            }
+        )
+
+        from media_catalog.adapters.contracts import ResponseEnvelope
+
+        envelope = ResponseEnvelope(
+            provider="gelbooru",
+            instance="gelbooru",
+            operation=AdapterOperation.FETCH_POST,
+            request_identity="gelbooru:dapi_json:post:7",
+            status_code=200,
+            headers={"content-type": "application/json"},
+            payload=body.encode(),
+            observed_at="2026-10-06T00:00:00Z",
+            adapter_version=ADAPTER_VERSION,
+            schema_version=DAPI_SCHEMA_VERSION,
+            transport_key=DAPI_TRANSPORT_VERSION,
+            transport_version=DAPI_TRANSPORT_VERSION,
+            request_target="post:7",
+        )
+        with pytest.raises(AdapterFailure) as failure:
+            adapter.normalize(envelope)
+        assert failure.value.outcome is AdapterOutcome.MALFORMED_RESPONSE
 
 
 # ── Task 3.5g: zero media-host requests ──────────────────────────────

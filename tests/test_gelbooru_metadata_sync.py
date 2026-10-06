@@ -115,6 +115,19 @@ def _dapi_post_handler() -> Callable[[httpx.Request], httpx.Response]:
     return handler
 
 
+def _dapi_case_handler(name: str) -> Callable[[httpx.Request], httpx.Response]:
+    payload = _dapi_case(name).response.payload
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=payload,
+        )
+
+    return handler
+
+
 def _html_post_handler() -> Callable[[httpx.Request], httpx.Response]:
     body = _html_body("html_post_12370900").encode()
 
@@ -193,6 +206,59 @@ def test_sync_dapi_post_retains_raw_then_persists_normalized_facts(tmp_path: Pat
             "SELECT score_total FROM post_metadata_observations"
         ).fetchone()
         assert score_total is not None and score_total["score_total"] is not None
+
+
+def test_sync_dapi_typed_tags_parent_and_title_persist(tmp_path: Path) -> None:
+    # add-gelbooru-bounded-lookup: a fields=tag_info detail observation lands
+    # typed tag categories, a directional parent relation, and the title in
+    # the shared persistence layer.
+    path = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(path) as database:
+        service = _dapi_service(database, _dapi_case_handler("post_typed_tags_parent_title_synth"))
+        result = service.synchronize(
+            AdapterOperation.FETCH_POST,
+            "87654321",
+            limits=SyncLimits(3, 3, 500, 60),
+        )
+        assert (result.status, result.outcome) == ("complete", "success")
+        connection = database.connection
+        post = connection.execute(
+            """SELECT p.post_id, p.title FROM posts p JOIN platforms pl USING (platform_id)
+               WHERE pl.platform_key = 'gelbooru' AND p.native_post_id = '87654321'"""
+        ).fetchone()
+        assert post is not None
+        assert post["title"] == "sample typed post"
+        categories = {
+            row["name"]: row["category"]
+            for row in connection.execute(
+                """SELECT DISTINCT t.name, t.category
+                     FROM post_tags pt JOIN tags t USING (tag_id)
+                    WHERE pt.post_id = ?""",
+                (post["post_id"],),
+            )
+        }
+        assert categories == {
+            "artist_a": "artist",
+            "character_b": "character",
+            "copyright_c": "copyright",
+            "solo": "general",
+            "high_res": "meta",
+            "undocumented_tag": "unknown",
+        }
+        relation = connection.execute(
+            """SELECT pr.relation_type, parent.native_post_id AS source,
+                      child.native_post_id AS target
+                 FROM post_relations pr
+                 JOIN posts parent ON parent.post_id = pr.source_post_id
+                 JOIN posts child ON child.post_id = pr.target_post_id
+                WHERE child.native_post_id = '87654321'"""
+        ).fetchone()
+        assert relation is not None
+        assert (relation["relation_type"], relation["source"], relation["target"]) == (
+            "parent_of",
+            "12370900",
+            "87654321",
+        )
 
 
 def test_sync_dapi_post_keeps_provider_pacing_floor(tmp_path: Path) -> None:

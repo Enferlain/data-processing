@@ -361,6 +361,22 @@ does not make a provider request. Exact names, aliases, tags, hashes, uploaders,
 remain evidence; they do not establish account identity or authorship. Cross-database alias mapping
 is a later capability, not an implicit lookup step.
 
+Gelbooru declares three bounded strategies: `source_post_url`, `declared_md5`, and `verified_md5`,
+rendered as exact credentialed DAPI tag queries (`source:`/`md5:`). Its `source:` match is
+substring-based, so hits are weak evidence like every source-URL lookup. Gelbooru has no
+foreign-ID metatag and no artist-record endpoint, so `external_post_id` and the artist strategies
+are excluded during planning rather than approximated:
+
+```bash
+uv run catalog lookup plan catalog-output/catalog.sqlite3 post:42 \
+  --provider gelbooru --strategy declared_md5 --json
+```
+
+Single-post gelbooru DAPI fetches request typed tag info (`fields=tag_info`), so detail
+observations land artist/character/copyright/general/meta categories instead of `unknown`;
+listings stay flat. Gelbooru post `parent_id` and `title` normalize like the Danbooru family
+(directional `parent_of` relation, post title).
+
 A provider source URL may support a directed `sourced_from` candidate. An MD5 calculated from
 verified bytes may support `same_work` plus `exact_bytes`; provider-declared MD5 remains weaker
 declared evidence. Names, aliases, tags, and uploaders never establish identity or authorship.

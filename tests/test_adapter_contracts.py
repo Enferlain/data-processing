@@ -135,6 +135,7 @@ def test_redacted_fixture_suites_cover_required_contract_cases() -> None:
         "variation_pair_10791439",
         "variation_pair_10791440",
         "tag_metadata",
+        "post_typed_tags_parent_title_synth",
         "post_not_found",
         "authentication_required",
         "authorization_denied",

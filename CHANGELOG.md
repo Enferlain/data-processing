@@ -13,6 +13,24 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-06]
+
+### Added
+
+- **Gelbooru gains bounded reverse lookup and relationship normalization (Bead
+  `data-processing-o6y`, OpenSpec change `add-gelbooru-bounded-lookup`)** — the last
+  adapted provider with zero lookup capability now declares `source_post_url`,
+  `declared_md5`, and `verified_md5` (rendered as exact credentialed DAPI `tags=` queries
+  with digest-only request identities and pid page continuation under the shared limits;
+  the HTML transport stays lookup-free), and the CLI accepts `--provider gelbooru` for
+  plan/run/resume. Single-post DAPI fetches request `fields=tag_info`, so detail
+  observations land typed tag categories (`tag`→general, `metadata`→meta, undocumented →
+  unknown) instead of flat `unknown`; post `parent_id` normalizes as a directional
+  `parent_of` relation and `title` lands on the post projection. The audit's
+  favorites-dispute is resolved from references: gallery-dl's DAPI JSON `s=favorite&id=`
+  works; Grabber's JSON path only refuses generic favorites syntax. Requirements 1 and 2
+  are no longer blocked for gelbooru.
+
 ## [2026-10-05]
 
 ### Added

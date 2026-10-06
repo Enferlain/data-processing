@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
+import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -18,7 +20,13 @@ from media_catalog.adapters.contracts import (
     AdapterRequest,
     Continuation,
     LookupCapabilities,
+    LookupContinuation,
+    LookupPlanContext,
+    LookupRequest,
+    LookupStrategy,
     NormalizedItem,
+    NormalizedLookupPage,
+    NormalizedLookupResult,
     NormalizedPage,
     ResponseEnvelope,
 )
@@ -38,6 +46,39 @@ from media_catalog.adapters.gelbooru.redaction import sanitize_exception
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+_MAX_LOOKUP_TEXT = 200
+_MD5_LOOKUP_RE = re.compile(r"[0-9a-f]{32}")
+
+# DAPI `fields=tag_info` entries carry a string type; the neutral five map
+# from Gelbooru's documented type names and anything else stays unknown
+# rather than being guessed (mirrors the flat-tag and HTML policies).
+_TAG_TYPE_CATEGORY = {
+    "artist": "artist",
+    "character": "character",
+    "copyright": "copyright",
+    "tag": "general",
+    "metadata": "meta",
+}
+
+
+def _exact_source_lookup_text(value: str) -> None:
+    """Reject anything that is not one exact source token before rendering."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Gelbooru source post URL must be non-empty text")
+    if any(ord(char) < 32 for char in value):
+        raise ValueError("Gelbooru source post URL must not contain control characters")
+    if len(value) > _MAX_LOOKUP_TEXT:
+        raise ValueError(f"Gelbooru source post URL exceeds {_MAX_LOOKUP_TEXT} characters")
+    if "*" in value or any(char.isspace() for char in value):
+        raise ValueError("Gelbooru source post URL must be one exact source token")
+
+
+def _exact_md5_lookup_text(value: str) -> None:
+    if not isinstance(value, str) or not _MD5_LOOKUP_RE.fullmatch(value):
+        raise ValueError("Gelbooru MD5 lookup requires an exact 32-character hex hash")
 
 
 # Listing enumeration scope admitted by this adapter.  DAPI serves posts
@@ -107,8 +148,13 @@ class GelbooruAdapter:
 
     @property
     def lookup_capabilities(self) -> LookupCapabilities:
-        """Gelbooru currently declares no bounded reverse-lookup strategies."""
-        return LookupCapabilities()
+        """Bounded reverse-lookup strategies declared by the instance policy."""
+
+        return self.instance.lookup_capabilities
+
+    @property
+    def lookup_plan_context(self) -> LookupPlanContext:
+        return self.instance.lookup_plan_context
 
     def fetch(self, request: AdapterRequest) -> ResponseEnvelope:
         """Render a DAPI request and return the provider response as an envelope."""
@@ -192,6 +238,225 @@ class GelbooruAdapter:
             )
         return NormalizedPage(tuple(items))
 
+    # ── Bounded reverse lookup (credentialed DAPI only) ────────────────
+
+    def fetch_lookup(self, request: LookupRequest) -> ResponseEnvelope:
+        """Fetch one fixed-token lookup page on the DAPI transport.
+
+        Only the strategies the instance declares are rendered; anything else
+        (and any malformed token) is rejected before HTTP.  The request
+        identity is digest-only so rendered URLs, hashes, and credentials
+        never enter retained identifiers.
+        """
+
+        if not self.lookup_capabilities.supports(request.strategy):
+            raise ValueError(
+                f"{self.instance_key} does not support lookup strategy {request.strategy.value}"
+            )
+        params, identity, cursor = self._lookup_request_parts(request)
+        headers = {"User-Agent": self.instance.user_agent, "Accept": "application/json"}
+        try:
+            response = self._client.get(
+                f"{self.instance.base_url}/index.php",
+                params=params,
+                headers=headers,
+            )
+        except httpx.HTTPError as error:
+            secrets = self._credentials.secret_values() if self._credentials else ()
+            raise AdapterFailure(
+                AdapterOutcome.TRANSIENT_PROVIDER,
+                f"DAPI transport error: {sanitize_exception(error, secrets)}",
+            ) from error
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise AdapterFailure(
+                AdapterOutcome.RESPONSE_TOO_LARGE,
+                "DAPI response exceeded the transport byte limit",
+                status_code=response.status_code,
+            )
+        return ResponseEnvelope(
+            provider=self.provider_key,
+            instance=self.instance_key,
+            operation=request.operation,
+            request_identity=identity,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            payload=response.content or b"{}",
+            observed_at=self._clock(),
+            adapter_version=self.adapter_version,
+            schema_version=self.schema_version,
+            transport_key=self.transport_key,
+            transport_version=self.transport_version,
+            lookup_strategy=request.strategy,
+            lookup_query_digest=request.material.digest,
+            lookup_continuation=cursor,
+            lookup_material=request.material,
+        )
+
+    def _lookup_request_parts(
+        self, request: LookupRequest
+    ) -> tuple[dict[str, str], str, LookupContinuation | None]:
+        material = request.material
+        cursor = request.continuation
+        alias_index = 0
+        pid = 0
+        if cursor is not None:
+            if (
+                cursor.adapter != self.provider_key
+                or cursor.version != self.schema_version
+                or cursor.strategy is not request.strategy
+                or cursor.query_digest != material.digest
+            ):
+                raise ValueError("incompatible Gelbooru lookup continuation")
+            alias_index = cursor.alias_index
+            pid = self._lookup_pid(cursor.page)
+        if alias_index >= len(material.values):
+            raise ValueError("lookup continuation alias index is out of range")
+        value = material.values[alias_index]
+        strategy = request.strategy
+        if strategy is LookupStrategy.SOURCE_POST_URL:
+            _exact_source_lookup_text(value)
+            tags = f"source:{value}"
+        elif strategy in {LookupStrategy.DECLARED_MD5, LookupStrategy.VERIFIED_MD5}:
+            _exact_md5_lookup_text(value)
+            tags = f"md5:{value}"
+        else:  # pragma: no cover - capabilities reject undeclared strategies first
+            raise ValueError(f"Gelbooru does not render lookup strategy {strategy.value}")
+        if self._credentials is None:
+            raise ValueError("DAPI requests require credentials")
+        limit = min(request.limit, self.instance.page_size)
+        params = self._credentials.authenticated_query(
+            {
+                "page": "dapi",
+                "s": "post",
+                "q": "index",
+                "json": "1",
+                "tags": tags,
+                "pid": str(pid),
+                "limit": str(limit),
+            }
+        )
+        identity = self._lookup_identity(strategy, material.digest, alias_index, pid, limit)
+        return params, identity, cursor
+
+    @staticmethod
+    def _lookup_pid(page: str | None) -> int:
+        if page is None:
+            return 0
+        if not page.isdecimal():
+            raise ValueError("Gelbooru lookup continuation page must be a pid offset")
+        return int(page)
+
+    def _lookup_identity(
+        self,
+        strategy: LookupStrategy,
+        digest: str,
+        alias_index: int,
+        pid: int,
+        limit: int,
+    ) -> str:
+        payload = (
+            f"{self.provider_key}|{self.instance_key}|{strategy.value}|"
+            f"{digest}|{alias_index}|{pid}|{limit}"
+        )
+        return "lookup:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def normalize_lookup(
+        self, response: ResponseEnvelope, request: LookupRequest | None = None
+    ) -> NormalizedLookupPage:
+        """Turn a DAPI lookup envelope into evidence-shaped results."""
+
+        if request is None:
+            raise ValueError("Gelbooru lookup normalization requires its request")
+        self._validate_envelope(response)
+        self._raise_for_outcome(response)
+        try:
+            body = json.loads(response.payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "provider returned invalid JSON"
+            ) from error
+        self._raise_for_error_envelope(body)
+        if isinstance(body, dict) and body.get("@attributes", {}).get("count", -1) == 0:
+            posts: list[dict[str, Any]] = []
+        else:
+            posts = self._parse_dapi_post_body(body)
+        strategy = request.strategy
+        provenance = {
+            "provider": self.provider_key,
+            "schema_version": self.schema_version,
+            "transport": self.transport_key,
+            "strategy": strategy.value,
+            "query_digest": request.material.digest,
+            "request_identity": response.request_identity,
+        }
+        results: list[NormalizedLookupResult] = []
+        for rank, post in enumerate(posts):
+            if not isinstance(post, dict) or not isinstance(post.get("id"), int):
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE, "DAPI post record has no stable numeric ID"
+                )
+            post_id = str(post["id"])
+            source = post.get("source")
+            results.append(
+                NormalizedLookupResult(
+                    "post",
+                    post_id,
+                    {
+                        "platform": self.instance_key,
+                        "post_id": post_id,
+                        "canonical_url": (
+                            f"{self.instance.base_url}/index.php?page=post&s=view&id={post_id}"
+                        ),
+                        "query_kind": strategy.value,
+                        "query": (
+                            request.material.value if len(request.material.values) == 1 else None
+                        ),
+                        "source": source if isinstance(source, str) and source else None,
+                        "declared_md5": post.get("md5"),
+                        "uploader_id": post.get("creator_id"),
+                        "uploader_name": post.get("owner"),
+                        "availability": (
+                            "deleted" if post.get("status") == "deleted" else "available"
+                        ),
+                        "lookup_provenance": dict(provenance),
+                    },
+                    rank,
+                    tuple(self._post_items(post)),
+                )
+            )
+        return NormalizedLookupPage(
+            tuple(results), self._lookup_continuation(request, len(results)), len(results)
+        )
+
+    def _lookup_continuation(
+        self, request: LookupRequest, result_count: int
+    ) -> LookupContinuation | None:
+        cursor = request.continuation
+        alias_index = cursor.alias_index if cursor is not None else 0
+        pid = self._lookup_pid(cursor.page) if cursor is not None else 0
+        limit = min(request.limit, self.instance.page_size)
+        if result_count >= limit:
+            return LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                str(pid + limit),
+                alias_index,
+            )
+        # A short page ends the current query token; source-URL materials
+        # carry URL aliases, so the walk may continue with the next one.
+        if alias_index + 1 < len(request.material.values):
+            return LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                None,
+                alias_index + 1,
+            )
+        return None
+
     # ── Request rendering ──────────────────────────────────────────────
 
     def _dapi_post_request(
@@ -208,6 +473,9 @@ class GelbooruAdapter:
                 "q": "index",
                 "json": "1",
                 "id": post_id,
+                # Grabber's Gelbooru 0.2 details endpoint evidence: typed tag
+                # info comes back as [{tag, type, count}] with string types.
+                "fields": "tag_info",
             }
         )
         identity = f"{self.instance_key}:dapi_json:post:{post_id}"
@@ -537,6 +805,11 @@ class GelbooruAdapter:
             ) from error
 
         score = post.get("score")
+        title = post.get("title")
+        if title is not None and not isinstance(title, str):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "DAPI post record has a malformed title"
+            )
         items: list[NormalizedItem] = [
             NormalizedItem(
                 "post",
@@ -550,6 +823,7 @@ class GelbooruAdapter:
                     "rating": rating if rating else None,
                     "availability": availability,
                     "status": status,
+                    "title": title or None,
                     "source": post.get("source") or None,
                     # The page writer persists score facts only in mapping form.
                     "score": (
@@ -560,6 +834,22 @@ class GelbooruAdapter:
                 },
             ),
         ]
+
+        # Parent reference is a directional relation, never a variation label.
+        parent_id = post.get("parent_id")
+        if isinstance(parent_id, int) and not isinstance(parent_id, bool) and parent_id > 0:
+            items.append(
+                NormalizedItem(
+                    "post_relation",
+                    f"{parent_id}:parent_of:{post_id}",
+                    {
+                        "platform": self.instance_key,
+                        "source_post_id": str(parent_id),
+                        "target_post_id": post_id,
+                        "relation_type": "parent_of",
+                    },
+                )
+            )
 
         # Uploader account and participant
         creator_id = post.get("creator_id")
@@ -590,24 +880,58 @@ class GelbooruAdapter:
                 ]
             )
 
-        # Tags (flat space-separated string; no category info → "unknown")
-        tags_str = post.get("tags", "")
-        if isinstance(tags_str, str) and tags_str:
-            for position, spelling in enumerate(tags_str.split()):
+        # Tags: typed entries when the DAPI response carries `tag_info`
+        # (details requests), flat unknown otherwise (listings).
+        tag_info = post.get("tag_info")
+        if tag_info is not None:
+            if not isinstance(tag_info, list):
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE, "DAPI post tag_info is malformed"
+                )
+            for position, entry in enumerate(tag_info):
+                if (
+                    not isinstance(entry, dict)
+                    or not isinstance(entry.get("tag"), str)
+                    or not entry["tag"]
+                    or not isinstance(entry.get("type"), str)
+                ):
+                    raise AdapterFailure(
+                        AdapterOutcome.MALFORMED_RESPONSE, "DAPI post tag_info is malformed"
+                    )
+                spelling = entry["tag"]
+                category = _TAG_TYPE_CATEGORY.get(entry["type"], "unknown")
                 items.append(
                     NormalizedItem(
                         "post_tag",
-                        f"{post_id}:unknown:{spelling}",
+                        f"{post_id}:{category}:{spelling}",
                         {
                             "platform": self.instance_key,
                             "post_id": post_id,
-                            "category": "unknown",
+                            "category": category,
                             "normalized_name": spelling.casefold(),
                             "spelling": spelling,
                             "position": position,
                         },
                     )
                 )
+        else:
+            tags_str = post.get("tags", "")
+            if isinstance(tags_str, str) and tags_str:
+                for position, spelling in enumerate(tags_str.split()):
+                    items.append(
+                        NormalizedItem(
+                            "post_tag",
+                            f"{post_id}:unknown:{spelling}",
+                            {
+                                "platform": self.instance_key,
+                                "post_id": post_id,
+                                "category": "unknown",
+                                "normalized_name": spelling.casefold(),
+                                "spelling": spelling,
+                                "position": position,
+                            },
+                        )
+                    )
 
         # Media occurrence (original, sample, preview)
         file_url = post.get("file_url")

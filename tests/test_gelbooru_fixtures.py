@@ -41,6 +41,7 @@ def test_dapi_fixture_suite_shape_and_manifest() -> None:
     assert [case.name for case in suite.cases] == [
         *POST_CASES,
         "tag_metadata",
+        "post_typed_tags_parent_title_synth",
         "post_not_found",
         "authentication_required",
         "authorization_denied",

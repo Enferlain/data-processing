@@ -404,7 +404,11 @@ def build_parser() -> argparse.ArgumentParser:
         command = lookup_commands.add_parser(name)
         command.add_argument("catalog", type=Path)
         command.add_argument("seed", metavar="ACCOUNT:ID|POST:ID")
-        command.add_argument("--provider", choices=("danbooru", "aibooru", "e621"), required=True)
+        command.add_argument(
+            "--provider",
+            choices=("danbooru", "aibooru", "e621", "gelbooru"),
+            required=True,
+        )
         command.add_argument(
             "--strategy", choices=LOOKUP_STRATEGIES, action="append", required=True
         )
@@ -414,7 +418,9 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_resume = lookup_commands.add_parser("resume")
     lookup_resume.add_argument("catalog", type=Path)
     lookup_resume.add_argument("run_id", type=int)
-    lookup_resume.add_argument("--provider", choices=("danbooru", "aibooru", "e621"), required=True)
+    lookup_resume.add_argument(
+        "--provider", choices=("danbooru", "aibooru", "e621", "gelbooru"), required=True
+    )
     _add_lookup_limits(lookup_resume)
     _add_json(lookup_resume)
     lookup_runs = lookup_commands.add_parser("runs")
@@ -850,6 +856,8 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             plan_configuration: LookupPlanConfiguration = (
                 E621
                 if arguments.provider == "e621"
+                else GELBOORU
+                if arguments.provider == "gelbooru"
                 else DANBOORU
                 if arguments.provider == "danbooru"
                 else AIBOORU
@@ -871,6 +879,16 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     database,
                     adapter,
                     minimum_interval_seconds=E621.minimum_interval_seconds,
+                )
+                return _execute_lookup(arguments, catalog_label, service, limits)
+        if arguments.provider == "gelbooru":
+            credentials = GelbooruCredentials.from_environment(GELBOORU)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = GelbooruAdapter(GELBOORU, client=client, credentials=credentials)
+                service = CandidateLookupService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=GELBOORU.minimum_interval_seconds,
                 )
                 return _execute_lookup(arguments, catalog_label, service, limits)
         instance = DANBOORU if arguments.provider == "danbooru" else AIBOORU

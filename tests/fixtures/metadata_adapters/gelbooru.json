@@ -11,7 +11,7 @@
    "no credential-bearing URLs retained",
    "response bodies otherwise as captured without media bytes"
   ],
-  "source": "live Gelbooru DAPI captures and probes reviewed and redacted 2026-10-01; 403/5xx/oversized/malformed envelopes are documentation-derived synthetic cases (gallery-dl and Grabber conventions); no rate-limit response observed yet"
+  "source": "live Gelbooru DAPI captures and probes reviewed and redacted 2026-10-01; 403/5xx/oversized/malformed envelopes are documentation-derived synthetic cases (gallery-dl and Grabber conventions); no rate-limit response observed yet; post_typed_tags_parent_title_synth is a reference-corroborated synthetic case (Grabber Gelbooru 0.2 model: fields=tag_info entries {tag, type, count} with tag->general and metadata->meta) added 2026-10-06 for the fields=tag_info, parent_id, and title normalization paths"
  },
  "cases": [
   {
@@ -428,6 +428,107 @@
     "ambiguous": [
      false
     ]
+   }
+  },
+  {
+   "name": "post_typed_tags_parent_title_synth",
+   "operation": "fetch_post",
+   "target": "87654321",
+   "request_identity": "gelbooru:dapi_json:post:87654321",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+     "@attributes": {
+      "limit": 1,
+      "offset": 0,
+      "count": 1
+     },
+     "post": [
+      {
+       "change": 100,
+       "created_at": "2026-09-30 16:00:00",
+       "creator_id": 6498,
+       "directory": "sample",
+       "file_url": "https://sample.gelbooru.com/images/sample/sample.jpg",
+       "has_children": "false",
+       "has_comments": "false",
+       "has_notes": "false",
+       "height": 900,
+       "id": 87654321,
+       "image": "sample.jpg",
+       "md5": "0102030405060708090a0b0c0d0e0f10",
+       "owner": "sample_owner",
+       "parent_id": 12370900,
+       "post_locked": 0,
+       "preview_height": 180,
+       "preview_url": "https://sample.gelbooru.com/thumbnails/sample/thumbnail_sample.jpg",
+       "preview_width": 240,
+       "rating": "general",
+       "sample": 0,
+       "sample_height": 0,
+       "sample_url": "",
+       "sample_width": 0,
+       "score": 7,
+       "source": "https://www.pixiv.net/artworks/99999999",
+       "status": "active",
+       "tags": "artist_a character_b copyright_c solo high_res undocumented_tag",
+       "title": "sample typed post",
+       "width": 1200,
+       "tag_info": [
+        {
+         "tag": "artist_a",
+         "type": "artist",
+         "count": 120
+        },
+        {
+         "tag": "character_b",
+         "type": "character",
+         "count": 30
+        },
+        {
+         "tag": "copyright_c",
+         "type": "copyright",
+         "count": 45
+        },
+        {
+         "tag": "solo",
+         "type": "tag",
+         "count": 5000000
+        },
+        {
+         "tag": "high_res",
+         "type": "metadata",
+         "count": 900000
+        },
+        {
+         "tag": "undocumented_tag",
+         "type": "species",
+         "count": 7
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "87654321"
+    ],
+    "declared_md5": "0102030405060708090a0b0c0d0e0f10",
+    "title": "sample typed post",
+    "parent_id": 12370900,
+    "tag_categories": {
+     "artist_a": "artist",
+     "character_b": "character",
+     "copyright_c": "copyright",
+     "solo": "general",
+     "high_res": "meta",
+     "undocumented_tag": "unknown"
+    }
    }
   },
   {

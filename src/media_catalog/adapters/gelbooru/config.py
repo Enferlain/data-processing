@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from urllib.parse import urlsplit
+
+from media_catalog.adapters.contracts import (
+    LookupCapabilities,
+    LookupCapability,
+    LookupPlanContext,
+    LookupStrategy,
+)
 
 PROVIDER_KEY = "gelbooru"
 ADAPTER_VERSION = "gelbooru-native-v1"
@@ -48,6 +55,7 @@ class GelbooruInstance:
     page_size: int = MAX_PAGE_SIZE
     max_response_bytes: int = MAX_RESPONSE_BYTES
     request_timeout_seconds: float = REQUEST_TIMEOUT_SECONDS
+    lookup_capabilities: LookupCapabilities = field(default_factory=lambda: LookupCapabilities(()))
 
     def __post_init__(self) -> None:
         if self.platform_key != PROVIDER_KEY:
@@ -85,6 +93,18 @@ class GelbooruInstance:
     def instance_key(self) -> str:
         return self.platform_key
 
+    @property
+    def lookup_plan_context(self) -> LookupPlanContext:
+        """Provider-neutral planning identity for this Gelbooru instance."""
+
+        return LookupPlanContext(
+            provider=PROVIDER_KEY,
+            instance_key=self.platform_key,
+            adapter_version=ADAPTER_VERSION,
+            schema_version=DAPI_SCHEMA_VERSION,
+            lookup_capabilities=self.lookup_capabilities,
+        )
+
     def schema_version(self, transport: GelbooruTransport) -> str:
         if transport is GelbooruTransport.DAPI_JSON:
             return DAPI_SCHEMA_VERSION
@@ -96,4 +116,22 @@ class GelbooruInstance:
         return HTML_PARSER_VERSION
 
 
-GELBOORU = GelbooruInstance()
+GELBOORU = GelbooruInstance(
+    # Bounded reverse lookup is limited to the exact server-side operators the
+    # DAPI documents for searches: canonical source URL and exact MD5.  Gelbooru
+    # exposes no foreign-ID metatag and no artist-record endpoint, so the other
+    # neutral strategies stay undeclared rather than approximated.
+    lookup_capabilities=LookupCapabilities(
+        (
+            LookupCapability(
+                LookupStrategy.SOURCE_POST_URL, "post", "page", max_page_size=MAX_PAGE_SIZE
+            ),
+            LookupCapability(
+                LookupStrategy.DECLARED_MD5, "post", "page", max_page_size=MAX_PAGE_SIZE
+            ),
+            LookupCapability(
+                LookupStrategy.VERIFIED_MD5, "post", "page", max_page_size=MAX_PAGE_SIZE
+            ),
+        )
+    ),
+)

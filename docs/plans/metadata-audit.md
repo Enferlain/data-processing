@@ -118,11 +118,11 @@ catch-up is cheap and reprocess-able.
 | identity, created_at, rating, status, availability, source, score{total} | ✓ | ✓ | foundation |
 | declared md5, file/preview/sample URLs, dims | ✓ | ✓ | hash matching |
 | uploader (creator_id + owner) | ✓ | ✓ | — |
-| tags (flat; typed via `fields=tag_info` or HTML) | ✓ | ✓ flat; **typed = R/adapter work** | ordering |
-| **`parent_id` / `has_children`** | ✓ | **R** — not normalized | **relationships (req 3)** |
-| **`title`** | ✓ | **R** | context |
-| **lookup capabilities (md5:, source:, id:, parent:)** | ✓ server-side | **✗ — adapter declares none** | **req 1 + 2 entirely blocked for gelbooru** |
-| favorites (`s=favorite`) | ✓ (JSON) | ✗ | discovery surface |
+| tags (flat; typed via `fields=tag_info` or HTML) | ✓ | ✓ typed on detail fetches (`tag`→general, `metadata`→meta; undocumented → unknown); listings flat | ordering |
+| **`parent_id` / `has_children`** | ✓ | ✓ parent as `parent_of` relation (2026-10-06, bead `o6y`); has_children derivable | **relationships (req 3)** |
+| **`title`** | ✓ | ✓ post title (2026-10-06) | context |
+| **lookup capabilities (md5:, source:, id:, parent:)** | ✓ server-side | ✓ `source_post_url`/`declared_md5`/`verified_md5` wired via DAPI `tags=` (2026-10-06, bead `o6y`); `id:`/`parent:` are self-platform (not cross-platform strategies) | **req 1 + 2 for gelbooru** |
+| favorites (`s=favorite`) | ✓ (JSON) | ✗ (dispute resolved 2026-10-06: gallery-dl's DAPI JSON `s=favorite&id=<user>` works — Grabber's JSON path merely refuses generic favorites *syntax*; still a future surface) | discovery surface |
 | updated_at, file size | ✗/n/a | — | — |
 
 ### e621
@@ -196,10 +196,11 @@ Filed as beads, in requirement-impact order:
    variant dims ✓, artist group_name/is_banned/created/updated ✓; per-post pool ids
    verified absent (pool grouping needs the pools collection surface, still open);
    tag counts and has_children are derivable from already-normalized data.
-2. **Gelbooru lookup + relations** — declare bounded lookup capabilities (md5:, source:,
-   id:, parent:) with the dapi transport (verify favorites dispute), normalize
-   parent_id/has_children/title, typed tags via `fields=tag_info`; unlocks req 1+2 for
-   gelbooru.
+2. **Gelbooru lookup + relations** — *(Done 2026-10-06, bead `data-processing-o6y`,
+   OpenSpec change `add-gelbooru-bounded-lookup`)* bounded lookup capabilities
+   (source_post_url, declared_md5, verified_md5) wired via the credentialed DAPI; parent
+   relations, title, and typed tags (`fields=tag_info` on detail fetches) normalized;
+   favorites dispute resolved (see table).
 3. **e621 description/duration/locked_tags normalization** — small reprocess-able
    catch-up.
 4. **Pixiv engagement + series + related** — normalize totals, tools, ai_type, series
