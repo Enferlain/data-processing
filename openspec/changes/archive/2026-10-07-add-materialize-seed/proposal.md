@@ -5,9 +5,9 @@ but a lookup seed must be an existing catalog entity, so items the operator hold
 synced source have no entry point. The decided design (2026-10-05, bead `data-processing-zos`,
 catalog plan §12 "Non-recorded item entry") is a materialize-a-seed operation: an explicit
 operator command that ingests the evidence bundle available at the time — innate image metadata
-first (a local-bytes phase follows), supplied-alongside references second at declared or
-operator-asserted status — and creates a provenance-recorded stub the whole existing pipeline
-(plan, lookup, candidates, review, later real sync) already works on.
+first, supplied-alongside references second at declared or operator-asserted status — and
+creates a provenance-recorded stub the whole existing pipeline (plan, lookup, candidates,
+review, later real sync) already works on.
 
 ## What Changes
 
@@ -23,9 +23,12 @@ operator-asserted status — and creates a provenance-recorded stub the whole ex
 - Materialization is idempotent (re-running the same bundle reuses the import run and writes no
   duplicate rows), decides nothing (no candidates, no relations, no identity claims), and
   reports only counts and identifiers.
-- The local-bytes phase (hashing a file the operator holds through the existing inspection
-  machinery into verified asset facts) remains open on the bead; this change lands the entry
-  point and reference intake.
+- With `--file`, the innate metadata is preferred: the file's content hash joins the bundle
+  digest, a media occurrence lands on the stub (declared MD5 attached when supplied, the file
+  registered as a local source under an operator-seed source root), and the existing adoption
+  machinery stages the bytes into the operator-designated `--media-root`, producing verified
+  SHA-256/MD5, detected dimensions, and a versioned perceptual hash — so `verified_md5`
+  (and declared-MD5) lookup planning works from the stub too.
 
 ## Impact
 

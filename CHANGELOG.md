@@ -13,6 +13,20 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-07]
+
+### Added
+
+- **Materialize-a-seed gains the local-bytes phase (Bead `data-processing-8b2`, completed;
+  OpenSpec change `add-materialize-seed` archived)** — `catalog seed create --file` ingests
+  the file the operator holds: its content hash joins the bundle identity (changed bytes are
+  a new seed), a declared MD5 is verified against the bytes before any write, and the file
+  adopts through the existing managed-storage machinery into the designated `--media-root`,
+  yielding verified SHA-256/MD5, detected dimensions, and a recorded perceptual hash linked
+  to the stub's occurrence. The stub therefore seeds `external_post_id`, `declared_md5`, and
+  `verified_md5` lookup planning exactly like a recorded post — requirement 1's non-recorded
+  half now works end to end with innate image metadata preferred, per the decided design.
+
 ## [2026-10-06]
 
 ### Added

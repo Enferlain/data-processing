@@ -8,11 +8,13 @@ seed exactly like a synced post.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import socket
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from media_catalog.adapters import LookupStrategy
 from media_catalog.adapters.danbooru import DANBOORU
@@ -107,12 +109,9 @@ def test_seed_is_idempotent_for_the_same_bundle(tmp_path: Path) -> None:
         assert second["status"] == "existing"
         assert second["post_id"] == first["post_id"]
         assert second["import_run_id"] == first["import_run_id"]
+        assert database.connection.execute("SELECT COUNT(*) FROM import_runs").fetchone()[0] == 1
         assert (
-            database.connection.execute("SELECT COUNT(*) FROM import_runs").fetchone()[0] == 1
-        )
-        assert (
-            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0]
-            == 1
+            database.connection.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0] == 1
         )
 
 
@@ -125,9 +124,7 @@ def test_seed_bundle_adding_a_url_creates_new_evidence_not_duplicates(tmp_path: 
         assert extended["status"] == "materialized"
         assert extended["post_id"] == first["post_id"]
         assert extended["import_run_id"] != first["import_run_id"]
-        assert (
-            database.connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0] == 1
-        )
+        assert database.connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0] == 1
 
 
 @pytest.mark.parametrize(
@@ -191,9 +188,7 @@ def test_materialized_stub_seeds_external_post_id_lookup_planning(tmp_path: Path
     assert len(plan.items) == 1
     assert plan.items[0].material.values == ("150422897",)
     assert plan.items[0].material.platform == "pixiv"
-    assert plan.exclusions == (
-        {"strategy": "verified_md5", "reason": "missing_seed_material"},
-    )
+    assert plan.exclusions == ({"strategy": "verified_md5", "reason": "missing_seed_material"},)
 
 
 def test_seed_cli_creates_stub_offline(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -221,3 +216,160 @@ def test_seed_cli_creates_stub_offline(tmp_path: Path, capsys, monkeypatch) -> N
     assert "private note" not in rendered
     assert "pixiv.net" not in rendered
     assert str(tmp_path) not in rendered
+
+
+def _seed_image(root: Path, name: str = "found_artwork.png") -> Path:
+    path = root / name
+    Image.new("RGB", (64, 48), (200, 30, 30)).save(path)
+    return path
+
+
+def test_seed_with_file_adopts_verified_asset_and_seeds_hash_lookups(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    source = tmp_path / "downloads"
+    source.mkdir()
+    media_root = tmp_path / "media-root"
+    media_root.mkdir()
+    image = _seed_image(source)
+    real_md5 = hashlib.md5(image.read_bytes()).hexdigest()
+
+    with CatalogDatabase(catalog) as database:
+        result = SeedMaterializationService(database).materialize(
+            [PIXIV_URL],
+            declared_md5=real_md5,
+            observed_at=NOW,
+            file=image,
+            media_root=media_root,
+        )
+        assert result["status"] == "materialized"
+        adoption = result["adoption"]
+        assert adoption["status"] == "adopted"
+        assert adoption["width"] == 64
+        assert adoption["height"] == 48
+        assert adoption["phash_recorded"] is True
+        assert adoption["verified_md5"] == real_md5
+        assert adoption["verified_sha256"] == hashlib.sha256(image.read_bytes()).hexdigest()
+
+        connection = database.connection
+        occurrence = connection.execute(
+            "SELECT declared_md5 FROM media_occurrences WHERE post_id = ?",
+            (result["post_id"],),
+        ).fetchone()
+        assert occurrence["declared_md5"] == real_md5
+
+    def fail_connect(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("network access attempted")
+
+    socket_default = socket.socket.connect
+    socket.socket.connect = fail_connect
+    try:
+        for strategy in (LookupStrategy.DECLARED_MD5, LookupStrategy.VERIFIED_MD5):
+            plan = plan_candidate_lookup(
+                catalog,
+                f"post:{result['post_id']}",
+                DANBOORU,
+                (strategy,),
+                limits=LookupLimits(1, 1, 10, 30),
+            )
+            assert len(plan.items) == 1, strategy
+            assert plan.items[0].material.values == (real_md5,)
+    finally:
+        socket.socket.connect = socket_default
+
+
+def test_seed_with_file_is_idempotent_across_runs(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    source = tmp_path / "downloads"
+    source.mkdir()
+    media_root = tmp_path / "media-root"
+    media_root.mkdir()
+    image = _seed_image(source)
+
+    with CatalogDatabase(catalog) as database:
+        service = SeedMaterializationService(database)
+        first = service.materialize([PIXIV_URL], observed_at=NOW, file=image, media_root=media_root)
+        second = service.materialize(
+            [PIXIV_URL], observed_at=NOW, file=image, media_root=media_root
+        )
+        assert second["status"] == "existing"
+        assert second["post_id"] == first["post_id"]
+        assert second["adoption"]["status"] == "already-adopted"
+        connection = database.connection
+        assert connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM import_runs").fetchone()[0] == 1
+
+
+def test_seed_rejects_declared_md5_mismatch_before_writes(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    source = tmp_path / "downloads"
+    source.mkdir()
+    media_root = tmp_path / "media-root"
+    media_root.mkdir()
+    image = _seed_image(source)
+
+    with CatalogDatabase(catalog) as database:
+        with pytest.raises(ValueError, match="does not match the supplied file"):
+            SeedMaterializationService(database).materialize(
+                [PIXIV_URL],
+                declared_md5="0123456789abcdef0123456789abcdef",
+                observed_at=NOW,
+                file=image,
+                media_root=media_root,
+            )
+        connection = database.connection
+        assert connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM import_runs").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize(
+    "kwargs, match",
+    (
+        ({"file": "missing.png", "media_root": "media"}, "existing regular file"),
+        ({"media_root": "media"}, "only used with a local seed file"),
+        ({"file": "placeholder"}, "required when seeding with a local file"),
+    ),
+)
+def test_seed_rejects_malformed_file_inputs(
+    tmp_path: Path, kwargs: dict[str, str], match: str
+) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    if kwargs.get("file") == "placeholder":
+        kwargs["file"] = _seed_image(tmp_path)
+    if kwargs.get("media_root") == "media":
+        kwargs["media_root"] = media_root
+    with (
+        CatalogDatabase(tmp_path / "catalog.sqlite3") as database,
+        pytest.raises(ValueError, match=match),
+    ):
+        SeedMaterializationService(database).materialize([PIXIV_URL], observed_at=NOW, **kwargs)
+
+
+def test_seed_cli_with_file_adopts(tmp_path: Path, capsys, monkeypatch) -> None:
+    from media_catalog.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "downloads").mkdir()
+    media_root = tmp_path / "media-root"
+    media_root.mkdir()
+    image = _seed_image(tmp_path / "downloads")
+
+    main(
+        [
+            "seed",
+            "create",
+            "seed-catalog.sqlite3",
+            "--url",
+            PIXIV_URL,
+            "--file",
+            str(image),
+            "--media-root",
+            str(media_root),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert output["adoption"]["status"] == "adopted"
+    assert output["adoption"]["phash_recorded"] is True
+    assert str(tmp_path) not in json.dumps(output)

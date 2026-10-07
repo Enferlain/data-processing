@@ -395,8 +395,23 @@ availability `unknown`, each URL as a `source_url` link and a typed `provider_id
 and nothing else — no candidates, relations, or identity claims. The stub is then an ordinary
 lookup seed (`catalog lookup plan ... post:<ID> --strategy external_post_id`), and a later real
 sync of the same platform item enriches the stub in place. Re-running the same bundle is
-idempotent. A local-bytes phase (hashing a file you hold into verified asset facts) is the
-next step on this surface.
+idempotent.
+
+When you hold the file itself, prefer its innate metadata — the strongest identity evidence
+even if the bytes were altered downstream, because alteration later surfaces as a derivative
+signal rather than being lost:
+
+```bash
+uv run catalog seed create catalog-output/catalog.sqlite3 \
+  --url https://www.pixiv.net/artworks/150422897 \
+  --file /path/to/found_artwork.png --media-root /path/to/media-root --json
+```
+
+The file's content hash joins the bundle identity (so re-running with changed bytes is a new
+seed), a declared MD5 is verified against the bytes before any write, and the file adopts
+through the existing managed-storage machinery into the designated media root — producing
+verified SHA-256/MD5, detected dimensions, and a recorded perceptual hash linked to the stub's
+occurrence, so `verified_md5` (and declared-MD5) lookup planning works from the stub too.
 
 A provider source URL may support a directed `sourced_from` candidate. An MD5 calculated from
 verified bytes may support `same_work` plus `exact_bytes`; provider-declared MD5 remains weaker

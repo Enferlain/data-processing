@@ -27,3 +27,15 @@
 - [x] 4.1 Delta spec adds the seed-entry requirement; strict validation passes
 - [x] 4.2 Catalog guide documents the workflow; audit §bridge findings updated; CHANGELOG
 - [x] 4.3 Full pytest/ruff/ty/openspec gates green
+
+## 5. Phase 2: local-bytes intake
+
+- [x] 5.1 `--file` validation (exists, regular, within inspection byte ceiling) with the
+      content hash folded into the bundle digest
+- [x] 5.2 Media occurrence on the stub with declared MD5 and the file registered as a local
+      source under an operator-seed source root
+- [x] 5.3 `--media-root` adoption through the existing machinery: verified SHA-256/MD5,
+      detected dimensions, versioned perceptual hash linked to the occurrence
+- [x] 5.4 `verified_md5` (and declared) lookup planning accepts the stub; re-running the same
+      bundle adopts nothing new
+- [x] 5.5 Docs, CHANGELOG, gates, archive the change

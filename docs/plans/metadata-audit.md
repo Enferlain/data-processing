@@ -182,12 +182,14 @@ order of reliability:
    twitter/pixiv URLs (e621 also `normalized_url`); linking a bookmark author to an artist
    record via these is the reviewed-target path that makes library expansion the real
    X→booru bridge (already supported by discovery + review).
-6. **Non-recorded items have an entry point** — `catalog seed create` (2026-10-06, bead
-   `data-processing-8b2` phase 1) materializes a provenance-recorded stub from the operator's
-   URL bundle (operator_seed import evidence, availability unknown, source_url + typed
-   provider_id references, idempotent, decides nothing) and the stub seeds lookups like any
-   recorded post. The local-bytes phase of the decided design (hashing a held file into
-   verified asset facts) remains open on the bead; see the catalog plan §12.
+6. **Non-recorded items have an entry point** — `catalog seed create` (2026-10-06/07, bead
+   `data-processing-8b2`) materializes a provenance-recorded stub from the operator's
+   evidence bundle: URLs (operator_seed import evidence, availability unknown, source_url +
+   typed provider_id references, idempotent, decides nothing) and, preferentially, the local
+   file itself — content hash in the bundle identity, declared MD5 verified against the bytes
+   before any write, adoption into the designated media root yielding verified hashes,
+   detected dimensions, and a recorded perceptual hash. The stub seeds `external_post_id`,
+   `declared_md5`, and `verified_md5` lookups like any recorded post; see catalog plan §12.
 
 ## Ordered normalization worklist
 

@@ -451,6 +451,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     seed_create.add_argument("--note", help="private operator note retained with the bundle")
     seed_create.add_argument("--declared-md5", help="declared 32-character hex MD5")
+    seed_create.add_argument(
+        "--file", type=Path, help="local file the operator holds (innate metadata is preferred)"
+    )
+    seed_create.add_argument(
+        "--media-root",
+        type=Path,
+        help="existing managed media root for adopting --file into verified storage",
+    )
     _add_json(seed_create)
 
     library = commands.add_parser("library")
@@ -926,6 +934,8 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 note=arguments.note,
                 declared_md5=arguments.declared_md5,
                 observed_at=_utc_now(),
+                file=arguments.file,
+                media_root=arguments.media_root,
             )
         return {"catalog": catalog_label, **result}
     if arguments.command == "library":

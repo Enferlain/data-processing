@@ -13,17 +13,24 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from media_catalog.database import CatalogDatabase
 from media_catalog.links import recognize_url
 from media_catalog.records import PostRecord, RawRecord
+from media_catalog.records.catalog import MediaOccurrenceRecord
 from media_catalog.records.metadata import PostExternalReferenceRecord
+from media_catalog.records.storage import ManagedRootRecord, OccurrenceSourceRecord
+from media_catalog.storage.adoption import adopt_assets
+from media_catalog.storage.cas import InspectionLimits
 from media_catalog.writer import CatalogWriter
 
 BUNDLE_VERSION = 1
 SOURCE_KIND = "operator_seed"
+OCCURRENCE_SOURCE_KEY = "operator-seed"
 _SEED_NOTE_LIMIT = 2000
+_FILE_CHUNK_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +39,23 @@ class _RecognizedSeedURL:
     canonical: str
     platform: str
     native_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _SeedFile:
+    path: Path
+    size: int
+    sha256: str
+    md5: str
+
+    @property
+    def name(self) -> str:
+        return self.path.name
+
+    def bundle_entry(self) -> dict[str, Any]:
+        # The absolute path stays out of the retained bundle; it lives in the
+        # managed-root and occurrence-source rows like every other local path.
+        return {"name": self.name, "size": self.size, "sha256": self.sha256}
 
 
 def _digest(payload: bytes) -> str:
@@ -51,12 +75,15 @@ class SeedMaterializationService:
         note: str | None = None,
         declared_md5: str | None = None,
         observed_at: str,
+        file: str | Path | None = None,
+        media_root: str | Path | None = None,
     ) -> dict[str, Any]:
         """Materialize one stub post from the supplied bundle.
 
-        Raises ``ValueError`` with bounded diagnostics (no URL text echoed)
-        before any write when the bundle is empty, a URL does not resolve to
-        a stable post identity, or two URLs disagree on one platform's id.
+        Raises ``ValueError`` with bounded diagnostics (no URL or path text
+        echoed) before any write when the bundle is empty, a URL does not
+        resolve to a stable post identity, two URLs disagree on one platform's
+        id, or a supplied file is missing, irregular, or oversized.
         """
 
         recognized = self._recognize(urls)
@@ -68,6 +95,19 @@ class SeedMaterializationService:
             and all(character in "0123456789abcdefABCDEF" for character in declared_md5)
         ):
             raise ValueError("declared MD5 must be a 32-character hex hash")
+        seed_file = self._validate_file(file)
+        if seed_file is not None and media_root is None:
+            raise ValueError("a media root is required when seeding with a local file")
+        if seed_file is None and media_root is not None:
+            raise ValueError("a media root is only used with a local seed file")
+        if (
+            seed_file is not None
+            and declared_md5 is not None
+            and declared_md5.lower() != seed_file.md5
+        ):
+            # A declared hash that disagrees with the held bytes fails closed
+            # before any write, exactly as adoption's verification would.
+            raise ValueError("declared MD5 does not match the supplied file")
 
         primary = recognized[0]
         bundle = {
@@ -77,6 +117,7 @@ class SeedMaterializationService:
             "canonical_urls": [item.canonical for item in recognized],
             "note": note,
             "declared_md5": declared_md5.lower() if declared_md5 else None,
+            "file": seed_file.bundle_entry() if seed_file is not None else None,
             "platform": primary.platform,
             "native_post_id": primary.native_id,
         }
@@ -90,29 +131,37 @@ class SeedMaterializationService:
                 (SOURCE_KIND, digest),
             ).fetchone()
             if existing is not None and existing["status"] == "complete":
-                return self._existing_result(primary, int(existing["import_run_id"]))
-            if existing is not None:
+                result = self._existing_result(primary, int(existing["import_run_id"]))
+            elif existing is not None:
                 raise ValueError("an operator seed import run for this bundle is not complete")
-            import_run_id = self._begin_import_run(digest, len(payload), observed_at)
-            raw_observation_id = CatalogWriter(self._database).store_raw(
-                RawRecord(payload, "application/json", "post", primary.native_id, observed_at),
-                import_run_id=import_run_id,
-            )
-            post_id = self._write_stub(primary, raw_observation_id, observed_at)
-            reference_count = self._write_references(
-                post_id, recognized, raw_observation_id, observed_at
-            )
-            self._finish_import_run(import_run_id, observed_at)
-        return {
-            "status": "materialized",
-            "seed_kind": "post",
-            "platform": primary.platform,
-            "native_post_id": primary.native_id,
-            "post_id": post_id,
-            "import_run_id": import_run_id,
-            "url_count": len(recognized),
-            "reference_count": reference_count,
-        }
+            else:
+                import_run_id = self._begin_import_run(digest, len(payload), observed_at)
+                raw_observation_id = CatalogWriter(self._database).store_raw(
+                    RawRecord(payload, "application/json", "post", primary.native_id, observed_at),
+                    import_run_id=import_run_id,
+                )
+                post_id = self._write_stub(primary, raw_observation_id, observed_at)
+                reference_count = self._write_references(
+                    post_id, recognized, raw_observation_id, observed_at
+                )
+                if seed_file is not None:
+                    self._write_occurrence(post_id, seed_file, declared_md5, observed_at)
+                self._finish_import_run(import_run_id, observed_at)
+                result = {
+                    "status": "materialized",
+                    "seed_kind": "post",
+                    "platform": primary.platform,
+                    "native_post_id": primary.native_id,
+                    "post_id": post_id,
+                    "import_run_id": import_run_id,
+                    "url_count": len(recognized),
+                    "reference_count": reference_count,
+                }
+        if seed_file is not None:
+            if media_root is None:  # pragma: no cover - validated above
+                raise ValueError("a media root is required when seeding with a local file")
+            result["adoption"] = self._ensure_adopted(int(result["post_id"]), seed_file, media_root)
+        return result
 
     def _recognize(self, urls: list[str] | tuple[str, ...]) -> list[_RecognizedSeedURL]:
         if not urls:
@@ -145,6 +194,134 @@ class SeedMaterializationService:
                 )
             )
         return recognized
+
+    def _validate_file(self, file: str | Path | None) -> _SeedFile | None:
+        if file is None:
+            return None
+        path = Path(file)
+        if not path.is_file():
+            raise ValueError("seed file must be an existing regular file")
+        size = path.stat().st_size
+        maximum = InspectionLimits().max_bytes
+        if not 0 < size <= maximum:
+            raise ValueError(f"seed file size must be between 1 and {maximum} bytes")
+        sha256 = hashlib.sha256()
+        md5 = hashlib.md5()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(_FILE_CHUNK_BYTES), b""):
+                sha256.update(chunk)
+                md5.update(chunk)
+        return _SeedFile(path.resolve(), size, sha256.hexdigest(), md5.hexdigest())
+
+    def _write_occurrence(
+        self,
+        post_id: int,
+        seed_file: _SeedFile,
+        declared_md5: str | None,
+        observed_at: str,
+    ) -> None:
+        """Land the local file as the stub's occurrence and adoptable source."""
+
+        writer = CatalogWriter(self._database)
+        occurrence = writer.upsert_media(
+            post_id,
+            MediaOccurrenceRecord(
+                OCCURRENCE_SOURCE_KEY,
+                0,
+                "image",
+                declared_md5=declared_md5.lower() if declared_md5 else None,
+                observed_at=observed_at,
+                local_path=seed_file.name,
+            ),
+        )
+        source_root = seed_file.path.parent
+        root_identity = hashlib.sha256(str(source_root).encode()).hexdigest()
+        root_id = writer.register_managed_root(
+            ManagedRootRecord(
+                root_kind="source",
+                root_identity=root_identity,
+                display_label="operator-seed source",
+                private_path=str(source_root),
+            )
+        )
+        writer.add_occurrence_source(
+            OccurrenceSourceRecord(
+                occurrence.id,
+                "legacy_local",
+                seed_file.name,
+                observed_at,
+                managed_root_id=root_id,
+                source_identity=root_identity,
+            )
+        )
+
+    def _ensure_adopted(
+        self,
+        post_id: int,
+        seed_file: _SeedFile,
+        media_root: str | Path,
+    ) -> dict[str, Any]:
+        """Adopt the seed file into managed storage once, with verified facts."""
+
+        connection = self._database.connection
+        occurrence_id = connection.execute(
+            "SELECT media_occurrence_id FROM media_occurrences "
+            "WHERE post_id = ? AND source_key = ?",
+            (post_id, OCCURRENCE_SOURCE_KEY),
+        ).fetchone()
+        if occurrence_id is None:
+            raise ValueError("seed occurrence is missing for local-byte adoption")
+        occurrence_id = int(occurrence_id[0])
+        fingerprint = self._asset_fingerprint(occurrence_id)
+        if fingerprint is not None:
+            return {"status": "already-adopted", **fingerprint}
+        summary = adopt_assets(
+            self._database,
+            seed_file.path.parent,
+            media_root,
+            occurrence_ids={occurrence_id},
+            limits=InspectionLimits(),
+        )
+        fingerprint = self._asset_fingerprint(occurrence_id)
+        if fingerprint is None:
+            diagnostic = next(
+                (
+                    str(item.get("diagnostic") or item.get("outcome"))
+                    for item in summary.items
+                    if not item.get("asset_id")
+                ),
+                "adoption produced no asset",
+            )
+            raise ValueError(f"seed file adoption failed: {diagnostic}")
+        return {
+            "status": "adopted",
+            "run_id": summary.run_id,
+            **fingerprint,
+        }
+
+    def _asset_fingerprint(self, occurrence_id: int) -> dict[str, Any] | None:
+        row = self._database.connection.execute(
+            """SELECT a.verified_sha256, a.verified_md5, a.byte_size,
+                      COALESCE(a.detected_width, a.width) AS width,
+                      COALESCE(a.detected_height, a.height) AS height,
+                      EXISTS (SELECT 1 FROM asset_fingerprints f
+                               WHERE f.asset_id = a.asset_id
+                                 AND f.fingerprint_kind = 'phash') AS phash_recorded
+                 FROM occurrence_assets oa JOIN assets a USING (asset_id)
+                WHERE oa.media_occurrence_id = ?
+                ORDER BY oa.asset_id LIMIT 1""",
+            (occurrence_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "verified_sha256": row["verified_sha256"],
+            "verified_md5": row["verified_md5"],
+            "width": row["width"],
+            "height": row["height"],
+            "byte_size": row["byte_size"],
+            "phash_recorded": bool(row["phash_recorded"]),
+        }
 
     def _begin_import_run(self, digest: str, size: int, observed_at: str) -> int:
         cursor = self._database.connection.execute(
