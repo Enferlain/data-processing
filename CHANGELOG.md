@@ -17,6 +17,19 @@ Rules:
 
 ### Added
 
+- **e621 post content facts normalize (Bead `data-processing-8jj`, OpenSpec change
+  `extend-e621-post-content-facts`)** — description content lands as post text
+  (`posts.text_content` — live-verified e621 descriptions embed the artist's original
+  "From source:" caption, i.e. retained source content), the top-level seconds float
+  lands as the occurrence's `duration_ms`, and URL-bearing `sample.alternates` enrich the
+  variant metadata under `alternate:*` names with dimensions, extension/MIME, fps, and
+  codec. Malformed shapes fail closed. Findings recorded in the audit: `locked_tags` and
+  `change_seq` stay raw-retained (no persistence home), and the sets surface is verified —
+  `/sets.json` does not exist; the real endpoint `/post_sets.json` returns 403 anonymously,
+  so set membership needs the authenticated transport plus the typed grouping model
+  (Bead `data-processing-t08`).
+
+- **Materialize-a-seed gains the local-bytes phase (Bead `data-processing-8b2`, completed;
 - **Materialize-a-seed gains the local-bytes phase (Bead `data-processing-8b2`, completed;
   OpenSpec change `add-materialize-seed` archived)** — `catalog seed create --file` ingests
   the file the operator holds: its content hash joins the bundle identity (changed bytes are

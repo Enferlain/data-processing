@@ -868,6 +868,9 @@ class E621Adapter:
                     "rating": body.get("rating"),
                     "status": "deleted" if deleted else "available",
                     "availability": "deleted" if deleted else "available",
+                    # e621 descriptions embed the artist's original source-post
+                    # caption ("From source:" + text): retained source content.
+                    "text": body.get("description") or None,
                     "description_present": bool(body.get("description")),
                     "score": dict(score) if isinstance(score, dict) else None,
                     "fav_count": body.get("fav_count"),
@@ -1006,6 +1009,7 @@ class E621Adapter:
                     "availability": _variant_availability(preview_url, deleted),
                 }
             )
+        variants.extend(self._alternate_variants(sample_obj, deleted=deleted))
 
         extension = file_obj.get("ext")
         mime_type = _mime_type(extension)
@@ -1033,10 +1037,69 @@ class E621Adapter:
                 "declared_file_size": file_obj.get("size"),
                 "width": file_obj.get("width"),
                 "height": file_obj.get("height"),
+                "duration_ms": _duration_ms(body.get("duration")),
                 "variants": variants,
                 "availability": availability,
             },
         )
+
+    def _alternate_variants(self, sample_obj: object, *, deleted: bool) -> list[dict[str, Any]]:
+        """Render URL-bearing sample alternates as provider-native variants.
+
+        e621's ``sample.alternates`` carries transcoded representations
+        (``original`` plus keyed ``variants``/``samples`` maps) with fps,
+        codec, size, and dimensions; each URL-bearing entry becomes an
+        ``alternate:*`` variant so the original/sample/preview roles keep
+        their exact meaning.
+        """
+
+        if not isinstance(sample_obj, dict):
+            return []
+        alternates = sample_obj.get("alternates")
+        if alternates is None:
+            return []
+        if not isinstance(alternates, dict):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "post sample alternates are malformed"
+            )
+        entries: list[tuple[str, Mapping[str, Any]]] = []
+        original = alternates.get("original")
+        if isinstance(original, dict):
+            entries.append(("alternate:original", original))
+        for group in ("variants", "samples"):
+            keyed = alternates.get(group)
+            if keyed is None:
+                continue
+            if not isinstance(keyed, dict):
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE, "post sample alternates are malformed"
+                )
+            for key, entry in keyed.items():
+                if isinstance(entry, dict):
+                    entries.append((f"alternate:{group}:{key}", entry))
+        variants: list[dict[str, Any]] = []
+        for name, entry in entries:
+            url = _opt_str(entry.get("url"))
+            if url is None:
+                continue
+            extension = url.rsplit(".", 1)[-1].lower() if "." in url.rsplit("/", 1)[-1] else None
+            variant: dict[str, Any] = {
+                "role": name,
+                "url": url,
+                "ext": extension,
+                "mime_type": _mime_type(extension),
+                "width": entry.get("width"),
+                "height": entry.get("height"),
+                "availability": _variant_availability(url, deleted),
+            }
+            fps = entry.get("fps")
+            codec = entry.get("codec")
+            if fps is not None:
+                variant["fps"] = fps
+            if codec is not None:
+                variant["codec"] = codec
+            variants.append(variant)
+        return variants
 
     def _reference_items(self, post_id: str, body: Mapping[str, Any]) -> list[NormalizedItem]:
         items: list[NormalizedItem] = []
@@ -1431,6 +1494,16 @@ def _mime_type(extension: object) -> str | None:
     return mimetypes.guess_type(f"file.{extension}")[0]
 
 
+def _duration_ms(value: object) -> int | None:
+    """Convert e621's top-level seconds float to whole milliseconds."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "post duration is malformed")
+    return round(float(value) * 1000)
+
+
 def _variant_availability(url: str | None, deleted: bool) -> str:
     if deleted:
         return "deleted"
@@ -1438,6 +1511,12 @@ def _variant_availability(url: str | None, deleted: bool) -> str:
 
 
 def _validate_post_shapes(body: Mapping[str, Any]) -> None:
+    description = body.get("description")
+    if description is not None and not isinstance(description, str):
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "post description is malformed")
+    locked_tags = body.get("locked_tags")
+    if locked_tags is not None and not isinstance(locked_tags, list):
+        raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "post locked tags are malformed")
     for name in ("fav_count", "comment_count"):
         value = body.get(name)
         if value is not None and (

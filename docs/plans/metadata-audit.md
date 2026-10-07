@@ -132,10 +132,11 @@ The most complete adapter. Gaps only:
 | Field group | Exposed | Today | Unlocks |
 | --- | --- | --- | --- |
 | everything above for danbooru incl. per-variant dims, flags→observations, pools→observations, uploader id+name, rich artist records (urls, domains, group, linked_user_id), tag + alias records, sources[] refs, parent/children | ✓ | ✓ | — |
-| **description content** | ✓ | only `description_present` bool (**R**) | **provenance: e621 descriptions embed the artist's original post text ("From source:" + full caption/credits, verified on live pages 2026-10-05) — normalize as retained source content** |
-| **sets** (grouping type distinct from pools) | ✓ ("Sets with this post" on live pages) | **✗ — missed by the first audit pass; API surface to verify (`/sets.json`)** | work-grouping relationships (req 3) |
+| **description content** | ✓ | ✓ as post text (2026-10-07, bead `8jj`; live-verified "From source:" captions land in `posts.text_content`) | provenance: retained source content |
+| **sets** (grouping type distinct from pools) | ✓ ("Sets with this post" on live pages) | ✗ — API verified 2026-10-07: `/sets.json` 404s; the real endpoint is `/post_sets.json` and returns 403 anonymously — needs the adapter's authenticated transport plus a grouping model that does not conflate sets with pools (bead `t08`) | work-grouping relationships (req 3) |
 | **notes (coordinates, versions)** | opt-in | ✗ | overlay metadata |
-| **duration, locked_tags, sample.alternates, change_seq, is_favorited** | ✓ | **R** | fidelity |
+| **duration, sample.alternates** | ✓ | ✓ (2026-10-07: duration_ms on the occurrence; alternates as `alternate:*` variants with fps/codec) | fidelity |
+| **locked_tags, change_seq, is_favorited** | ✓ | raw-retained (no persistence home, not derivable; available on reprocess when a home exists) | fidelity |
 | external pixiv id | via sources[] only | ✓ when URL-recognized | bridge (URL-spelling sensitive) |
 
 ### Pixiv
@@ -205,8 +206,12 @@ Filed as beads, in requirement-impact order:
    (source_post_url, declared_md5, verified_md5) wired via the credentialed DAPI; parent
    relations, title, and typed tags (`fields=tag_info` on detail fetches) normalized;
    favorites dispute resolved (see table).
-3. **e621 description/duration/locked_tags normalization** — small reprocess-able
-   catch-up.
+3. **e621 description/duration/alternates normalization** — *(Done 2026-10-07, bead
+   `data-processing-8jj`, OpenSpec change `extend-e621-post-content-facts`)* description
+   content → post text, duration → occurrence duration_ms, sample.alternates →
+   `alternate:*` variants; locked_tags/change_seq stay raw-retained (no home); sets
+   verified to need the authenticated `/post_sets.json` endpoint and the typed grouping
+   model (t08).
 4. **Pixiv engagement + series + related** — normalize totals, tools, ai_type, series
    membership; add `related` as an explicit bounded operation (work relationships).
 5. **Bridge hardening + positive controls** — exercise `external_post_id`

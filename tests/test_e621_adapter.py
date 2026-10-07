@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -193,7 +194,8 @@ def test_post_normalization_keeps_nested_facts_separate() -> None:
     assert post.data["score"] == {"up": 20, "down": 2, "total": 18}
     assert post.data["fav_count"] == 12
     assert post.data["pools"] == [77001]
-    assert post.data["description_present"] is False
+    assert post.data["description_present"] is True
+    assert post.data["text"].startswith("[i]From source:[/i]")
 
     assert [item.native_id for item in by_kind["account"]] == ["42"]
     assert by_kind["post_participant"][0].data["role"] == "uploader"
@@ -285,6 +287,47 @@ def test_video_post_media_type_is_detected() -> None:
     media = _by_kind(_adapter().normalize(_case("video_post").response))["media_occurrence"][0]
     assert media.data["mime_type"] == "video/webm"
     assert media.data["availability"] == "available"
+
+
+def test_post_content_duration_and_alternates_normalize() -> None:
+    # OpenSpec extend-e621-post-content-facts: description content lands as
+    # post text, the top-level seconds float becomes duration_ms, and
+    # URL-bearing sample alternates become alternate:* variants with their
+    # technical metadata.
+    media = _by_kind(_adapter().normalize(_case("video_post").response))["media_occurrence"][0]
+    assert media.data["duration_ms"] == 13_026
+    by_role = {variant["role"]: variant for variant in media.data["variants"]}
+    assert by_role["alternate:original"] == {
+        "role": "alternate:original",
+        "url": "https://static1.e621.net/data/cd/abcdef0123456789abcdef0123456780.mp4",
+        "ext": "mp4",
+        "mime_type": "video/mp4",
+        "width": 960,
+        "height": 720,
+        "availability": "available",
+        "fps": 24.0,
+        "codec": "avc1.4D401E",
+    }
+    post = _by_kind(_adapter().normalize(_case("video_post").response))["post"][0]
+    assert post.data["text"] is None
+    assert post.data["description_present"] is False
+
+
+def test_malformed_description_duration_and_alternates_fail_closed() -> None:
+    case = _case("normal_post")
+    for field, value in (
+        ("description", 42),
+        ("locked_tags", "meta"),
+        ("duration", "thirteen"),
+        ("duration", -1),
+    ):
+        mutated = replace(
+            case.response,
+            payload=json.dumps({**json.loads(case.response.payload), field: value}).encode(),
+        )
+        with pytest.raises(AdapterFailure) as failure:
+            _adapter().normalize(mutated)
+        assert failure.value.outcome is AdapterOutcome.MALFORMED_RESPONSE, (field, value)
 
 
 def test_artist_record_is_attribution_and_never_an_account() -> None:

@@ -192,6 +192,43 @@ def test_sync_fetch_post_retains_raw_then_persists_normalized_facts(
         assert requested_hosts == ["e621.net"]
 
 
+def test_sync_persists_description_duration_and_alternates(tmp_path: Path) -> None:
+    # OpenSpec extend-e621-post-content-facts: description content lands in
+    # posts.text_content, the seconds float lands as duration_ms on the
+    # occurrence, and sample alternates enrich variants_json.
+    bodies = {"5001": _body("normal_post"), "5004": _body("video_post")}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        target = request.url.path.rsplit("/", 1)[-1].removesuffix(".json")
+        return _json_response(bodies[target])
+
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        connection = database.connection
+        for target in ("5001", "5004"):
+            result = _service(database, handler).synchronize(
+                AdapterOperation.FETCH_POST,
+                target,
+                limits=SyncLimits(1, 1, 10, 10),
+            )
+            assert result.status == "complete"
+
+        text_content = connection.execute(
+            "SELECT text_content FROM posts WHERE native_post_id = '5001'"
+        ).fetchone()[0]
+        assert text_content is not None and text_content.startswith("[i]From source:[/i]")
+
+        duration_ms, variants_json = connection.execute(
+            "SELECT duration_ms, variants_json FROM media_occurrences "
+            "WHERE post_id = (SELECT post_id FROM posts WHERE native_post_id = '5004')"
+        ).fetchone()
+        assert duration_ms == 13_026
+        variants = json.loads(variants_json)["variants"]
+        alternate = next(v for v in variants if v["role"] == "alternate:original")
+        assert alternate["mime_type"] == "video/mp4"
+        assert (alternate["width"], alternate["height"]) == (960, 720)
+        assert alternate["codec"] == "avc1.4D401E"
+
+
 def test_sync_fetch_attribution_persists_artist_record_not_account(
     tmp_path: Path,
 ) -> None:
