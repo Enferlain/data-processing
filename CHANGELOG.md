@@ -17,6 +17,16 @@ Rules:
 
 ### Added
 
+- **Pixiv engagement totals normalize (Bead `data-processing-cyp`, partial; OpenSpec change
+  `extend-pixiv-engagement-facts`)** — artwork details emit bookmark and comment counts
+  (from `total_bookmarks`/`total_comments`) that persist as post metadata observations
+  through the shared page writer, reprocess-able from retained raw. The audit records the
+  remaining scope precisely: `total_view` and the classification fields have no persistence
+  homes; series membership has no representable object kind today (the same constraint that
+  defers e621 sets — waits on the typed relationship model, bead `data-processing-t08`);
+  and a related-works operation needs a new `AdapterOperation` value whose CHECK
+  constraints on `remote_runs`/`remote_requests` require deliberate table rebuilds.
+
 - **e621 post content facts normalize (Bead `data-processing-8jj`, OpenSpec change
   `extend-e621-post-content-facts`)** — description content lands as post text
   (`posts.text_content` — live-verified e621 descriptions embed the artist's original

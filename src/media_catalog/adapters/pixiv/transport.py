@@ -796,6 +796,12 @@ class PixivAdapter:
             "page_count": _positive_int(illust.get("page_count")),
             "width": _positive_int(illust.get("width")),
             "height": _positive_int(illust.get("height")),
+            # Engagement totals the shared page writer persists as post
+            # metadata observations; total_view and the classification fields
+            # (tools, illust_ai_type, illust_book_style, sanity_level) stay
+            # raw-retained until persistence homes exist.
+            "fav_count": _positive_int(illust.get("total_bookmarks")),
+            "comment_count": _positive_int(illust.get("total_comments")),
             "rating": x_restrict,
             "restriction": x_restrict,
             "visible": visible,

@@ -145,10 +145,10 @@ The most complete adapter. Gaps only:
 | --- | --- | --- | --- |
 | account incl. stable id, external_links (webpage/twitter/...), profile facts | ✓ | ✓ rich | account matching (req 1) |
 | artwork identity/title/caption/type/dates/pages/dims/rating, tags w/ translations, per-page occurrences + variants, ugoira frames | ✓ | ✓ | foundation |
-| **series (manga series membership)** | ✓ | **R** | **work relationships (req 3)** |
-| **related works** (`/v2/illust/related`) | ✓ | ✗ (never requested) | **work relationships (req 3)** |
-| **total_view / total_bookmarks / total_comments** | ✓ | **R** | ordering/quality |
-| **tools, illust_ai_type, illust_book_style, sanity_level** | ✓ | **R** | evidence |
+| **series (manga series membership)** | ✓ | **R** — no representable object kind today (same constraint as e621 sets); waits on t08's grouping entities | **work relationships (req 3)** |
+| **related works** (`/v2/illust/related`) | ✓ | ✗ (never requested; needs a new `AdapterOperation` value whose CHECK constraints on `remote_runs`/`remote_requests` require deliberate table rebuilds) | **work relationships (req 3)** |
+| **total_view / total_bookmarks / total_comments** | ✓ | bookmarks/comments ✓ as metadata observations (2026-10-07, bead `cyp` partial); total_view raw (no column) | ordering/quality |
+| **tools, illust_ai_type, illust_book_style, sanity_level** | ✓ | raw-retained (no homes) | evidence |
 | unlisted works (`id_unlisted`) | ✓ | ✗ | coverage |
 | lookup strategies | search is fuzzy | none (by design) | pixiv stays a reference target |
 
@@ -212,8 +212,12 @@ Filed as beads, in requirement-impact order:
    `alternate:*` variants; locked_tags/change_seq stay raw-retained (no home); sets
    verified to need the authenticated `/post_sets.json` endpoint and the typed grouping
    model (t08).
-4. **Pixiv engagement + series + related** — normalize totals, tools, ai_type, series
-   membership; add `related` as an explicit bounded operation (work relationships).
+4. **Pixiv engagement + series + related** — engagement totals ✓ (2026-10-07, bead
+   `data-processing-cyp` partial, OpenSpec change `extend-pixiv-engagement-facts`:
+   bookmarks/comments → metadata observations). REMAINING on the bead: series membership
+   (needs t08 grouping entities — no object kind today), related-works operation (needs a
+   new AdapterOperation value + CHECK-constraint table rebuilds on remote_runs/
+   remote_requests), total_view/tools/ai_type classification (no homes).
 5. **Bridge hardening + positive controls** — exercise `external_post_id`
    (pixiv_id metatag) end-to-end with a known pair; e621 multi-spelling pixiv source
    URLs; demote source_post_url in docs to weak evidence; decide the non-recorded-seed

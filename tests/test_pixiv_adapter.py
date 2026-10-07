@@ -238,6 +238,12 @@ def test_pixiv_catalog_integration_preserves_profile_artwork_and_page_metadata(
         ).fetchone()
         assert tuple(occurrence[:4]) == ("2001:p0", 0, "page", "image/jpeg")
         assert occurrence[4].startswith("https://i.pximg.net/")
+        engagement = database.connection.execute(
+            """SELECT favorite_count, comment_count FROM post_metadata_observations
+                WHERE post_id = ?""",
+            (post_id,),
+        ).fetchone()
+        assert tuple(engagement) == (321, 12)
         assert len(list_account_external_links(database, account_id)) == 2
         assert list_post_tags(database, post_id)[0]["observation_count"] == 1
         assert database.connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
