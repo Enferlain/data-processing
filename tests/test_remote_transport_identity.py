@@ -32,7 +32,7 @@ NOW = "2026-08-14T00:00:00Z"
 class _TransportAdapter:
     provider_key = "gelbooru"
     instance_key = "gelbooru"
-    adapter_version = "gelbooru-native-v1"
+    adapter_version = "gelbooru-native-v2"
     schema_version = "gelbooru-dapi-json-v1"
 
     def __init__(self, transport_key: str, transport_version: str, pages: list[NormalizedPage]):

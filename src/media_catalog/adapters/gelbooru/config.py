@@ -14,7 +14,7 @@ from media_catalog.adapters.contracts import (
 )
 
 PROVIDER_KEY = "gelbooru"
-ADAPTER_VERSION = "gelbooru-native-v1"
+ADAPTER_VERSION = "gelbooru-native-v2"
 DAPI_SCHEMA_VERSION = "gelbooru-dapi-json-v1"
 HTML_SCHEMA_VERSION = "gelbooru-html-v1"
 DAPI_TRANSPORT_VERSION = "gelbooru-dapi-v1"

@@ -271,7 +271,7 @@ def test_attribution_without_primary_name_is_not_executable(tmp_path: Path) -> N
         with database.transaction():
             seed_id = _account(writer, "x", "9001")
             attribution_id = writer.upsert_attribution(
-                AttributionRecord("danbooru", "44", "danbooru-native-v1", NOW)
+                AttributionRecord("danbooru", "44", "danbooru-native-v2", NOW)
             ).id
 
         with pytest.raises(ValueError, match="no current primary name"):

@@ -90,7 +90,7 @@ def _booru_setup(platform: str, attribution_id: str, primary_name: str, host: st
                 AttributionRecord(
                     platform,
                     attribution_id,
-                    "danbooru-native-v1",
+                    "danbooru-native-v2",
                     NOW,
                     instance_host=host,
                     primary_name=primary_name,

@@ -4,7 +4,7 @@
   "provider": "pixiv",
   "instance": "pixiv",
   "captured_at": "2026-08-10T00:00:00Z",
-  "adapter_version": "pixiv-fixture-v1",
+  "adapter_version": "pixiv-adapter-v2",
   "schema_version": "pixiv-app-v1",
   "redactions": [
    "names replaced",

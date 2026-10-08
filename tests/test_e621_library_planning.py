@@ -373,7 +373,7 @@ def test_danbooru_attribution_regression_uses_primary_name_byte_compatible(
                 AttributionRecord(
                     "danbooru",
                     "44",
-                    "danbooru-native-v1",
+                    "danbooru-native-v2",
                     NOW,
                     instance_host="danbooru.donmai.us",
                     primary_name="artist_a",

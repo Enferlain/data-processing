@@ -17,7 +17,7 @@ from media_catalog.adapters.contracts import (
 # provider-neutral lookup planning context, replacing the values the planner
 # previously hardcoded.
 PROVIDER_KEY = "danbooru"
-ADAPTER_VERSION = "danbooru-native-v1"
+ADAPTER_VERSION = "danbooru-native-v2"
 ENUMERATION_VERSION = "library-expansion-v1"
 
 

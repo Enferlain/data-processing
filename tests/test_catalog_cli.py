@@ -145,7 +145,7 @@ def test_e621_metadata_cli_routes_operations_with_provider_limits_and_resume(
     service_intervals: list[float] = []
 
     class FakeAdapter:
-        adapter_version = "e621-native-v1"
+        adapter_version = "e621-native-v2"
         schema_version = "e621-json-v1"
         instance_key = "e621"
 
@@ -282,7 +282,7 @@ def test_e621_metadata_cli_human_output_and_help_keep_credentials_external(
         pass
 
     class FakeAdapter:
-        adapter_version = "e621-native-v1"
+        adapter_version = "e621-native-v2"
         schema_version = "e621-json-v1"
         instance_key = "e621"
 
@@ -648,7 +648,7 @@ def test_e621_lookup_plan_uses_e621_identity_and_capability_exclusions(
     assert item["provider"] == "e621"
     assert item["instance"] == "e621"
     assert item["strategy"] == "source_post_url"
-    assert item["adapter_version"] == "e621-native-v1"
+    assert item["adapter_version"] == "e621-native-v2"
     assert item["schema_version"] == "e621-json-v1"
     assert "acme" not in json.dumps(planned)
 
@@ -862,7 +862,7 @@ def test_lookup_run_listing_succeeds_when_history_contains_failure(
                 "",
                 "source_post_url",
                 "lookup-v1",
-                "danbooru-native-v1",
+                "danbooru-native-v2",
                 "danbooru-json-v1",
                 "revision",
                 "a" * 64,
@@ -1214,7 +1214,7 @@ def _seed_e621_library_target(catalog: Path) -> tuple[int, int]:
             AttributionRecord(
                 "e621",
                 "tag:12345",
-                "e621-native-v1",
+                "e621-native-v2",
                 NOW,
                 instance_host="e621.net",
             )
@@ -1291,7 +1291,7 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
 
     class FakeAdapter:
         instance_key = "e621"
-        adapter_version = "e621-native-v1"
+        adapter_version = "e621-native-v2"
         schema_version = "e621-json-v1"
 
         def __init__(self, instance: object, *, client: object, credentials: object) -> None:
@@ -1607,7 +1607,7 @@ def test_library_capabilities_cli_reports_supported_and_unsupported_targets_offl
         pixiv_id = writer.upsert_account(AccountRecord("pixiv", "1001", NOW)).id
         x_id = writer.upsert_account(AccountRecord("x", "9001", NOW)).id
         e621_attribution_id = writer.upsert_attribution(
-            AttributionRecord("e621", "tag:12345", "e621-native-v1", NOW)
+            AttributionRecord("e621", "tag:12345", "e621-native-v2", NOW)
         ).id
     before_bytes = catalog.read_bytes()
     monkeypatch.setattr(
@@ -1680,7 +1680,7 @@ def test_library_capabilities_cli_reports_unsupported_attribution_kind(
     with CatalogDatabase(catalog) as database, database.transaction():
         writer = CatalogWriter(database)
         attribution_id = writer.upsert_attribution(
-            AttributionRecord("gelbooru", "g-1", "gelbooru-native-v1", NOW)
+            AttributionRecord("gelbooru", "g-1", "gelbooru-native-v2", NOW)
         ).id
 
     main(

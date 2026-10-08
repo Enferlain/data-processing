@@ -9,6 +9,7 @@ from .executor import (
     ResponseRetainer,
     RetainedPage,
 )
+from .reprocess import execute_reprocess, plan_reprocess
 from .request_gate import RequestGate, sanitize_transport_error, semantic_request_identity
 from .service import MetadataSyncService, SyncResult
 
@@ -26,6 +27,8 @@ __all__ = [
     "SecretValue",
     "SyncLimits",
     "SyncResult",
+    "execute_reprocess",
+    "plan_reprocess",
     "sanitize_transport_error",
     "semantic_request_identity",
 ]

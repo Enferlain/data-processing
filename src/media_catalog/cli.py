@@ -54,7 +54,12 @@ from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.records import AcquisitionLimits
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
-from media_catalog.remote_sync import MetadataSyncService, SyncLimits
+from media_catalog.remote_sync import (
+    MetadataSyncService,
+    SyncLimits,
+    execute_reprocess,
+    plan_reprocess,
+)
 from media_catalog.seeding import SeedMaterializationService
 from media_catalog.storage.adoption import adopt_assets, plan_adoption
 from media_catalog.storage.cas import AssetStorageError, InspectionLimits
@@ -120,6 +125,20 @@ def _add_acquisition_limits(parser: argparse.ArgumentParser) -> None:
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _offline_replay_adapter(provider: str):
+    # Reprocessing is offline: the adapter only normalizes, so its client is
+    # a mock that fails loudly if anything ever tries to contact a provider.
+    def refuse(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("reprocessing must not contact the provider")
+
+    client = httpx.Client(transport=httpx.MockTransport(refuse))
+    if provider == "gelbooru":
+        return GelbooruAdapter(GELBOORU, client=client)
+    if provider == "e621":
+        return E621Adapter(E621, client=client)
+    return DanbooruAdapter(AIBOORU if provider == "aibooru" else DANBOORU, client=client)
 
 
 def _add_lookup_limits(parser: argparse.ArgumentParser) -> None:
@@ -441,6 +460,23 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_show.add_argument("--result-limit", type=int, default=100)
     lookup_show.add_argument("--result-after", type=int)
     _add_json(lookup_show)
+
+    reprocess = commands.add_parser("reprocess")
+    reprocess_commands = reprocess.add_subparsers(dest="reprocess_command", required=True)
+    reprocess_plan = reprocess_commands.add_parser("plan")
+    reprocess_plan.add_argument("catalog", type=Path)
+    reprocess_plan.add_argument(
+        "--provider", choices=("danbooru", "aibooru", "gelbooru", "e621"), required=True
+    )
+    reprocess_plan.add_argument("--limit", type=int, default=100)
+    _add_json(reprocess_plan)
+    reprocess_run = reprocess_commands.add_parser("run")
+    reprocess_run.add_argument("catalog", type=Path)
+    reprocess_run.add_argument(
+        "--provider", choices=("danbooru", "aibooru", "gelbooru", "e621"), required=True
+    )
+    reprocess_run.add_argument("--raw-id", action="append", type=int, required=True)
+    _add_json(reprocess_run)
 
     seed = commands.add_parser("seed")
     seed_commands = seed.add_subparsers(dest="seed_command", required=True)
@@ -926,6 +962,26 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 minimum_interval_seconds=instance.minimum_interval_seconds,
             )
             return _execute_lookup(arguments, catalog_label, service, limits)
+    if arguments.command == "reprocess":
+        catalog_label = public_path(arguments.catalog)
+        if arguments.reprocess_command == "plan":
+            adapter = _offline_replay_adapter(arguments.provider)
+            with CatalogDatabase(arguments.catalog) as database:
+                return {
+                    "catalog": catalog_label,
+                    **plan_reprocess(database, adapter=adapter, limit=arguments.limit),
+                }
+        adapter = _offline_replay_adapter(arguments.provider)
+        with CatalogDatabase(arguments.catalog) as database:
+            return {
+                "catalog": catalog_label,
+                **execute_reprocess(
+                    database,
+                    adapter,
+                    raw_observation_ids=arguments.raw_id,
+                    clock=_utc_now,
+                ),
+            }
     if arguments.command == "seed":
         catalog_label = public_path(arguments.catalog)
         with CatalogDatabase(arguments.catalog) as database:

@@ -413,6 +413,31 @@ through the existing managed-storage machinery into the designated media root â€
 verified SHA-256/MD5, detected dimensions, and a recorded perceptual hash linked to the stub's
 occurrence, so `verified_md5` (and declared-MD5) lookup planning works from the stub too.
 
+## Reprocess retained raw under a newer normalizer
+
+Normalizer improvements do not require refetching: every retained provider response can be
+replayed offline through the current adapter. A normalization attempt is identified by the
+payload together with the adapter and schema versions, and adapters bump their version
+whenever normalization behavior changes (all four providers are now at `-v2`, covering this
+week's field catch-ups). Planning is read-only and bounded:
+
+```bash
+uv run catalog reprocess plan catalog-output/catalog.sqlite3 --provider danbooru --json
+```
+
+Each replay reconstructs the response envelope from the retained row, normalizes with zero
+provider requests, and commits through the shared page writer under a `reprocess`-origin
+remote run. The retained payload is never modified, prior interpretations stay in history,
+identical facts dedup by observation digest, and replaying the same raw under the same
+versions is skipped. Malformed historical payloads fail as typed outcomes and remain
+inspectable for a later parser version. Retained lookup responses and import raws have no
+metadata operation linkage and are out of scope.
+
+```bash
+uv run catalog reprocess run catalog-output/catalog.sqlite3 --provider danbooru \
+  --raw-id 3153 --json
+```
+
 A provider source URL may support a directed `sourced_from` candidate. An MD5 calculated from
 verified bytes may support `same_work` plus `exact_bytes`; provider-declared MD5 remains weaker
 declared evidence. Names, aliases, tags, and uploaders never establish identity or authorship.

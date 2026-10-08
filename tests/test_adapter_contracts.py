@@ -45,7 +45,7 @@ def test_tag_operations_are_valid_remote_run_operations(operation: str) -> None:
         platform="e621",
         operation=operation,
         target="fox",
-        adapter_version="e621-native-v1",
+        adapter_version="e621-native-v2",
         schema_version="e621-json-v1",
         request_budget=1,
         page_budget=1,

@@ -4,7 +4,7 @@
   "provider": "e621",
   "instance": "e621",
   "captured_at": "2026-08-13T00:00:00Z",
-  "adapter_version": "e621-fixture-v1",
+  "adapter_version": "e621-native-v2",
   "schema_version": "e621-json-v1",
   "redactions": [
    "names replaced with synthetic spellings",

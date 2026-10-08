@@ -13,6 +13,25 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-08]
+
+### Added
+
+- **Retained raw now reprocesses offline under newer normalizers (Bead `data-processing-uru`,
+  OpenSpec change `add-reprocessing-contract`; GitHub issue #8)** — `catalog reprocess
+  plan|run` replays retained provider responses through the current adapter with zero
+  provider requests: the reconstructed envelope normalizes and commits through the shared
+  page writer under a `reprocess`-origin remote run (migration 0014 extends the origin-kind
+  vocabulary), the retained payload is never modified, identical facts dedup by observation
+  digest, replaying the same raw under the same versions is skipped, and malformed
+  historical payloads fail as typed retentive outcomes. Establishing the contract surfaced a
+  real gap: this week's normalizer changes had shipped without version bumps, so all four
+  provider adapters now carry `-v2` versions (fixture manifests and pinned literals follow,
+  with a guard test keeping them in lockstep). Verified live: the six retained danbooru
+  post raws replayed complete offline, a re-run skipped, and six zero-request reprocess
+  runs recorded. Retained lookup responses and import raws have no metadata-operation
+  linkage and stay out of scope.
+
 ## [2026-10-07]
 
 ### Added

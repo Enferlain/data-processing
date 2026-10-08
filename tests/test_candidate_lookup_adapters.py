@@ -78,7 +78,7 @@ def test_lookup_plan_context_is_provider_neutral_and_preserves_identity() -> Non
         # instance_key and schema_version are instance-specific.
         assert context.provider == "danbooru"
         assert context.instance_key == platform_key
-        assert context.adapter_version == "danbooru-native-v1"
+        assert context.adapter_version == "danbooru-native-v2"
         assert context.schema_version == schema_version
         assert context.lookup_capabilities is instance.lookup_capabilities
 
@@ -114,7 +114,7 @@ def test_lookup_plan_context_is_provider_neutral_and_preserves_identity() -> Non
             limits=limits,
             seed_kind="post",
             seed_id="1",
-            adapter_version="danbooru-native-v1",
+            adapter_version="danbooru-native-v2",
             schema_version=schema_version,
         )
         assert via_context.digest == via_literals.digest

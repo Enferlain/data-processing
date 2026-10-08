@@ -130,7 +130,7 @@ def test_e621_facts_are_typed_queryable_idempotent_and_immutable(tmp_path: Path)
                     "5001",
                     NOW,
                     platform="e621",
-                    adapter_version="e621-native-v1",
+                    adapter_version="e621-native-v2",
                     schema_version="e621-json-v1",
                 )
             )
@@ -142,7 +142,7 @@ def test_e621_facts_are_typed_queryable_idempotent_and_immutable(tmp_path: Path)
                     "7001",
                     NOW,
                     platform="e621",
-                    adapter_version="e621-native-v1",
+                    adapter_version="e621-native-v2",
                     schema_version="e621-json-v1",
                 )
             )
@@ -154,7 +154,7 @@ def test_e621_facts_are_typed_queryable_idempotent_and_immutable(tmp_path: Path)
                     "8001",
                     NOW,
                     platform="e621",
-                    adapter_version="e621-native-v1",
+                    adapter_version="e621-native-v2",
                     schema_version="e621-json-v1",
                 )
             )
@@ -166,7 +166,7 @@ def test_e621_facts_are_typed_queryable_idempotent_and_immutable(tmp_path: Path)
                     "6001",
                     NOW,
                     platform="e621",
-                    adapter_version="e621-native-v1",
+                    adapter_version="e621-native-v2",
                     schema_version="e621-json-v1",
                 )
             )
@@ -175,31 +175,31 @@ def test_e621_facts_are_typed_queryable_idempotent_and_immutable(tmp_path: Path)
                 post_page,
                 observed_at=NOW,
                 raw_observation_id=raw_post,
-                adapter_version="e621-native-v1",
+                adapter_version="e621-native-v2",
             )
             page_writer.write_with_result(
                 tag_page,
                 observed_at=NOW,
                 raw_observation_id=raw_tag,
-                adapter_version="e621-native-v1",
+                adapter_version="e621-native-v2",
             )
             page_writer.write_with_result(
                 alias_page,
                 observed_at=NOW,
                 raw_observation_id=raw_alias,
-                adapter_version="e621-native-v1",
+                adapter_version="e621-native-v2",
             )
             page_writer.write_with_result(
                 artist_page,
                 observed_at=NOW,
                 raw_observation_id=raw_artist,
-                adapter_version="e621-native-v1",
+                adapter_version="e621-native-v2",
             )
             page_writer.write_with_result(
                 post_page,
                 observed_at=NOW,
                 raw_observation_id=raw_post,
-                adapter_version="e621-native-v1",
+                adapter_version="e621-native-v2",
             )
 
         assert (
@@ -275,7 +275,7 @@ def test_e621_post_metadata_observation_keeps_changed_score_history(tmp_path: Pa
             )
             page_writer = NormalizedPageWriter(writer)
             page_writer.write(
-                page, observed_at=NOW, raw_observation_id=raw, adapter_version="e621-native-v1"
+                page, observed_at=NOW, raw_observation_id=raw, adapter_version="e621-native-v2"
             )
             post = next(item for item in page.items if item.object_kind == "post")
             changed = dict(post.data)
@@ -285,7 +285,7 @@ def test_e621_post_metadata_observation_keeps_changed_score_history(tmp_path: Pa
                 changed_page,
                 observed_at="2026-08-14T00:00:00Z",
                 raw_observation_id=raw,
-                adapter_version="e621-native-v1",
+                adapter_version="e621-native-v2",
             )
         scores = database.connection.execute(
             "SELECT score_total FROM post_metadata_observations "

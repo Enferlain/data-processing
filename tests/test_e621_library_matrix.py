@@ -208,7 +208,7 @@ def test_e621_stale_material_is_rejected_before_network_or_run(
             adapter_type = type(
                 "FutureE621Adapter",
                 (E621Adapter,),
-                {"adapter_version": "e621-native-v2"},
+                {"adapter_version": "e621-native-v999"},
             )
         adapter = adapter_type(
             E621,
@@ -354,7 +354,7 @@ def test_existing_provider_expansion_plan_matrix_remains_stable(
                     AttributionRecord(
                         platform,
                         native_id,
-                        "danbooru-native-v1",
+                        "danbooru-native-v2",
                         NOW,
                         instance_host=(
                             "aibooru.online" if platform == "aibooru" else "danbooru.donmai.us"

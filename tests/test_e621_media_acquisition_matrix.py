@@ -484,7 +484,7 @@ def test_metadata_sync_and_library_expansion_never_start_media_acquisition(tmp_p
                 seed_id = writer.upsert_account(AccountRecord("x", "9001", NOW)).id
                 attribution_id = writer.upsert_attribution(
                     AttributionRecord(
-                        "e621", "tag:12345", "e621-native-v1", NOW, instance_host="e621.net"
+                        "e621", "tag:12345", "e621-native-v2", NOW, instance_host="e621.net"
                     )
                 ).id
                 writer.upsert_tag_record(

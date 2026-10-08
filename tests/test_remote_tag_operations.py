@@ -91,7 +91,7 @@ def test_fresh_schema_persists_tag_operations_and_raw_kinds(
         with database.transaction():
             run_id = writer.begin_remote_run(
                 RemoteRunRecord(
-                    "e621", operation, target, "e621-native-v1", "e621-json-v1", 1, 1, 1, 1, NOW
+                    "e621", operation, target, "e621-native-v2", "e621-json-v1", 1, 1, 1, 1, NOW
                 )
             )
             request_id = writer.record_remote_request(
@@ -116,7 +116,7 @@ def test_fresh_schema_persists_tag_operations_and_raw_kinds(
                     target,
                     NOW,
                     platform="e621",
-                    adapter_version="e621-native-v1",
+                    adapter_version="e621-native-v2",
                     schema_version="e621-json-v1",
                 ),
                 remote_run_id=run_id,

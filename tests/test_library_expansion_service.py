@@ -374,7 +374,7 @@ def test_danbooru_attribution_expansion_pauses_and_resumes_from_committed_keyset
                 AttributionRecord(
                     "danbooru",
                     "44",
-                    "danbooru-native-v1",
+                    "danbooru-native-v2",
                     NOW,
                     primary_name="artist_a",
                 )
@@ -521,7 +521,7 @@ def test_danbooru_attribution_renders_retained_primary_name_privately(tmp_path: 
                 AttributionRecord(
                     "danbooru",
                     "44",
-                    "danbooru-native-v1",
+                    "danbooru-native-v2",
                     NOW,
                     primary_name="artist_a",
                 )

@@ -76,7 +76,9 @@ REMOTE_OUTCOMES = frozenset(
 BUDGET_BOUNDARIES = frozenset({"request", "page", "record", "time"})
 TAG_CATEGORIES = frozenset({"general", "artist", "copyright", "character", "meta", "unknown"})
 ATTRIBUTION_NAME_KINDS = frozenset({"primary", "alias", "other", "group"})
-LIBRARY_ORIGIN_KINDS = frozenset({"library_expansion"})
+# Origin kinds name what created a remote run; reprocess marks offline
+# replays of retained raw under a newer normalizer.
+LIBRARY_ORIGIN_KINDS = frozenset({"library_expansion", "reprocess"})
 _SECRET_IDENTITY_MARKERS = (
     "access_token=",
     "refresh_token=",

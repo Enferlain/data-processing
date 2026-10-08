@@ -79,7 +79,7 @@ from media_catalog.adapters.contracts import (
 )
 
 PROVIDER_KEY = "e621"
-ADAPTER_VERSION = "e621-native-v1"
+ADAPTER_VERSION = "e621-native-v2"
 SCHEMA_VERSION = "e621-json-v1"
 CONTINUATION_VERSION = "e621-keyset-v1"
 ENUMERATION_VERSION = "library-expansion-v1"

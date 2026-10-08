@@ -36,7 +36,7 @@ from media_catalog.adapters.contracts import (
 
 PIXIV_PROVIDER = "pixiv"
 PIXIV_INSTANCE = "pixiv"
-PIXIV_ADAPTER_VERSION = "pixiv-adapter-v1"
+PIXIV_ADAPTER_VERSION = "pixiv-adapter-v2"
 PIXIV_SCHEMA_VERSION = "pixiv-app-v1"
 DEFAULT_BASE_URL = "https://app-api.pixiv.net"
 DEFAULT_OAUTH_URL = "https://oauth.secure.pixiv.net/auth/token"

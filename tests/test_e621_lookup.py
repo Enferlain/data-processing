@@ -100,7 +100,7 @@ def test_lookup_plan_context_is_e621_identity() -> None:
     assert isinstance(context, LookupPlanContext)
     assert context.provider == "e621"
     assert context.instance_key == "e621"
-    assert context.adapter_version == ADAPTER_VERSION == "e621-native-v1"
+    assert context.adapter_version == ADAPTER_VERSION == "e621-native-v2"
     assert context.schema_version == SCHEMA_VERSION == "e621-json-v1"
     assert context.lookup_capabilities is E621.lookup_capabilities
 

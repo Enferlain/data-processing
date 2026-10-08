@@ -4,7 +4,7 @@
   "provider": "gelbooru",
   "instance": "gelbooru",
   "captured_at": "2026-10-01T20:18:04.354834Z",
-  "adapter_version": "gelbooru-native-v1",
+  "adapter_version": "gelbooru-native-v2",
   "schema_version": "gelbooru-dapi-json-v1",
   "redactions": [
    "credential values removed from all retained request material",
