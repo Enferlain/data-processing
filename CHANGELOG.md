@@ -15,6 +15,18 @@ Rules:
 
 ## [2026-10-08]
 
+### Changed
+
+- **README and user-facing terminology restructured around the three layers (Bead
+  `data-processing-n7l`; GitHub issue #1)** — the top-level README now presents the
+  provenance/data-gathering kernel, the media/social domain family, and the current
+  `x-likes`/`catalog` workflows as distinct layers, with a terminology table naming what stays
+  intentionally legacy or domain-local (no code or CLI renames) and a "what this can become"
+  section framing future surfaces as evidence-layer projections that do not exist yet. The
+  roadmap date/state coherence was restored for the 2026-10-05 through 2026-10-08 capability
+  work (matching evidence, materialize-a-seed, e621 content facts, Pixiv engagement,
+  reprocessing), and a duplicated changelog line in the 2026-10-07 entry was removed.
+
 ### Added
 
 - **Retained raw now reprocesses offline under newer normalizers (Bead `data-processing-uru`,
@@ -58,7 +70,6 @@ Rules:
   so set membership needs the authenticated transport plus the typed grouping model
   (Bead `data-processing-t08`).
 
-- **Materialize-a-seed gains the local-bytes phase (Bead `data-processing-8b2`, completed;
 - **Materialize-a-seed gains the local-bytes phase (Bead `data-processing-8b2`, completed;
   OpenSpec change `add-materialize-seed` archived)** — `catalog seed create --file` ingests
   the file the operator holds: its content hash joins the bundle identity (changed bytes are

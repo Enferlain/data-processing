@@ -1,6 +1,6 @@
 # Project roadmap
 
-Last updated: 2026-10-04
+Last updated: 2026-10-08
 
 ## Goal
 
@@ -69,6 +69,17 @@ The reviewed-target workflow milestone (kernel Phase C, Bead `data-processing-is
 and archived (2026-10-03): the OpenSpec change `generalize-reviewed-target-workflow` was
 implemented, reviewed by two independent review passes whose findings were folded in, and
 archived with its delta specs synced into the main specs. All quality gates green.
+
+Since 2026-10-05 the capability thread has advanced without declaring a new milestone: the
+supervised matching spike recorded its first measured evidence
+([matching-spike-evidence.md](docs/plans/matching-spike-evidence.md), 2026-10-05); the
+materialize-a-seed change (Bead `data-processing-8b2`, archived 2026-10-07) gave non-recorded
+items an entry point — `catalog seed create` ingests an operator-held evidence bundle and
+optional local bytes into a provenance-recorded stub post that plans lookups exactly like a
+recorded post; e621 post content facts (Bead `data-processing-8jj`) and Pixiv engagement totals
+(Bead `data-processing-cyp`, partial) normalized into the shared observation contracts; and
+retained raw now reprocesses offline under newer normalizers through `catalog reprocess`
+(Bead `data-processing-uru`, GitHub issue #8, 2026-10-08, migration 0014).
 
 Live task state can be checked with:
 

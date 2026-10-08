@@ -14,6 +14,9 @@ recovery or troubleshooting steps. Add a guide here when adding another tool.
 
 - [Project roadmap](../ROADMAP.md) — concise status of completed capabilities, active direction,
   the next milestone, and later work.
+- [Provenance kernel plan](plans/provenance-kernel.md) — the domain-neutral north star and
+  vocabulary every data family builds on; media is the first family, not the definition of the
+  system.
 - [Cross-platform media catalog](plans/cross-platform-media-catalog.md) — researched architecture
   and delivery plan for combining X likes/bookmarks with Pixiv, booru, account matching, asset
   provenance, and bounded discovery.
