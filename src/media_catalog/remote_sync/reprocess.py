@@ -5,7 +5,10 @@ normalization attempt is identified by (source payload, adapter version,
 schema version); replaying a retained raw never contacts the provider, never
 mutates the retained payload or prior interpretations, lands new facts as
 observations under the current-projection policy, and is idempotent per
-(raw, adapter version, schema version).
+(raw, adapter version, schema version). Facts keep the retained raw's
+original observation time so the current-projection policy keeps ranking by
+when the source reported a fact; the replay's own wall-clock time is run
+provenance only.
 """
 
 from __future__ import annotations
@@ -104,9 +107,10 @@ def plan_reprocess(
     """List retained raw observations that are stale under ``adapter``.
 
     Read-only: a candidate is a raw observation with a remote run for the
-    adapter's platform whose recorded adapter version differs from the replay
-    adapter's; replays already completed under the current versions are
-    reported as skips.
+    adapter's platform whose recorded adapter version or schema version
+    differs from the replay adapter's (either drift changes the
+    normalization identity, so both count as stale); replays already
+    completed under the current versions are reported as skips.
     """
 
     connection = database.connection if isinstance(database, CatalogDatabase) else database
@@ -121,10 +125,12 @@ def plan_reprocess(
              JOIN platforms pl ON pl.platform_id = ro.platform_id
             WHERE pl.platform_key = ?
               AND ro.adapter_version IS NOT NULL
-              AND ro.adapter_version != ?
+              AND (ro.adapter_version != ?
+                   OR ro.schema_version IS NULL
+                   OR ro.schema_version != ?)
             ORDER BY ro.raw_observation_id
             LIMIT ?""",
-        (adapter.instance_key, adapter.adapter_version, limit),
+        (adapter.instance_key, adapter.adapter_version, adapter.schema_version, limit),
     ).fetchall()
     done = _completed_reprocess_references(connection)
     candidates = [
@@ -164,7 +170,8 @@ def execute_reprocess(
     normalized and written through the shared page writer under a
     reprocess-origin remote run with zero provider requests.  The retained
     payload is never modified, and a raw already replayed under the current
-    adapter/schema versions is skipped.
+    adapter/schema versions is skipped.  Facts land at the retained raw's
+    original observation time; ``clock`` timestamps only the run itself.
     """
 
     if not raw_observation_ids:
@@ -219,7 +226,12 @@ def _replay_one(
 
     operation = AdapterOperation(row["operation"])
     status_code = int(row["status"]) if str(row["status"] or "").isdecimal() else 200
-    observed_at = str(clock())
+    # Source chronology: replayed facts carry the retained raw's original
+    # observation time so current-value resolution keeps ranking by when the
+    # source reported a fact. The replay's own wall-clock time is recorded on
+    # the run (replay provenance), never on the facts.
+    source_observed_at = str(row["observed_at"])
+    replayed_at = str(clock())
     envelope = ResponseEnvelope(
         provider=adapter.provider_key,
         instance=adapter.instance_key,
@@ -228,7 +240,7 @@ def _replay_one(
         status_code=status_code,
         headers={},
         payload=bytes(row["payload"]),
-        observed_at=observed_at,
+        observed_at=source_observed_at,
         adapter_version=adapter.adapter_version,
         schema_version=adapter.schema_version,
         transport_key=row["transport_key"],
@@ -243,7 +255,7 @@ def _replay_one(
             raw_id=raw_id,
             operation=operation,
             target=str(row["target"]),
-            observed_at=observed_at,
+            observed_at=replayed_at,
             status="failed",
             outcome=failure.outcome.value,
             record_count=0,
@@ -260,19 +272,19 @@ def _replay_one(
             raw_id=raw_id,
             operation=operation,
             target=str(row["target"]),
-            started_at=observed_at,
+            started_at=replayed_at,
             origin_reference=reference,
         )
         record_count = NormalizedPageWriter(writer).write(
             page,
-            observed_at=observed_at,
+            observed_at=source_observed_at,
             raw_observation_id=raw_id,
             adapter_version=adapter.adapter_version,
         )
         _finish_run(
             writer,
             run_id,
-            finished_at=observed_at,
+            finished_at=replayed_at,
             status="complete",
             outcome="success",
             record_count=record_count,

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import socket
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -39,14 +40,14 @@ def _fixture_payload() -> bytes:
     return case.response.payload
 
 
-def _old_adapter(handler) -> DanbooruAdapter:
+def _old_adapter(handler, *, clock=None) -> DanbooruAdapter:
     class _OldDanbooruAdapter(DanbooruAdapter):
         adapter_version = OLD_VERSION
 
     return _OldDanbooruAdapter(
         DANBOORU,
         client=httpx.Client(transport=httpx.MockTransport(handler)),
-        clock=lambda: NOW,
+        clock=clock or (lambda: NOW),
     )
 
 
@@ -269,3 +270,107 @@ def test_reprocess_rejects_unknown_or_foreign_raws(tmp_path: Path) -> None:
             execute_reprocess(
                 database, _replay_adapter(), raw_observation_ids=[], clock=lambda: NOW
             )
+
+
+def test_replay_preserves_source_observation_time(tmp_path: Path) -> None:
+    """Review regression (gh#8): replayed facts keep the source's chronology.
+
+    A January raw reprocessed under a newer normalizer in October must not
+    outrank a genuinely newer February observation: facts land at the
+    retained raw's original observation time, and only the reprocess run
+    carries the replay wall-clock time.
+    """
+
+    january = "2026-01-01T00:00:00Z"
+    february = "2026-02-01T00:00:00Z"
+    october = "2026-10-08T12:00:00Z"
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=_fixture_payload(), headers={"content-type": "application/json"}
+        )
+
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+
+        def _sync_at(observed_at: str) -> int:
+            MetadataSyncService(
+                database,
+                _old_adapter(handler, clock=lambda: observed_at),
+                minimum_interval_seconds=0,
+                maximum_retries=0,
+                monotonic=lambda: 0.0,
+                sleep=lambda _seconds: None,
+                clock=lambda: observed_at,
+            ).synchronize(AdapterOperation.FETCH_POST, "3001", limits=SyncLimits(1, 1, 50, 10))
+            row = database.connection.execute(
+                "SELECT raw_observation_id FROM raw_observations ORDER BY raw_observation_id DESC"
+            ).fetchone()
+            return int(row[0])
+
+        january_raw = _sync_at(january)
+        _sync_at(february)
+        # The February observation owns the current projection.
+        last_seen = database.connection.execute("SELECT last_seen_at FROM posts").fetchone()[0]
+        assert last_seen == february
+
+        result = execute_reprocess(
+            database, _replay_adapter(), raw_observation_ids=[january_raw], clock=lambda: october
+        )
+        assert result["counts"] == {"complete": 1}
+        run_id = result["results"][0]["remote_run_id"]
+
+        # Facts keep the January source time, so the February observation
+        # still wins the current projection despite the October replay.
+        last_seen_after = database.connection.execute("SELECT last_seen_at FROM posts").fetchone()[
+            0
+        ]
+        assert last_seen_after == february
+        replayed_metadata = database.connection.execute(
+            "SELECT observed_at FROM post_metadata_observations ORDER BY observed_at"
+        ).fetchall()
+        assert [row[0] for row in replayed_metadata] == [january, february]
+
+        # The replay's own wall-clock time is run provenance only.
+        run = database.connection.execute(
+            "SELECT started_at, finished_at FROM remote_runs WHERE remote_run_id = ?",
+            (run_id,),
+        ).fetchone()
+        assert (run["started_at"], run["finished_at"]) == (october, october)
+
+
+def test_plan_reports_schema_version_drift(tmp_path: Path) -> None:
+    """Review regression (gh#8): schema-only drift is stale too.
+
+    The normalization identity is (payload, adapter version, schema
+    version), so planning must not depend solely on the version-discipline
+    rule that every normalization change bumps the adapter version.
+    """
+
+    drifted = replace(DANBOORU, schema_version="danbooru-json-v0")
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=_fixture_payload(), headers={"content-type": "application/json"}
+        )
+
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        MetadataSyncService(
+            database,
+            DanbooruAdapter(
+                drifted,
+                client=httpx.Client(transport=httpx.MockTransport(handler)),
+                clock=lambda: NOW,
+            ),
+            minimum_interval_seconds=0,
+            maximum_retries=0,
+            monotonic=lambda: 0.0,
+            sleep=lambda _seconds: None,
+            clock=lambda: NOW,
+        ).synchronize(AdapterOperation.FETCH_POST, "3001", limits=SyncLimits(1, 1, 50, 10))
+        plan = plan_reprocess(database, adapter=_replay_adapter())
+        # Same adapter version, drifted schema version: still a candidate.
+        assert plan["count"] == 1
+        candidate = plan["results"][0]
+        assert candidate["raw_adapter_version"] == ADAPTER_VERSION
+        assert candidate["raw_schema_version"] == "danbooru-json-v0"
+        assert candidate["already_reprocessed"] is False

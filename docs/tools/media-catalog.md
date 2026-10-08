@@ -417,9 +417,10 @@ occurrence, so `verified_md5` (and declared-MD5) lookup planning works from the 
 
 Normalizer improvements do not require refetching: every retained provider response can be
 replayed offline through the current adapter. A normalization attempt is identified by the
-payload together with the adapter and schema versions, and adapters bump their version
-whenever normalization behavior changes (all four providers are now at `-v2`, covering this
-week's field catch-ups). Planning is read-only and bounded:
+payload together with the adapter and schema versions; adapters bump their version whenever
+normalization behavior changes (all four providers are now at `-v2`, covering this week's field
+catch-ups), and planning treats either an adapter-version or a schema-version difference as
+stale. Planning is read-only and bounded:
 
 ```bash
 uv run catalog reprocess plan catalog-output/catalog.sqlite3 --provider danbooru --json
@@ -427,9 +428,11 @@ uv run catalog reprocess plan catalog-output/catalog.sqlite3 --provider danbooru
 
 Each replay reconstructs the response envelope from the retained row, normalizes with zero
 provider requests, and commits through the shared page writer under a `reprocess`-origin
-remote run. The retained payload is never modified, prior interpretations stay in history,
-identical facts dedup by observation digest, and replaying the same raw under the same
-versions is skipped. Malformed historical payloads fail as typed outcomes and remain
+remote run. Facts land at the retained raw's original observation time so current-value
+resolution keeps ranking by when the source reported them; only the run rows carry the
+replay's wall-clock time. The retained payload is never modified, prior interpretations stay
+in history, identical facts dedup by observation digest, and replaying the same raw under the
+same versions is skipped. Malformed historical payloads fail as typed outcomes and remain
 inspectable for a later parser version. Retained lookup responses and import raws have no
 metadata operation linkage and are out of scope.
 

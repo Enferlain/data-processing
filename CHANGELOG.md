@@ -15,6 +15,20 @@ Rules:
 
 ## [2026-10-08]
 
+### Fixed
+
+- **Reprocess review fixes: source observation time and schema-drift planning (Bead
+  `data-processing-qoa`; GitHub issue #8 review)** — replayed facts now land at the retained
+  raw's original observation time instead of the replay wall-clock (which runs only on the
+  reprocess run), so a replayed older raw can no longer outrank genuinely newer source
+  observations in current-projection resolution (`posts.last_seen_at` guards, tag/attribute
+  last-observed upserts, post metadata observation ordering); and `reprocess plan` treats
+  schema-version drift (or a NULL schema version) as stale alongside adapter-version drift,
+  matching the (payload, adapter version, schema version) normalization identity instead of
+  relying solely on the adapter-version-bump discipline. Both are conformance restorations of
+  the synced `remote-metadata-sync` reprocessing requirement; two regression tests reproduce
+  each defect against the pre-fix code.
+
 ### Changed
 
 - **README and user-facing terminology restructured around the three layers (Bead
