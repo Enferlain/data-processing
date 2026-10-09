@@ -81,6 +81,13 @@ recorded post; e621 post content facts (Bead `data-processing-8jj`) and Pixiv en
 retained raw now reprocesses offline under newer normalizers through `catalog reprocess`
 (Bead `data-processing-uru`, GitHub issue #8, 2026-10-08, migration 0014).
 
+On 2026-10-09 the export-projection layer landed its first slice (Bead `data-processing-1oi`,
+change `add-export-projections`): `catalog export plan|run` writes bounded, reproducible
+JSONL/CSV projections (`assets`, `posts`) with a full manifest recipe and deterministic
+spec/selection digests per the gh#6 audit requirements. Remaining projection kinds — the
+attribution-disagreement report, per-field source exports, and variant-family grouping —
+stay tracked on the bead, the last pending the Phase D relationship model.
+
 Live task state can be checked with:
 
 ```bash

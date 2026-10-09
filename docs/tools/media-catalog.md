@@ -450,6 +450,39 @@ Lookup does not follow result links, enumerate an account, contact X, fetch medi
 similarity, or start metadata sync. After manually confirming a stable Pixiv account candidate, run
 the existing `catalog metadata pixiv-account-artworks` command as a separate explicit operation.
 
+## Export evidence-layer projections
+
+Bounded, reproducible exports over the retained evidence — a stated recipe, not a convenient
+dump. Planning is read-only; execution writes JSONL/CSV data files plus a manifest sidecar into
+a directory of your choice, never touching the catalog and never contacting a provider:
+
+```bash
+uv run catalog export plan catalog-output/catalog.sqlite3 --kind posts --json
+uv run catalog export run catalog-output/catalog.sqlite3 --kind assets \
+  --out-dir exports/ --format jsonl --format csv --json
+```
+
+Two projection kinds exist today. `assets` emits one row per verified asset — content identity
+(`verified_sha256`; exact byte-duplicates collapse to one row with a representation-link
+count), locally verified byte and image facts, and bounded legacy-assertion counts. `posts`
+emits one row per post — platform identity, current mutable facts with the raw-observation
+pointer behind them, occurrence summary, and participants with roles and review states (a
+`--platform` filter restricts the selection). Output is privacy-safe by construction: fields
+are deny-by-default allowlists, no storage paths or raw payloads are emitted, and URLs appear
+as origin and path only.
+
+The manifest sidecar (`<kind>-projection.manifest.json`) is the audit record: projection kind
+and schema version, all six stated policies (selection, ordering, dedup,
+preferred-representation, field-source, URL handling), source schema version, tool version,
+generation timestamp, per-file row counts and content digests, inclusion/exclusion counts with
+bounded reasons, and two deterministic digests — `spec_digest` over the recipe itself and
+`selection_digest` over the ordered stable identifiers of the included rows. Re-running the
+same projection against unchanged evidence reproduces both digests and byte-identical data
+files; a change in evidence moves the selection digest. Exports are bounded (`--limit`,
+default 10,000) and rows beyond the limit are reported as `excluded_by_limit`. Variant-family
+grouping and per-field source exports arrive with the Phase D relationship model; the
+manifest's policy slots already carry explicit placeholders so recipes stay comparable.
+
 ## Expand a reviewed artist library
 
 Library expansion connects a stable catalog account or provider attribution to bounded metadata

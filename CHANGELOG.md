@@ -13,6 +13,26 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-09]
+
+### Added
+
+- **Export projections: bounded, reproducible JSONL/CSV views over the evidence layer (Bead
+  `data-processing-1oi`; OpenSpec change `add-export-projections`; GitHub issue #6)** —
+  `catalog export plan|run` previews and writes projection kinds `assets` (one row per
+  verified asset, exact byte-duplicates collapsed by content identity with representation
+  counts) and `posts` (current facts with their evidence pointer, occurrence summary,
+  participants with review states, optional platform filter) as JSONL and/or CSV plus a
+  manifest sidecar. The manifest is the full recipe per gh#6: kind and projection schema
+  version, six stated policies, source schema and tool versions, generation timestamp,
+  per-file row counts and content digests, inclusion/exclusion counts with bounded reasons,
+  stable evidence-layer identifiers, and deterministic `spec_digest`/`selection_digest` —
+  re-runs on unchanged evidence reproduce digests and byte-identical files. Execution is
+  offline and read-only (no-write snapshot open), output is deny-by-default allowlisted (no
+  storage paths, credentials, signed URLs, or raw payloads; URLs emit origin and path only),
+  and exports are bounded with `excluded_by_limit` reporting. Remaining on the bead:
+  attribution-disagreement report, per-field source exports, variant-family grouping (Phase D).
+
 ## [2026-10-08]
 
 ### Fixed

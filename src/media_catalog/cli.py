@@ -52,6 +52,7 @@ from media_catalog.library import (
 )
 from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
+from media_catalog.projections import DEFAULT_LIMIT, FORMATS, plan_export, run_export
 from media_catalog.records import AcquisitionLimits
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
 from media_catalog.remote_sync import (
@@ -460,6 +461,29 @@ def build_parser() -> argparse.ArgumentParser:
     lookup_show.add_argument("--result-limit", type=int, default=100)
     lookup_show.add_argument("--result-after", type=int)
     _add_json(lookup_show)
+
+    export = commands.add_parser("export")
+    export_commands = export.add_subparsers(dest="export_command", required=True)
+    export_plan = export_commands.add_parser("plan")
+    export_plan.add_argument("catalog", type=Path)
+    export_plan.add_argument("--kind", choices=("assets", "posts"), required=True)
+    export_plan.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    export_plan.add_argument(
+        "--platform", help="posts only: restrict the projection to one platform"
+    )
+    _add_json(export_plan)
+    export_run = export_commands.add_parser("run")
+    export_run.add_argument("catalog", type=Path)
+    export_run.add_argument("--kind", choices=("assets", "posts"), required=True)
+    export_run.add_argument(
+        "--out-dir", type=Path, default=Path("."), help="directory for data files and manifest"
+    )
+    export_run.add_argument("--format", choices=("jsonl", "csv"), action="append", dest="formats")
+    export_run.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    export_run.add_argument(
+        "--platform", help="posts only: restrict the projection to one platform"
+    )
+    _add_json(export_run)
 
     reprocess = commands.add_parser("reprocess")
     reprocess_commands = reprocess.add_subparsers(dest="reprocess_command", required=True)
@@ -962,6 +986,31 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 minimum_interval_seconds=instance.minimum_interval_seconds,
             )
             return _execute_lookup(arguments, catalog_label, service, limits)
+    if arguments.command == "export":
+        catalog_label = public_path(arguments.catalog)
+        formats = tuple(arguments.formats) if getattr(arguments, "formats", None) else FORMATS
+        if arguments.export_command == "plan":
+            return {
+                "catalog": catalog_label,
+                **plan_export(
+                    arguments.catalog,
+                    kind=arguments.kind,
+                    limit=arguments.limit,
+                    platform=arguments.platform,
+                ),
+            }
+        return {
+            "catalog": catalog_label,
+            **run_export(
+                arguments.catalog,
+                kind=arguments.kind,
+                out_dir=arguments.out_dir,
+                formats=formats,
+                limit=arguments.limit,
+                platform=arguments.platform,
+                clock=_utc_now,
+            ),
+        }
     if arguments.command == "reprocess":
         catalog_label = public_path(arguments.catalog)
         if arguments.reprocess_command == "plan":
