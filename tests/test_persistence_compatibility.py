@@ -21,10 +21,10 @@ from media_catalog.records import (
 )
 from media_catalog.writer import CatalogWriter
 
-RECORD_SIGNATURE_DIGEST = "38a4a629d5ae850f2c8cc21d957a3e647f69e9d7a5191caa5e979320e50ae2c4"
-RECORD_PUBLIC_NAMES_DIGEST = "e6c2ba22873f447ea3a1ec1876f7ed8659a245e836c7abaf014182ebf9b47a71"
-WRITER_SIGNATURE_DIGEST = "d7db6318a1c54685e78c4393d6e6cdfb28d4cda4943fa1875e3464bb6b9a0aa1"
-RECORD_FIELD_SURFACE_DIGEST = "df3c5dd72b32b7d419f3fece5dd4ff1372b8617531beb8f8476c27c7909288e0"
+RECORD_SIGNATURE_DIGEST = "3474357adbce79b70d5c7086b339ec39165952b8518c51694642782bb7c73d55"
+RECORD_PUBLIC_NAMES_DIGEST = "d5daf37fd8460ced0506bd31a361e8d94b91a1b4e2d46aee701a74ab3c2e2c33"
+WRITER_SIGNATURE_DIGEST = "6195cc8d5045e8bdecb890ce7b17bacf02796be93edea98af11cb58db746f577"
+RECORD_FIELD_SURFACE_DIGEST = "eeae7e33f74f5dc4a23536aa6d835e57507e576b40872b5d55b67d45e7528ae7"
 
 
 def _digest(lines: list[str]) -> str:
@@ -50,14 +50,14 @@ def _writer_signatures() -> list[str]:
 def test_records_public_constructor_surface_is_stable() -> None:
     signatures = _record_signatures()
 
-    assert len(signatures) == 45
+    assert len(signatures) == 47
     assert _digest(signatures) == RECORD_SIGNATURE_DIGEST, "\n".join(signatures)
 
 
 def test_records_public_name_surface_is_stable() -> None:
     names = sorted(records.__all__)
 
-    assert len(names) == 156
+    assert len(names) == 165
     assert all(not name.startswith("_") for name in names)
     assert all(hasattr(records, name) for name in names)
     assert {"REMOTE_OPERATIONS", "REMOTE_OUTCOMES", "REMOTE_RUN_STATUSES"} <= set(names)
@@ -79,6 +79,7 @@ def test_record_serialization_and_validator_reflection_paths_are_explicit() -> N
         "media_catalog.records.lookup",
         "media_catalog.records.metadata",
         "media_catalog.records.remote",
+        "media_catalog.records.relationships",
         "media_catalog.records.storage",
     }
     assert records.validate_platform.__module__ == "media_catalog.records.common"
@@ -103,7 +104,7 @@ def test_record_families_preserve_fields_defaults_and_frozen_behavior() -> None:
             parts.append(f"{field.name}={default}")
         field_lines.append(f"{name}({', '.join(parts)})")
 
-    assert len(field_lines) == 45
+    assert len(field_lines) == 47
     assert _digest(field_lines) == RECORD_FIELD_SURFACE_DIGEST, "\n".join(field_lines)
 
 
@@ -226,7 +227,7 @@ def test_record_family_validation_smokes() -> None:
 def test_catalog_writer_public_method_surface_is_stable() -> None:
     signatures = _writer_signatures()
 
-    assert len(signatures) == 53
+    assert len(signatures) == 60
     assert _digest(signatures) == WRITER_SIGNATURE_DIGEST, "\n".join(signatures)
     assert CatalogWriter.upsert_managed_root is CatalogWriter.register_managed_root
 

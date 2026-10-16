@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from media_catalog.database import CatalogDatabase
 from media_catalog.persistence.acquisition import AcquisitionWrites
 from media_catalog.persistence.catalog import CatalogWrites
@@ -7,6 +9,7 @@ from media_catalog.persistence.discovery import DiscoveryWrites
 from media_catalog.persistence.library import LibraryWrites
 from media_catalog.persistence.lookup import LookupWrites
 from media_catalog.persistence.metadata import MetadataWrites
+from media_catalog.persistence.relationships import RelationshipWrites
 from media_catalog.persistence.remote import RemoteWrites
 from media_catalog.persistence.storage import StorageWrites
 from media_catalog.persistence.support import (
@@ -49,11 +52,13 @@ from media_catalog.records import (
     PostPoolObservationRecord,
     PostRecord,
     RawRecord,
+    RelationshipRecord,
     RemoteCheckpointRecord,
     RemoteRequestRecord,
     RemoteRunRecord,
     TagAliasObservationRecord,
     TagObservationRecord,
+    WorkRecord,
 )
 
 
@@ -68,6 +73,7 @@ class CatalogWriter:
         self._remote = RemoteWrites(database)
         self._metadata = MetadataWrites(database)
         self._discovery = DiscoveryWrites(database)
+        self._relationships = RelationshipWrites(database)
         self._catalog = CatalogWrites(database)
 
     def platform_id(self, platform: str) -> int:
@@ -496,3 +502,58 @@ class CatalogWriter:
 
     def record_library_expansion_post(self, record: LibraryExpansionPostRecord) -> int:
         return self._library.record_library_expansion_post(record)
+
+    def materialize_work(self, record: WorkRecord) -> WriteResult:
+        return self._relationships.materialize_work(record)
+
+    def link_work_representation(
+        self, work_id: int, media_occurrence_id: int, added_at: str
+    ) -> WriteResult:
+        return self._relationships.link_work_representation(work_id, media_occurrence_id, added_at)
+
+    def insert_relationship(self, record: RelationshipRecord) -> WriteResult:
+        return self._relationships.insert_relationship(record)
+
+    def attach_relationship_evidence(
+        self, relationship_id: int, evidence_id: int, added_at: str
+    ) -> WriteResult:
+        return self._relationships.attach_evidence(relationship_id, evidence_id, added_at)
+
+    def insert_relationship_evidence_row(
+        self,
+        *,
+        evidence_kind: str,
+        direction: str,
+        strength: str,
+        detector: str,
+        detector_version: str,
+        observed_at: str,
+        explanation: str,
+        components: dict[str, Any] | None = None,
+        platform_reference_id: int | None = None,
+    ) -> int:
+        return self._relationships.insert_evidence(
+            evidence_kind=evidence_kind,
+            direction=direction,
+            strength=strength,
+            detector=detector,
+            detector_version=detector_version,
+            observed_at=observed_at,
+            explanation=explanation,
+            components=components,
+            platform_reference_id=platform_reference_id,
+        )
+
+    def record_relationship_review(
+        self, relationship_id: int, *, decision: str, decided_at: str, note: str | None = None
+    ) -> WriteResult:
+        return self._relationships.record_review_decision(
+            relationship_id, decision=decision, decided_at=decided_at, note=note
+        )
+
+    def record_relationship_status(
+        self, relationship_id: int, *, new_status: str, cause: str, at: str
+    ) -> WriteResult:
+        return self._relationships.record_status_transition(
+            relationship_id, new_status=new_status, cause=cause, at=at
+        )

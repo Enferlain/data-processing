@@ -13,6 +13,30 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-16]
+
+### Added
+
+- **Work entities and the typed relationship model — kernel Phase D schema half (Bead
+  `data-processing-t08`; OpenSpec change `add-work-relationship-model`; GitHub issues #2 and
+  #3)** — migration 0015 adds works (minimal deterministic anchors, one per post with
+  occurrences, no media vocabulary), work representation links, one uniform
+  typed-relationship table (polymorphic endpoints, closed fifteen-kind vocabulary, epistemic
+  status, canonical orientation with deterministic relationship keys), evidence attachment
+  through the existing match-evidence ledger, append-only reversible review decisions, and
+  append-only status-transition history — with trigger-enforced immutability tiers from day
+  one (anchor identity and links immutable; relationship identity immutable with only state
+  fields updatable; evidence links, decisions, and history fully immutable; nothing
+  deletable). `catalog works materialize` and `catalog relationships seed|list|show|review`
+  land the deterministic surfaces: same_bytes from SHA-256 content dedup (verified),
+  thumbnail_of from provider-declared variant roles (observed), and reposted_from from
+  provider-declared source URLs (observed) — all offline, idempotent, evidence-citing, and
+  never establishing identity, authorship, or same-work. A `works` export projection kind
+  groups variant families per work under a stated policy excluding thumbnail roles and
+  preferring the upstream original then the largest verified area. The design carries the
+  gh#2 semantic decision table and the gh#3 lifecycle model; the records/persistence surface
+  contracts were consciously updated (47 record signatures, 60 writer methods).
+
 ## [2026-10-09]
 
 ### Added

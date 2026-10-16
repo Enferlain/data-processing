@@ -483,6 +483,52 @@ default 10,000) and rows beyond the limit are reported as `excluded_by_limit`. V
 grouping and per-field source exports arrive with the Phase D relationship model; the
 manifest's policy slots already carry explicit placeholders so recipes stay comparable.
 
+## Works and relationships (kernel Phase D)
+
+Work anchors and typed relationships join separately observed versions of a work without
+silent identity assumptions. Works are minimal deterministic anchors — one per post with
+media occurrences, no image-specific facts:
+
+```bash
+uv run catalog works materialize catalog-output/catalog.sqlite3 --json
+```
+
+Relationships are typed, provenance-bearing conclusions with an epistemic status
+(`observed`, `verified`, `derived`, `inferred`, `reviewed`) and a review state
+(`pending`/`confirmed`/`rejected`, the candidate vocabulary). Symmetric kinds like
+`same_bytes` and `same_work` store endpoints in canonical order with a deterministic
+relationship key, so re-materialization is idempotent; directional kinds keep the
+derivative, child, page, or thumbnail on the subject side. Evidence rides the existing
+match-evidence ledger; review decisions and status transitions are append-only; and
+storage-level immutability is trigger-enforced from migration 0015 (identity fields never
+change; rows are never deleted; evidence links, decisions, and history are fully
+immutable).
+
+The deterministic seeder materializes the three kinds already provable from retained
+evidence, offline and idempotently — `same_bytes` from verified SHA-256 content
+deduplication, `thumbnail_of` from provider-declared sample/preview variant roles, and
+`reposted_from` from provider-declared source URLs resolving to another catalog post:
+
+```bash
+uv run catalog relationships seed catalog-output/catalog.sqlite3 --json
+uv run catalog relationships list catalog-output/catalog.sqlite3 --kind thumbnail_of --json
+uv run catalog relationships show catalog-output/catalog.sqlite3 --relationship-id 7 --json
+uv run catalog relationships review catalog-output/catalog.sqlite3 --relationship-id 7 \
+  --decision reject --note "miscited source" --json
+```
+
+Confirming a relationship transitions its status to `reviewed` with the prior status
+recorded in history; reversing a decision appends a new decision rather than editing one;
+rejected relationships are retained. Nothing seeded or reviewed establishes identity,
+authorship, or same-work beyond what its evidence proves — fuzzy matchers arrive later as
+`inferred` proposals through the existing candidate machinery. The `works` export
+projection groups each work's representations with a stated preference policy (thumbnail
+and preview roles excluded, upstream original preferred, then largest verified area):
+
+```bash
+uv run catalog export run catalog-output/catalog.sqlite3 --kind works --out-dir exports/ --json
+```
+
 ## Expand a reviewed artist library
 
 Library expansion connects a stable catalog account or provider attribution to bounded metadata

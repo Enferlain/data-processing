@@ -54,6 +54,13 @@ from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.projections import DEFAULT_LIMIT, FORMATS, plan_export, run_export
 from media_catalog.records import AcquisitionLimits
+from media_catalog.relationships import (
+    get_relationship,
+    list_relationships,
+    materialize_works,
+    review_relationship,
+    seed_relationships,
+)
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
 from media_catalog.remote_sync import (
     MetadataSyncService,
@@ -466,7 +473,7 @@ def build_parser() -> argparse.ArgumentParser:
     export_commands = export.add_subparsers(dest="export_command", required=True)
     export_plan = export_commands.add_parser("plan")
     export_plan.add_argument("catalog", type=Path)
-    export_plan.add_argument("--kind", choices=("assets", "posts"), required=True)
+    export_plan.add_argument("--kind", choices=("assets", "posts", "works"), required=True)
     export_plan.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     export_plan.add_argument(
         "--platform", help="posts only: restrict the projection to one platform"
@@ -474,7 +481,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json(export_plan)
     export_run = export_commands.add_parser("run")
     export_run.add_argument("catalog", type=Path)
-    export_run.add_argument("--kind", choices=("assets", "posts"), required=True)
+    export_run.add_argument("--kind", choices=("assets", "posts", "works"), required=True)
     export_run.add_argument(
         "--out-dir", type=Path, default=Path("."), help="directory for data files and manifest"
     )
@@ -484,6 +491,39 @@ def build_parser() -> argparse.ArgumentParser:
         "--platform", help="posts only: restrict the projection to one platform"
     )
     _add_json(export_run)
+
+    works = commands.add_parser("works")
+    works_commands = works.add_subparsers(dest="works_command", required=True)
+    works_materialize = works_commands.add_parser("materialize")
+    works_materialize.add_argument("catalog", type=Path)
+    _add_json(works_materialize)
+
+    relationships = commands.add_parser("relationships")
+    relationship_commands = relationships.add_subparsers(
+        dest="relationships_command", required=True
+    )
+    relationship_seed = relationship_commands.add_parser("seed")
+    relationship_seed.add_argument("catalog", type=Path)
+    _add_json(relationship_seed)
+    relationship_list = relationship_commands.add_parser("list")
+    relationship_list.add_argument("catalog", type=Path)
+    relationship_list.add_argument("--kind", dest="relation_kind")
+    relationship_list.add_argument("--status", dest="epistemic_status")
+    relationship_list.add_argument("--review-state", dest="review_state")
+    relationship_list.add_argument("--limit", type=int, default=200)
+    _add_json(relationship_list)
+    relationship_show = relationship_commands.add_parser("show")
+    relationship_show.add_argument("catalog", type=Path)
+    relationship_show.add_argument("--relationship-id", type=int, required=True)
+    _add_json(relationship_show)
+    relationship_review = relationship_commands.add_parser("review")
+    relationship_review.add_argument("catalog", type=Path)
+    relationship_review.add_argument("--relationship-id", type=int, required=True)
+    relationship_review.add_argument(
+        "--decision", choices=("confirm", "reject", "pending"), required=True
+    )
+    relationship_review.add_argument("--note")
+    _add_json(relationship_review)
 
     reprocess = commands.add_parser("reprocess")
     reprocess_commands = reprocess.add_subparsers(dest="reprocess_command", required=True)
@@ -1011,6 +1051,47 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 clock=_utc_now,
             ),
         }
+    if arguments.command == "works":
+        catalog_label = public_path(arguments.catalog)
+        with CatalogDatabase(arguments.catalog) as database:
+            return {
+                "catalog": catalog_label,
+                **materialize_works(database, clock=_utc_now),
+            }
+    if arguments.command == "relationships":
+        catalog_label = public_path(arguments.catalog)
+        with CatalogDatabase(arguments.catalog) as database:
+            if arguments.relationships_command == "seed":
+                return {
+                    "catalog": catalog_label,
+                    **seed_relationships(database, clock=_utc_now),
+                }
+            if arguments.relationships_command == "list":
+                return {
+                    "catalog": catalog_label,
+                    "relationships": list_relationships(
+                        database,
+                        relation_kind=arguments.relation_kind,
+                        epistemic_status=arguments.epistemic_status,
+                        review_state=arguments.review_state,
+                        limit=arguments.limit,
+                    ),
+                }
+            if arguments.relationships_command == "show":
+                shown = get_relationship(database, arguments.relationship_id)
+                if shown is None:
+                    raise ValueError(f"relationship {arguments.relationship_id} not found")
+                return {"catalog": catalog_label, **shown}
+            return {
+                "catalog": catalog_label,
+                **review_relationship(
+                    database,
+                    arguments.relationship_id,
+                    arguments.decision,
+                    note=arguments.note,
+                    clock=_utc_now,
+                ),
+            }
     if arguments.command == "reprocess":
         catalog_label = public_path(arguments.catalog)
         if arguments.reprocess_command == "plan":

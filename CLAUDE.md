@@ -8,12 +8,13 @@ This file provides instructions and context for AI coding agents working on this
 
 Prefer rg instead of grep
 
-### Subagents
+## Subagents
 
-Sub agents are enabled by default for research and implementation in this repo, use them as per the instructions. If there are no instructions, ask the user.
+Prefer launching subagents for reviews after meaningful tasks are finished.
 
-- When running model glm-5.3[1m], subagents should run under model glm-5.3-flash[1m].
-- When running a different model, assume that that model should be reused for subagents.
+Delegate subagents for tasks when deemed that they can speed up work.
+
+Both reviewer and worker models should always be GLM-5.3-Flash Max [1m] (Whatever the exact id is).
 
 ## Python Quality Gates
 

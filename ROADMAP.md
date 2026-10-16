@@ -1,6 +1,6 @@
 # Project roadmap
 
-Last updated: 2026-10-08
+Last updated: 2026-10-16
 
 ## Goal
 
@@ -322,11 +322,17 @@ No new tables, engines, or provider primitives were added.
 ## Current milestone: none active
 
 The provenance-kernel storage-enforcement gaps are closed (Beads `data-processing-ts5` and
-`data-processing-5de`, 2026-10-04, migrations 0012-0013). The leading candidate for the next
-milestone is the **work and relationship model (kernel Phase D)** — artifact/work entities and
-the uniform typed-relationship model carrying epistemic status, the first schema consumer of the
-kernel's epistemic vocabulary, with review-gated conclusions and no metric silently establishing
-identity, authorship, or same-work. Tracked as Bead `data-processing-t08` (unclaimed).
+`data-processing-5de`, 2026-10-04, migrations 0012-0013). The **work and relationship model
+(kernel Phase D) schema half** landed 2026-10-16 (Bead `data-processing-t08`, change
+`add-work-relationship-model`): work anchors, the uniform typed-relationship table with
+epistemic status and canonical orientation, evidence through the shared ledger, append-only
+review, trigger-enforced immutability (migration 0015), the deterministic seeder
+(`same_bytes`, `thumbnail_of`, `reposted_from`), and the `works` export projection. The
+design settled the gh#2 semantic decision table and the gh#3 lifecycle before any
+migration. Follow-ups now unblocked: reviewed-candidate materialization into
+relationships, grouping objects (series/pools/sets — beads `data-processing-cyp`/`vus`),
+and the fuzzy-matcher research half (bead `qi7`) whose proposals arrive as `inferred`
+candidates.
 
 The supervised matching research spike — curating fixtures of real originals, recompressions,
 mirrors, and crops from the already-synced catalog and measuring which signals (exact hashes,
