@@ -504,10 +504,11 @@ storage-level immutability is trigger-enforced from migration 0015 (identity fie
 change; rows are never deleted; evidence links, decisions, and history are fully
 immutable).
 
-The deterministic seeder materializes the three kinds already provable from retained
-evidence, offline and idempotently — `same_bytes` from verified SHA-256 content
-deduplication, `thumbnail_of` from provider-declared sample/preview variant roles, and
-`reposted_from` from provider-declared source URLs resolving to another catalog post:
+The deterministic seeder materializes the kinds already provable from retained evidence,
+offline and idempotently — `same_bytes` from verified SHA-256 content deduplication,
+`thumbnail_of` from provider-declared sample/preview variant roles, `reposted_from` from
+provider-declared source URLs resolving to another catalog post, and `parent_of` from
+retained provider-declared post parent relations:
 
 ```bash
 uv run catalog relationships seed catalog-output/catalog.sqlite3 --json

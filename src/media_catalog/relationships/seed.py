@@ -1,10 +1,11 @@
 """Deterministic relationship seeding from retained evidence.
 
-Three kinds are already provable without any fuzzy judgment and seed
+Four kinds are already provable without any fuzzy judgment and seed
 offline: ``same_bytes`` from verified content deduplication (SHA-256),
-``thumbnail_of`` from provider-declared occurrence variant roles, and
+``thumbnail_of`` from provider-declared occurrence variant roles,
 ``reposted_from`` from provider-declared source-URL references that resolve
-to another catalog post.  Every seeded relationship carries evidence naming
+to another catalog post, and ``parent_of`` from retained provider-declared
+post parent relations.  Every seeded relationship carries evidence naming
 its detector and version; none of them establishes identity, authorship, or
 same-work beyond what the evidence proves.
 """
@@ -190,6 +191,42 @@ def _seed_reposted_from(
     return {"materialized": materialized, "existing": existing, "skipped": skipped}
 
 
+def _seed_parent_of(database: CatalogDatabase, writer: CatalogWriter, now: str) -> dict[str, int]:
+    materialized = existing = skipped = 0
+    rows = database.connection.execute(
+        """SELECT pr.source_post_id, pr.target_post_id, pr.raw_observation_id
+             FROM post_relations pr
+            WHERE pr.relation_type = 'parent_of'
+         ORDER BY pr.source_post_id, pr.target_post_id"""
+    ).fetchall()
+    for row in rows:
+        if row["source_post_id"] == row["target_post_id"]:
+            skipped += 1
+            continue
+        outcome = _add(
+            writer,
+            RelationshipRecord(
+                subject_kind="post",
+                subject_id=int(row["source_post_id"]),
+                relation_kind="parent_of",
+                target_kind="post",
+                target_id=int(row["target_post_id"]),
+                epistemic_status="observed",
+                created_at=now,
+            ),
+            evidence_kind="provider_parent_relation",
+            direction="subject_to_target",
+            strength="moderate",
+            detector="provider-parent-relation",
+            observed_at=now,
+            explanation="The provider declares the subject post as the parent of the target.",
+            components={"raw_observation_id": row["raw_observation_id"]},
+        )
+        materialized += outcome == "inserted"
+        existing += outcome == "existing"
+    return {"materialized": materialized, "existing": existing, "skipped": skipped}
+
+
 def seed_relationships(database: CatalogDatabase, *, clock: Any) -> dict[str, Any]:
     """Materialize the deterministic relationship kinds offline and idempotently."""
 
@@ -199,9 +236,11 @@ def seed_relationships(database: CatalogDatabase, *, clock: Any) -> dict[str, An
         same_bytes = _seed_same_bytes(database, writer, now)
         thumbnails = _seed_thumbnail_of(database, writer, now)
         reposts = _seed_reposted_from(database, writer, now)
+        parents = _seed_parent_of(database, writer, now)
     return {
         "seeder_version": SEEDER_VERSION,
         "same_bytes": same_bytes,
         "thumbnail_of": thumbnails,
         "reposted_from": reposts,
+        "parent_of": parents,
     }

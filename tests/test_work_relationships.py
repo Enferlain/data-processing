@@ -168,6 +168,20 @@ def _seed(catalog: Path) -> dict[str, int]:
                VALUES (?, ?, 'source_url', ?, '2026-01-01T00:00:00Z')""",
             (ids["3002"], reference, raw),
         )
+        c.execute(
+            """INSERT INTO post_relations (source_post_id, target_post_id, relation_type,
+                                           raw_observation_id)
+               VALUES (?, ?, 'parent_of', ?)""",
+            (ids["3003"], ids["3001"], raw),
+        )
+        # A declaration without a retained raw observation still materializes;
+        # a self-link is skipped.
+        c.execute(
+            """INSERT INTO post_relations (source_post_id, target_post_id, relation_type,
+                                           raw_observation_id)
+               VALUES (?, ?, 'parent_of', NULL), (?, ?, 'parent_of', NULL)""",
+            (ids["3002"], ids["3001"], ids["3003"], ids["3003"]),
+        )
         database.connection.commit()
         return {**ids, **occurrences}
 
@@ -327,7 +341,7 @@ def test_materialize_works_is_deterministic_and_idempotent(tmp_path: Path) -> No
 
 def test_seeder_materializes_deterministic_kinds_with_evidence(tmp_path: Path) -> None:
     catalog = tmp_path / "catalog.sqlite3"
-    _seed(catalog)
+    ids = _seed(catalog)
     with CatalogDatabase(catalog) as database:
         socket_default = socket.socket.connect
 
@@ -345,6 +359,9 @@ def test_seeder_materializes_deterministic_kinds_with_evidence(tmp_path: Path) -
     assert result["thumbnail_of"] == {"materialized": 1, "existing": 0, "skipped": 0}
     # reposted_from: post 3002 cites post 3001.
     assert result["reposted_from"] == {"materialized": 1, "existing": 0, "skipped": 0}
+    # parent_of: 3003 -> 3001 with a raw observation, 3002 -> 3001 without one
+    # (still materializes), and the 3003 self-link is skipped.
+    assert result["parent_of"] == {"materialized": 2, "existing": 0, "skipped": 1}
 
     with CatalogDatabase(catalog) as database:
         c = database.connection
@@ -362,15 +379,18 @@ def test_seeder_materializes_deterministic_kinds_with_evidence(tmp_path: Path) -
         assert all(subject < target for _, _, subject, target in by_kind["same_bytes"])
         assert by_kind["thumbnail_of"][0][0] == "observed"
         assert by_kind["reposted_from"][0][0] == "observed"
+        assert by_kind["parent_of"][0] == ("observed", "pending", ids["3002"], ids["3001"])
+        assert by_kind["parent_of"][1] == ("observed", "pending", ids["3003"], ids["3001"])
         evidence = c.execute(
             """SELECT detector, detector_version, stance FROM relationship_evidence re
                  JOIN match_evidence me ON me.evidence_id = re.evidence_id"""
         ).fetchall()
-        assert len(evidence) == 5
+        assert len(evidence) == 7
         assert {row["detector"] for row in evidence} == {
             "asset-sha256",
             "occurrence-role",
             "source-url-reference",
+            "provider-parent-relation",
         }
         assert all(row["stance"] == "supports" for row in evidence)
 
@@ -378,6 +398,7 @@ def test_seeder_materializes_deterministic_kinds_with_evidence(tmp_path: Path) -
     assert again["same_bytes"] == {"materialized": 0, "existing": 3}
     assert again["thumbnail_of"] == {"materialized": 0, "existing": 1, "skipped": 0}
     assert again["reposted_from"] == {"materialized": 0, "existing": 1, "skipped": 0}
+    assert again["parent_of"] == {"materialized": 0, "existing": 2, "skipped": 1}
 
 
 # --- Review lifecycle ----------------------------------------------------------

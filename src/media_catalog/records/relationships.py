@@ -18,8 +18,9 @@ EPISTEMIC_STATUSES = frozenset({"observed", "verified", "derived", "inferred", "
 ENDPOINT_KINDS = frozenset({"work", "media_occurrence", "post", "asset"})
 
 # relation kind -> (symmetric, allowed subject kinds, allowed target kinds).
-# Directional kinds place the derivative, child, page, thumbnail, or repost on
-# the subject side and the origin, parent, original, or source on the target.
+# Directional kinds place the derivative, page, thumbnail, repost, or declaring
+# parent on the subject side and the origin, original, source, or child on the
+# target (``parent_of`` runs parent -> child, matching the adapter emission).
 RELATIONSHIP_KINDS: dict[str, tuple[bool, frozenset[str], frozenset[str]]] = {
     "same_bytes": (True, frozenset({"media_occurrence"}), frozenset({"media_occurrence"})),
     "same_work": (True, frozenset({"work"}), frozenset({"work"})),

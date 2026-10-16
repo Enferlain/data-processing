@@ -17,6 +17,13 @@ Rules:
 
 ### Added
 
+- **`parent_of` joins the deterministic relationship seeder (Bead `data-processing-zaf`
+  audit follow-up; OpenSpec change `seed-parent-of-relations`)** — `catalog relationships
+  seed` now materializes `parent_of` (post↔post, `observed`) from retained
+  provider-declared post parent relations, citing provider-declaration evidence and linked
+  raw observations; idempotent via the deterministic relationship key. `quote`/`reply`
+  stay in `post_relations` pending a vocabulary decision.
+
 - **Work entities and the typed relationship model — kernel Phase D schema half (Bead
   `data-processing-t08`; OpenSpec change `add-work-relationship-model`; GitHub issues #2 and
   #3)** — migration 0015 adds works (minimal deterministic anchors, one per post with
@@ -36,6 +43,13 @@ Rules:
   preferring the upstream original then the largest verified area. The design carries the
   gh#2 semantic decision table and the gh#3 lifecycle model; the records/persistence surface
   contracts were consciously updated (47 record signatures, 60 writer methods).
+
+### Changed
+
+- **Kernel plan mapping updated after Phase D** — the provenance-kernel plan's mapping
+  table now records the landed work/relationship surfaces (`works`, `relationships`,
+  migration 0015) and names the remaining `post_relations` absorption decision, replacing
+  the stale "not built" / "partial, scattered" rows.
 
 ## [2026-10-09]
 
