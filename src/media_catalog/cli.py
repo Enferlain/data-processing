@@ -39,6 +39,7 @@ from media_catalog.candidate_lookup import (
 )
 from media_catalog.database import CatalogDatabase
 from media_catalog.discovery import DiscoveryService
+from media_catalog.discovery.support import parse_match_ref
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.imports.xarchive import import_xarchive
 from media_catalog.library import (
@@ -57,6 +58,7 @@ from media_catalog.records import AcquisitionLimits
 from media_catalog.relationships import (
     get_relationship,
     list_relationships,
+    materialize_candidates,
     materialize_works,
     review_relationship,
     seed_relationships,
@@ -502,6 +504,14 @@ def build_parser() -> argparse.ArgumentParser:
     relationship_commands = relationships.add_subparsers(
         dest="relationships_command", required=True
     )
+    relationship_materialize = relationship_commands.add_parser(
+        "materialize", description="Turn confirmed post candidates into relationships"
+    )
+    relationship_materialize.add_argument("catalog", type=Path)
+    relationship_materialize.add_argument(
+        "--candidate", metavar="REF", help="materialize one candidate, e.g. post:7"
+    )
+    _add_json(relationship_materialize)
     relationship_seed = relationship_commands.add_parser("seed")
     relationship_seed.add_argument("catalog", type=Path)
     _add_json(relationship_seed)
@@ -1061,6 +1071,16 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.command == "relationships":
         catalog_label = public_path(arguments.catalog)
         with CatalogDatabase(arguments.catalog) as database:
+            if arguments.relationships_command == "materialize":
+                candidate_id = None
+                if arguments.candidate is not None:
+                    kind, candidate_id = parse_match_ref(arguments.candidate)
+                    if kind != "post":
+                        raise ValueError("materialization accepts post candidates only")
+                return {
+                    "catalog": catalog_label,
+                    **materialize_candidates(database, candidate_id=candidate_id, clock=_utc_now),
+                }
             if arguments.relationships_command == "seed":
                 return {
                     "catalog": catalog_label,

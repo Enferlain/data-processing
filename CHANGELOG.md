@@ -13,6 +13,25 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-18]
+
+### Added
+
+- **Confirmed candidates materialize into relationships (Bead `data-processing-zaf`;
+  OpenSpec change `add-reviewed-candidate-materialization`)** — `catalog relationships
+  materialize` turns confirmed post match candidates into reviewed relationship rows under
+  a fixed mapping (`sourced_from`/`repost_of` → `reposted_from` post↔post;
+  `same_work`/`variant_of`/`derived_from` → work↔work through the posts' deterministic
+  anchors), attaches the candidate's entire evidence bundle through the shared ledger, and
+  records a review decision naming the candidate as source. Idempotent via the
+  deterministic relationship key with evidence top-up on re-runs; pending/rejected
+  candidates, `unresolved` kinds, reference-only targets, and missing work anchors are
+  refused with typed reasons; the candidate ledger is never written; nothing ever
+  materializes automatically from a score. Materializing onto an already-seeded
+  (observed, pending) relationship upgrades it: the confirmation decision lands, the
+  status moves to `reviewed` with the prior status retained in history, and an
+  already-confirmed row gains only the new evidence.
+
 ## [2026-10-16]
 
 ### Added

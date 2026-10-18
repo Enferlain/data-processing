@@ -521,10 +521,27 @@ uv run catalog relationships review catalog-output/catalog.sqlite3 --relationshi
 Confirming a relationship transitions its status to `reviewed` with the prior status
 recorded in history; reversing a decision appends a new decision rather than editing one;
 rejected relationships are retained. Nothing seeded or reviewed establishes identity,
-authorship, or same-work beyond what its evidence proves — fuzzy matchers arrive later as
-`inferred` proposals through the existing candidate machinery. The `works` export
-projection groups each work's representations with a stated preference policy (thumbnail
-and preview roles excluded, upstream original preferred, then largest verified area):
+authorship, or same-work beyond what its evidence proves.
+
+Confirmed match candidates cross into this model explicitly:
+`catalog relationships materialize` turns a confirmed post candidate into a reviewed
+relationship under a fixed mapping (`sourced_from`/`repost_of` → `reposted_from` between
+the posts; `same_work`/`variant_of`/`derived_from` between the posts' work anchors),
+attaches the candidate's whole evidence bundle, and records a decision naming the
+candidate. Re-running attaches new evidence but never duplicates anything; pending or
+rejected candidates, unresolved kinds, reference-only targets, and missing work anchors
+are refused with typed reasons; matchers and lookups never materialize anything on their
+own:
+
+```bash
+uv run catalog relationships materialize catalog-output/catalog.sqlite3 --json
+uv run catalog relationships materialize catalog-output/catalog.sqlite3 \
+  --candidate post:7 --json
+```
+
+The `works` export projection groups each work's representations with a stated preference
+policy (thumbnail and preview roles excluded, upstream original preferred, then largest
+verified area):
 
 ```bash
 uv run catalog export run catalog-output/catalog.sqlite3 --kind works --out-dir exports/ --json
