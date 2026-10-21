@@ -479,6 +479,13 @@ identity joins. Rows carry both ends' identities, the linking relationship, and 
 pairs missing attribution on an end, rejected relationships, and rows beyond the limit are
 excluded with counted reasons. The report writes nothing and settles nothing.
 
+Finally, `post-field-sources` answers "which source supplied each field": one row per post
+with retained metadata observations, carrying every field's complete value history
+(value, observation time, raw-observation pointer) with the newest observation marked
+current under the stated policy — dissenting values stay in the row, and a later null
+never erases an earlier value. Posts without retained observations are excluded with a
+counted reason.
+
 The manifest sidecar (`<kind>-projection.manifest.json`) is the audit record: projection kind
 and schema version, all six stated policies (selection, ordering, dedup,
 preferred-representation, field-source, URL handling), source schema version, tool version,

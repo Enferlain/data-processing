@@ -477,7 +477,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_plan.add_argument("catalog", type=Path)
     export_plan.add_argument(
         "--kind",
-        choices=("assets", "attribution-disagreements", "posts", "works"),
+        choices=(
+            "assets",
+            "attribution-disagreements",
+            "post-field-sources",
+            "posts",
+            "works",
+        ),
         required=True,
     )
     export_plan.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
@@ -489,7 +495,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_run.add_argument("catalog", type=Path)
     export_run.add_argument(
         "--kind",
-        choices=("assets", "attribution-disagreements", "posts", "works"),
+        choices=(
+            "assets",
+            "attribution-disagreements",
+            "post-field-sources",
+            "posts",
+            "works",
+        ),
         required=True,
     )
     export_run.add_argument(

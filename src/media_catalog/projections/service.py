@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from media_catalog.database import CatalogDatabase
-from media_catalog.projections import assets, attribution, output, posts, works
+from media_catalog.projections import assets, attribution, field_sources, output, posts, works
 from media_catalog.projections.spec import (
     PROJECTION_SCHEMA_VERSION,
     ProjectionSpec,
@@ -29,6 +29,7 @@ FORMATS = ("jsonl", "csv")
 _KINDS: dict[str, Any] = {
     assets.KIND: assets,
     attribution.KIND: attribution,
+    field_sources.KIND: field_sources,
     posts.KIND: posts,
     works.KIND: works,
 }
@@ -43,7 +44,10 @@ def _validate(kind: str, limit: int, platform: str | None, formats: tuple[str, .
         raise ValueError(f"unknown projection kind {kind!r}; choose one of {sorted(_KINDS)}")
     if not 0 < limit <= MAX_LIMIT:
         raise ValueError(f"export limit must be between 1 and {MAX_LIMIT}")
-    if kind in {assets.KIND, attribution.KIND, works.KIND} and platform is not None:
+    if (
+        kind in {assets.KIND, attribution.KIND, field_sources.KIND, works.KIND}
+        and platform is not None
+    ):
         raise ValueError(f"the {kind} projection does not support a platform filter")
     for form in formats:
         if form not in FORMATS:

@@ -17,6 +17,19 @@ Rules:
 
 ### Added
 
+- **Per-field source export projection (Bead `data-processing-1oi`, final slice; OpenSpec
+  change `per-field-source-export`; GitHub issue #6)** — the `post-field-sources` kind emits
+  one row per post with retained metadata observations, carrying every observed field's
+  complete value history (value, observation time, raw-observation evidence pointer) with
+  the newest observation's value marked current under the stated
+  newest-observation-wins-all-values-retained policy. Nulls assert nothing and never erase;
+  posts without retained observations and limit overflow are excluded with counted reasons.
+  Offline, read-only, manifest/digest contracts unchanged. This closes bead 1oi: framework,
+  assets/posts/works/attribution-disagreements/post-field-sources kinds all delivered.
+
+
+### Added
+
 - **Attribution-disagreement export projection (Bead `data-processing-1oi`, second slice;
   OpenSpec change `attribution-disagreement-report`; GitHub issue #6)** — the
   `attribution-disagreements` kind emits one row per retained post-level relationship
