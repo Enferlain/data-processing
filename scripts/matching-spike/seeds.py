@@ -52,16 +52,35 @@ X_SAMPLING = {
     "variant_media_target": 60,
     # Random cross-author negative pairs among the sampled media.
     "cross_artist_pairs": 50,
-    # Same-author, different-post pairs (visually related style/subject,
-    # assumed different works; the evidence document flags any exceptions).
+    # Same-author, different-post pairs among the stride-sampled media
+    # (zero existed in the first spike's sample; kept for continuity).
     "same_artist_pairs": 30,
+    # gh#5: same-author pairs drawn from ALL archived media grouped by
+    # author, so authors with several posts contribute negatives even when
+    # the stride sample missed them.
+    "same_artist_pairs_full_catalog": 24,
     # Fixed seed so pair selection is reproducible across runs.
     "rng_seed": 20261004,
 }
 
-# Total fixture-file cap applied by build_manifest.py (truncation removes
-# general X variant samples first and is recorded in the manifest header).
-MAX_FIXTURE_FILES = 200
+# Total fixture-file cap applied by build_manifest.py; exceeding it raises
+# (the variant sampler truncates first and records truncation in the header).
+# gh#5 synthetic transformation classes: derived locally from fetched X
+# originals with ground truth by construction (a crop of X is a crop of X).
+# Applied by fetch.py's derive pass; measured like any other class.
+SYNTHETIC_TRANSFORMS = (
+    "crop_center",
+    "crop_corner",
+    "text_overlay",
+    "color_adjust",
+    "censor_bars",
+    "transcode_jpeg",
+    "transcode_webp",
+)
+TRANSFORM_ORIGINALS = 8
+SYNTHETIC_POSITIVE_CLASSES = frozenset(f"synthetic_{name}" for name in SYNTHETIC_TRANSFORMS)
+
+MAX_FIXTURE_FILES = 260
 
 # Hosts the harness may contact. Image hosts are contacted by fetch.py;
 # api.fxtwitter.com (JSON metadata only, the same service the x-likes tool
@@ -74,12 +93,15 @@ GELBOORU_GROUP3_PAIR_CLASS = "gelbooru_group3_candidate"
 # Pair classes treated as same-image/same-work positives in the threshold
 # sweep. The group-3 candidate class is included with the caveat above: its
 # pairs are measured same-work candidates, not confirmed labels.
-POSITIVE_CLASSES = frozenset(
-    {
-        "x_variant",
-        "gelbooru_sample",
-        "gelbooru_preview",
-        "cross_provider_same_work",
-        GELBOORU_GROUP3_PAIR_CLASS,
-    }
+POSITIVE_CLASSES = (
+    frozenset(
+        {
+            "x_variant",
+            "gelbooru_sample",
+            "gelbooru_preview",
+            "cross_provider_same_work",
+            GELBOORU_GROUP3_PAIR_CLASS,
+        }
+    )
+    | SYNTHETIC_POSITIVE_CLASSES
 )

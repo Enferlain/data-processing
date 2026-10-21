@@ -30,15 +30,15 @@ from typing import Any
 from PIL import Image
 from seeds import POSITIVE_CLASSES
 from signals import (
+    ahash_from_image,
     aspect_ratio,
     aspect_ratio_close,
+    dhash_from_image,
     hamming_distance,
     hashes_equal,
     phashes_from_image,
     same_dimensions,
 )
-
-SWEEP_MAX = 32
 
 
 def _fixture_map(fixtures_dir: Path) -> dict[str, Path]:
@@ -51,12 +51,16 @@ def _measure_fixture(path: Path) -> dict[str, Any] | None:
         image.seek(0)
         image.load()
         hashes = phashes_from_image(image)
+        ahash8 = ahash_from_image(image)
+        dhash8 = dhash_from_image(image)
         width, height = image.size
     return {
         "sha256": hashlib.sha256(data).hexdigest(),
         "md5": hashlib.md5(data).hexdigest(),
         "phash8": hashes[8],
         "phash16": hashes[16],
+        "ahash8": ahash8,
+        "dhash8": dhash8,
         "width": width,
         "height": height,
     }
@@ -85,8 +89,12 @@ def _distribution(values: list[int]) -> dict[str, Any] | None:
 def _sweep(
     pairs: list[dict[str, Any]], field: str, positives: set[str], negatives: set[str]
 ) -> list[dict[str, Any]]:
+    # The sweep range follows the measured distances of this signal so a wide
+    # scale (phash@16 reaches the 100+) is not clipped at an arbitrary cap and
+    # narrow scales do not sweep empty space.
+    sweep_max = max((int(p[field]) for p in pairs), default=0)
     sweep = []
-    for threshold in range(SWEEP_MAX + 1):
+    for threshold in range(sweep_max + 1):
         tp = sum(1 for p in pairs if p["class"] in positives and p[field] <= threshold)
         fn = sum(1 for p in pairs if p["class"] in positives and p[field] > threshold)
         fp = sum(1 for p in pairs if p["class"] in negatives and p[field] <= threshold)
@@ -142,6 +150,8 @@ def measure(
                 "md5_equal": hashes_equal(left["md5"], right["md5"]),
                 "distance8": hamming_distance(left["phash8"], right["phash8"]),
                 "distance16": hamming_distance(left["phash16"], right["phash16"]),
+                "ahash8_distance": hamming_distance(left["ahash8"], right["ahash8"]),
+                "dhash8_distance": hamming_distance(left["dhash8"], right["dhash8"]),
                 "same_dimensions": same_dimensions(
                     left["width"], left["height"], right["width"], right["height"]
                 ),
@@ -160,14 +170,20 @@ def measure(
     by_class: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in pair_records:
         by_class[record["class"]].append(record)
+    declared_by_class: dict[str, int] = defaultdict(int)
+    for pair in manifest.get("pairs", []):
+        declared_by_class[str(pair["class"])] += 1
 
     class_reports = {
         name: {
             "pairs": len(records),
+            "pairs_declared": declared_by_class.get(name, 0),
             "sha256_equal": sum(1 for r in records if r["sha256_equal"]),
             "same_dimensions": sum(1 for r in records if r["same_dimensions"]),
             "distance8": _distribution([r["distance8"] for r in records]),
             "distance16": _distribution([r["distance16"] for r in records]),
+            "ahash8_distance": _distribution([r["ahash8_distance"] for r in records]),
+            "dhash8_distance": _distribution([r["dhash8_distance"] for r in records]),
         }
         for name, records in sorted(by_class.items())
     }
@@ -191,6 +207,8 @@ def measure(
         "exact_byte_collisions": byte_collisions,
         "sweep_distance8": _sweep(pair_records, "distance8", positives, negatives),
         "sweep_distance16": _sweep(pair_records, "distance16", positives, negatives),
+        "sweep_ahash8": _sweep(pair_records, "ahash8_distance", positives, negatives),
+        "sweep_dhash8": _sweep(pair_records, "dhash8_distance", positives, negatives),
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)

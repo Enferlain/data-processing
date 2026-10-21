@@ -79,6 +79,26 @@ def phash_from_image(image: Image.Image, *, size: int = 8) -> str:
     return str(_imagehash.phash(image, hash_size=size)).lower()
 
 
+def ahash_from_image(image: Image.Image, *, size: int = 8) -> str:
+    """Return the average hash of a loaded image as lowercase hex."""
+
+    if _imagehash is None:  # pragma: no cover - declared runtime dependency
+        raise RuntimeError("imagehash is unavailable; perceptual hashing is disabled")
+    if size < 1:
+        raise ValueError("perceptual hash size must be positive")
+    return str(_imagehash.average_hash(image, hash_size=size)).lower()
+
+
+def dhash_from_image(image: Image.Image, *, size: int = 8) -> str:
+    """Return the difference hash of a loaded image as lowercase hex."""
+
+    if _imagehash is None:  # pragma: no cover - declared runtime dependency
+        raise RuntimeError("imagehash is unavailable; perceptual hashing is disabled")
+    if size < 1:
+        raise ValueError("perceptual hash size must be positive")
+    return str(_imagehash.dhash(image, hash_size=size)).lower()
+
+
 def phashes_from_image(image: Image.Image, sizes: Sequence[int] = (8, 16)) -> dict[int, str]:
     """Return perceptual hashes at several sizes keyed by size.
 

@@ -35,7 +35,9 @@ import httpx
 from seeds import (
     GELBOORU_GROUP3_PAIR_CLASS,
     MAX_FIXTURE_FILES,
+    SYNTHETIC_TRANSFORMS,
     TEST_LIST_GROUPS,
+    TRANSFORM_ORIGINALS,
     X_SAMPLING,
 )
 
@@ -314,6 +316,7 @@ def build_manifest(
         for second in ids[index + 1 :]
     ]
     rng.shuffle(same_author_candidates)
+    emitted_same_author: set[frozenset[str]] = set()
     for first, second in same_author_candidates[: int(X_SAMPLING["same_artist_pairs"])]:
         pairs.append(
             {
@@ -323,6 +326,7 @@ def build_manifest(
                 "group": "negatives",
             }
         )
+        emitted_same_author.add(frozenset((first, second)))
 
     cross_pairs_pool = [
         (first, second)
@@ -339,6 +343,84 @@ def build_manifest(
                 "class": "cross_artist_negative",
                 "group": "negatives",
             }
+        )
+
+    # gh#5: same-author negatives over the FULL archived media set. The
+    # stride sample above contained no repeated author, so the first spike
+    # measured zero pairs of this class; grouping every media id by author
+    # and sampling deterministically repairs that.
+    all_by_author: dict[int, list[str]] = {}
+    for media_id, _, post_id in media_rows:
+        author = author_by_post.get(post_id)
+        if author is not None:
+            all_by_author.setdefault(author, []).append(media_id)
+    full_author_pairs = [
+        (first, second)
+        for ids in all_by_author.values()
+        for index, first in enumerate(ids)
+        for second in ids[index + 1 :]
+        if frozenset((first, second)) not in emitted_same_author
+    ]
+    rng.shuffle(full_author_pairs)
+    full_selected = full_author_pairs[: int(X_SAMPLING["same_artist_pairs_full_catalog"])]
+    entry_keys = {str(entry["key"]) for entry in entries}
+    for media_id in sorted({m for pair in full_selected for m in pair}):
+        key = f"x:{media_id}:orig"
+        if key not in entry_keys:
+            entries.append(
+                _entry(
+                    key,
+                    _x_url(media_id, media_index[media_id][0], "orig"),
+                    "x",
+                    "orig",
+                    "negatives",
+                )
+            )
+            entry_keys.add(key)
+    for first, second in full_selected:
+        pairs.append(
+            {
+                "a": f"x:{first}:orig",
+                "b": f"x:{second}:orig",
+                "class": "same_artist_near_negative",
+                "group": "negatives",
+            }
+        )
+
+    # gh#5: synthetic transformation fixtures derived locally from sampled
+    # originals -- ground truth by construction, no network involved.
+    transform_sources = [
+        media_id for media_id in sampled if media_index[media_id][0] in ("jpg", "png")
+    ][:TRANSFORM_ORIGINALS]
+    for media_id in transform_sources:
+        source_key = f"x:{media_id}:orig"
+        if source_key not in entry_keys:
+            continue
+        for transform in SYNTHETIC_TRANSFORMS:
+            derived_key = f"{source_key}:{transform}"
+            entries.append(
+                {
+                    "key": derived_key,
+                    "derived_from": source_key,
+                    "transform": transform,
+                    "provider": "synthetic",
+                    "variant": "synthetic",
+                    "group": "synthetic",
+                }
+            )
+            entry_keys.add(derived_key)
+            pairs.append(
+                {
+                    "a": source_key,
+                    "b": derived_key,
+                    "class": f"synthetic_{transform}",
+                    "group": "synthetic",
+                }
+            )
+    if len(entries) > MAX_FIXTURE_FILES:
+        raise ValueError(
+            f"fixture entries ({len(entries)}) exceed the harness cap ({MAX_FIXTURE_FILES}); "
+            "lower the sampling targets in seeds.py"
         )
 
     class_counts: dict[str, int] = {}
