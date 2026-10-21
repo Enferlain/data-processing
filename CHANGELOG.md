@@ -13,6 +13,22 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-21]
+
+### Added
+
+- **Attribution-disagreement export projection (Bead `data-processing-1oi`, second slice;
+  OpenSpec change `attribution-disagreement-report`; GitHub issue #6)** — the
+  `attribution-disagreements` kind emits one row per retained post-level relationship
+  (`reposted_from`, `same_work`) whose ends both carry artist attribution (artist/author
+  participants plus tag-implied attribution entities) with no cross-pair joined by a
+  confirmed identity membership: the review worklist for attribution, not a verdict. Rows
+  carry both ends' identities with review states, the linking relationship, and a
+  `name_match` exact-casefolded hint marked as weak evidence; confirmed-join pairs,
+  attribution-missing ends, rejected relationships, and limit overflow are excluded with
+  counted reasons. Offline, read-only, report-only; rides the existing manifest and digest
+  contracts unchanged.
+
 ## [2026-10-18]
 
 ### Added

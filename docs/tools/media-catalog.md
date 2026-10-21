@@ -471,6 +471,14 @@ pointer behind them, occurrence summary, and participants with roles and review 
 are deny-by-default allowlists, no storage paths or raw payloads are emitted, and URLs appear
 as origin and path only.
 
+An `attribution-disagreements` kind turns the export surface into a review worklist: one row
+per linked post pair (`reposted_from`, `same_work`) whose artist attributions — account
+participants with artist/author roles plus tag-implied attribution entities — no confirmed
+identity joins. Rows carry both ends' identities, the linking relationship, and a
+`name_match` hint that is weak evidence only; pairs joined by a confirmed identity,
+pairs missing attribution on an end, rejected relationships, and rows beyond the limit are
+excluded with counted reasons. The report writes nothing and settles nothing.
+
 The manifest sidecar (`<kind>-projection.manifest.json`) is the audit record: projection kind
 and schema version, all six stated policies (selection, ordering, dedup,
 preferred-representation, field-source, URL handling), source schema version, tool version,

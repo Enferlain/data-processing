@@ -475,7 +475,11 @@ def build_parser() -> argparse.ArgumentParser:
     export_commands = export.add_subparsers(dest="export_command", required=True)
     export_plan = export_commands.add_parser("plan")
     export_plan.add_argument("catalog", type=Path)
-    export_plan.add_argument("--kind", choices=("assets", "posts", "works"), required=True)
+    export_plan.add_argument(
+        "--kind",
+        choices=("assets", "attribution-disagreements", "posts", "works"),
+        required=True,
+    )
     export_plan.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     export_plan.add_argument(
         "--platform", help="posts only: restrict the projection to one platform"
@@ -483,7 +487,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json(export_plan)
     export_run = export_commands.add_parser("run")
     export_run.add_argument("catalog", type=Path)
-    export_run.add_argument("--kind", choices=("assets", "posts", "works"), required=True)
+    export_run.add_argument(
+        "--kind",
+        choices=("assets", "attribution-disagreements", "posts", "works"),
+        required=True,
+    )
     export_run.add_argument(
         "--out-dir", type=Path, default=Path("."), help="directory for data files and manifest"
     )
