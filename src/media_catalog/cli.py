@@ -490,6 +490,11 @@ def build_parser() -> argparse.ArgumentParser:
     export_plan.add_argument(
         "--platform", help="posts only: restrict the projection to one platform"
     )
+    export_plan.add_argument(
+        "--as-of",
+        metavar="TIMESTAMP",
+        help="post-field-sources only: reconstruct under an ISO-8601 Z evidence cutoff",
+    )
     _add_json(export_plan)
     export_run = export_commands.add_parser("run")
     export_run.add_argument("catalog", type=Path)
@@ -511,6 +516,11 @@ def build_parser() -> argparse.ArgumentParser:
     export_run.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     export_run.add_argument(
         "--platform", help="posts only: restrict the projection to one platform"
+    )
+    export_run.add_argument(
+        "--as-of",
+        metavar="TIMESTAMP",
+        help="post-field-sources only: reconstruct under an ISO-8601 Z evidence cutoff",
     )
     _add_json(export_run)
 
@@ -1067,6 +1077,7 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     kind=arguments.kind,
                     limit=arguments.limit,
                     platform=arguments.platform,
+                    as_of=arguments.as_of,
                 ),
             }
         return {
@@ -1078,6 +1089,7 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 formats=formats,
                 limit=arguments.limit,
                 platform=arguments.platform,
+                as_of=arguments.as_of,
                 clock=_utc_now,
             ),
         }

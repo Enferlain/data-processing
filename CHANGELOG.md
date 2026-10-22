@@ -16,6 +16,18 @@ Rules:
 ## [2026-10-21]
 
 ### Added
+- **Temporal as-of semantics named and first surface landed (Bead `data-processing-2ai`;
+  OpenSpec change `add-as-of-semantics`; GitHub issue #7)** — the five-timestamp vocabulary
+  (source observation, provider-claimed, acquisition, interpretation, review) is mapped to
+  its columns in a tracked design doc with fixed as-of reconstruction rules (filter by
+  source observation time, re-resolve under the stated policy; review state from the latest
+  decision at or before the cutoff; deleted/unavailable objects appear through observations,
+  never by absence). A kernel requirement binds the distinction; every export manifest now
+  records its evidence cutoff (`as_of`, participating in the spec digest); and
+  `post-field-sources` accepts `--as-of` for cutoff-restricted, re-resolved field
+  histories. No schema changes, no event-sourcing layer; follow-on surfaces (as-of on
+  current-column kinds, change reports, timelines) tracked on the bead.
+
 
 - **Per-field source export projection (Bead `data-processing-1oi`, final slice; OpenSpec
   change `per-field-source-export`; GitHub issue #6)** — the `post-field-sources` kind emits

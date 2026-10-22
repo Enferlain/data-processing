@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
-PROJECTION_SCHEMA_VERSION = "export-projections-v1"
+PROJECTION_SCHEMA_VERSION = "export-projections-v2"
 
 POLICY_SLOTS = (
     "selection",
@@ -83,6 +83,9 @@ class ProjectionResult:
     exclusions: list[dict[str, Any]]
 
 
+AS_OF_ALL_RETAINED = "all_retained"
+
+
 @dataclass(frozen=True, slots=True)
 class ProjectionSpec:
     """The full, stated recipe of one projection execution."""
@@ -92,6 +95,10 @@ class ProjectionSpec:
     policies: dict[str, str]
     tool_version: str
     source_schema_version: str
+    # The evidence cutoff the selection resolved under: "all_retained" or an
+    # explicit ISO-8601 Z timestamp. Participates in the digest: different
+    # cutoffs are different recipes.
+    as_of: str = AS_OF_ALL_RETAINED
 
     def __post_init__(self) -> None:
         missing = [slot for slot in POLICY_SLOTS if not self.policies.get(slot)]
@@ -105,9 +112,14 @@ class ProjectionSpec:
             "policies": {slot: self.policies[slot] for slot in POLICY_SLOTS},
             "tool_version": self.tool_version,
             "source_schema_version": self.source_schema_version,
+            "as_of": self.as_of,
         }
 
     def digest(self) -> str:
-        """Deterministic over identical recipe inputs; no timestamp participates."""
+        """Deterministic over identical recipe inputs.
+
+        Generation time never participates; the as-of evidence cutoff does,
+        deliberately -- a different cutoff is a different recipe.
+        """
 
         return sha256_text(canonical_json(self.as_dict()))

@@ -62,9 +62,11 @@ retained observations by construction of the current-projection policy).
 
 ## Risks / Trade-offs
 
-- [String timestamp comparison] — the repo's timestamps are ISO-8601 `...Z` strings,
-  lexicographically ordered; the cutoff parameter validates against that format. Mixed
-  precision (fractional seconds) still compares correctly lexicographically.
+- [String timestamp comparison] — stored timestamps mix whole-second and fractional
+  precision, and lexicographic text comparison misplaces fractional seconds inside a
+  whole-second cutoff (`.` sorts before `Z`); as-of comparisons therefore parse both sides
+  (julianday over `Z`-stripped values) and cutoff inputs are calendar-validated on parse
+  (review finding, folded in pre-commit).
 - [As-of on current-column kinds would mislead if silently accepted] — refusing the flag
   per kind keeps the manifest honest.
 - [Reconstruction depends on facts carrying source time] — true since 8c95810; the known

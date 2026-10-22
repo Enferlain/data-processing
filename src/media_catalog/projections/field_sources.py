@@ -12,7 +12,11 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from media_catalog.projections.spec import ProjectionResult, enforce_allowlist
+from media_catalog.projections.spec import (
+    AS_OF_ALL_RETAINED,
+    ProjectionResult,
+    enforce_allowlist,
+)
 
 KIND = "post-field-sources"
 
@@ -51,28 +55,46 @@ IDENTIFIERS = {
 
 
 def build(
-    connection: sqlite3.Connection, *, limit: int, platform: str | None = None
+    connection: sqlite3.Connection,
+    *,
+    limit: int,
+    platform: str | None = None,
+    as_of: str = AS_OF_ALL_RETAINED,
 ) -> ProjectionResult:
     if platform is not None:
         raise ValueError("the post-field-sources projection does not support a platform filter")
+    # As-of reconstruction: only observations whose source observation time is
+    # at or before the cutoff exist for this build.  The comparison parses
+    # both sides (julianday) because stored timestamps mix whole-second and
+    # fractional-second precision, and lexicographic text comparison would
+    # place ".5s after the cutoff" before a whole-second cutoff ("." < "Z").
+    cutoff_clause = (
+        "AND julianday(replace(pmo.observed_at, 'Z', '+00:00')) "
+        "<= julianday(replace(?, 'Z', '+00:00'))"
+        if as_of != AS_OF_ALL_RETAINED
+        else ""
+    )
+    cutoff_values: tuple[str, ...] = (as_of,) if cutoff_clause else ()
     posts_total = int(connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0])
     observed_posts = connection.execute(
-        """SELECT p.post_id, pl.platform_key AS platform, p.native_post_id
+        f"""SELECT p.post_id, pl.platform_key AS platform, p.native_post_id
              FROM posts p
              JOIN platforms pl ON pl.platform_id = p.platform_id
             WHERE EXISTS (SELECT 1 FROM post_metadata_observations pmo
-                           WHERE pmo.post_id = p.post_id)
+                           WHERE pmo.post_id = p.post_id {cutoff_clause})
          ORDER BY p.post_id
             LIMIT ?""",
-        (limit,),
+        (*cutoff_values, limit),
     ).fetchall()
     unobserved = (
         posts_total
         - connection.execute(
-            "SELECT COUNT(DISTINCT post_id) FROM post_metadata_observations"
+            f"SELECT COUNT(DISTINCT pmo.post_id) FROM post_metadata_observations pmo "
+            f"WHERE 1=1 {cutoff_clause.replace('pmo.', 'pmo.')}",
+            cutoff_values,
         ).fetchone()[0]
     )
-    rows = [_row(connection, record) for record in observed_posts]
+    rows = [_row(connection, record, cutoff_clause, cutoff_values) for record in observed_posts]
     selection_keys = [f"{row['post_id']}:{row['platform']}:{row['native_post_id']}" for row in rows]
     exclusions: list[dict[str, Any]] = []
     if unobserved:
@@ -84,16 +106,23 @@ def build(
     return ProjectionResult(rows, selection_keys, len(rows), exclusions)
 
 
-def _row(connection: sqlite3.Connection, record: sqlite3.Row) -> dict[str, Any]:
+def _row(
+    connection: sqlite3.Connection,
+    record: sqlite3.Row,
+    cutoff_clause: str,
+    cutoff_values: tuple[str, ...],
+) -> dict[str, Any]:
     post_id = int(record["post_id"])
+    row_cutoff_clause = cutoff_clause.replace("pmo.", "")
     observations = connection.execute(
-        """SELECT score_up, score_down, score_total, favorite_count, comment_count,
+        f"""SELECT score_up, score_down, score_total, favorite_count, comment_count,
                   flag_deleted, flag_pending, flag_flagged, observed_at,
                   raw_observation_id
              FROM post_metadata_observations
-            WHERE post_id = ?
-         ORDER BY observed_at, post_metadata_observation_id""",
-        (post_id,),
+            WHERE post_id = ? {row_cutoff_clause}
+         ORDER BY julianday(replace(observed_at, 'Z', '+00:00')),
+                  post_metadata_observation_id""",
+        (post_id, *cutoff_values),
     ).fetchall()
     histories: dict[str, list[dict[str, Any]]] = {name: [] for name in FIELD_NAMES}
     for observation in observations:

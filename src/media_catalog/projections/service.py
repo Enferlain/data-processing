@@ -16,6 +16,7 @@ from typing import Any
 from media_catalog.database import CatalogDatabase
 from media_catalog.projections import assets, attribution, field_sources, output, posts, works
 from media_catalog.projections.spec import (
+    AS_OF_ALL_RETAINED,
     PROJECTION_SCHEMA_VERSION,
     ProjectionSpec,
     canonical_json,
@@ -39,7 +40,9 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _validate(kind: str, limit: int, platform: str | None, formats: tuple[str, ...]) -> None:
+def _validate(
+    kind: str, limit: int, platform: str | None, formats: tuple[str, ...], as_of: str
+) -> None:
     if kind not in _KINDS:
         raise ValueError(f"unknown projection kind {kind!r}; choose one of {sorted(_KINDS)}")
     if not 0 < limit <= MAX_LIMIT:
@@ -49,12 +52,35 @@ def _validate(kind: str, limit: int, platform: str | None, formats: tuple[str, .
         and platform is not None
     ):
         raise ValueError(f"the {kind} projection does not support a platform filter")
+    if as_of != AS_OF_ALL_RETAINED and kind != field_sources.KIND:
+        raise ValueError(
+            f"the {kind} projection does not support an as-of cutoff; only "
+            f"{field_sources.KIND} reconstructs under a cutoff today"
+        )
     for form in formats:
         if form not in FORMATS:
             raise ValueError(f"unknown export format {form!r}; choose from {FORMATS}")
 
 
-def _spec(database: CatalogDatabase, kind: str, platform: str | None) -> ProjectionSpec:
+def _normalize_as_of(as_of: str | None) -> str:
+    if as_of is None or as_of == AS_OF_ALL_RETAINED:
+        return AS_OF_ALL_RETAINED
+    try:
+        # Parsing validates shape and calendar together (rejecting impossible
+        # dates and non-ASCII digits that a regex would admit); the canonical
+        # Z form keeps manifests and digests stable.
+        parsed = datetime.fromisoformat(as_of)
+    except ValueError as error:
+        raise ValueError(
+            "as-of cutoff must be an ISO-8601 Z timestamp "
+            "(for example 2026-06-01T00:00:00Z) or omitted"
+        ) from error
+    if parsed.tzinfo is None:
+        raise ValueError("as-of cutoff must carry a timezone (use a Z suffix)")
+    return parsed.isoformat().replace("+00:00", "Z")
+
+
+def _spec(database: CatalogDatabase, kind: str, platform: str | None, as_of: str) -> ProjectionSpec:
     module = _KINDS[kind]
     policies = dict(module.POLICIES)
     if platform is not None:
@@ -65,11 +91,28 @@ def _spec(database: CatalogDatabase, kind: str, platform: str | None) -> Project
         policies=policies,
         tool_version=tool_version(),
         source_schema_version=str(database.schema_version),
+        as_of=as_of,
     )
 
 
 def _counts(result: Any) -> dict[str, Any]:
     return {"included": result.included, "excluded": result.exclusions}
+
+
+def _build(
+    module: Any,
+    kind: str,
+    connection: Any,
+    *,
+    limit: int,
+    platform: str | None,
+    as_of: str,
+) -> Any:
+    # Only the kinds whose semantics reconstruct under a cutoff receive it;
+    # validation above refuses explicit cutoffs for every other kind.
+    if kind == field_sources.KIND:
+        return module.build(connection, limit=limit, platform=platform, as_of=as_of)
+    return module.build(connection, limit=limit, platform=platform)
 
 
 def plan_export(
@@ -78,14 +121,18 @@ def plan_export(
     kind: str,
     limit: int = DEFAULT_LIMIT,
     platform: str | None = None,
+    as_of: str | None = None,
 ) -> dict[str, Any]:
     """Preview a projection: policy echo and would-be counts, nothing written."""
 
-    _validate(kind, limit, platform, FORMATS)
+    cutoff = _normalize_as_of(as_of)
+    _validate(kind, limit, platform, FORMATS, cutoff)
     with CatalogDatabase.open_read_only(catalog) as database:
         module = _KINDS[kind]
-        spec = _spec(database, kind, platform)
-        result = module.build(database.connection, limit=limit, platform=platform)
+        spec = _spec(database, kind, platform, cutoff)
+        result = _build(
+            module, kind, database.connection, limit=limit, platform=platform, as_of=cutoff
+        )
     return {
         "catalog": str(catalog),
         **spec.as_dict(),
@@ -104,15 +151,19 @@ def run_export(
     formats: tuple[str, ...] = FORMATS,
     limit: int = DEFAULT_LIMIT,
     platform: str | None = None,
+    as_of: str | None = None,
     clock: Any = _utc_now,
 ) -> dict[str, Any]:
     """Write the projection's data files and manifest sidecar; read-only on the catalog."""
 
-    _validate(kind, limit, platform, formats)
+    cutoff = _normalize_as_of(as_of)
+    _validate(kind, limit, platform, formats, cutoff)
     with CatalogDatabase.open_read_only(catalog) as database:
         module = _KINDS[kind]
-        spec = _spec(database, kind, platform)
-        result = module.build(database.connection, limit=limit, platform=platform)
+        spec = _spec(database, kind, platform, cutoff)
+        result = _build(
+            module, kind, database.connection, limit=limit, platform=platform, as_of=cutoff
+        )
     out_dir.mkdir(parents=True, exist_ok=True)
     writers = {"jsonl": output.write_jsonl, "csv": output.write_csv}
     files: list[dict[str, Any]] = []

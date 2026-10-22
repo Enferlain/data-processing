@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
+
 from media_catalog.database import CatalogDatabase
 from media_catalog.projections import plan_export, run_export
 from media_catalog.projections.output import parse_jsonl
@@ -149,3 +151,131 @@ def test_exclusions_digests_and_read_only(tmp_path: Path) -> None:
     assert first["policies"]["field_source"] == (
         "newest_observation_wins_per_field_all_values_retained"
     )
+
+
+def test_as_of_reconstructs_under_a_cutoff(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog)  # favorite_count observed Jan (5) and Feb (7); flags in March
+
+    between = run_export(
+        catalog,
+        kind="post-field-sources",
+        out_dir=tmp_path / "between",
+        as_of="2026-01-15T00:00:00Z",
+        clock=lambda: NOW,
+    )
+    rows = parse_jsonl(tmp_path / "between" / "post-field-sources-projection.jsonl")
+    anchor = next(row for row in rows if row["native_post_id"] == "6001")
+    favorite = next(f for f in anchor["fields"] if f["field"] == "favorite_count")
+    # Only the January observation exists at the cutoff; its value is current.
+    assert [entry["value"] for entry in favorite["entries"]] == [5]
+    assert favorite["current"]["value"] == 5
+    assert between["as_of"] == "2026-01-15T00:00:00Z"
+    # flag_deleted is asserted by every observation in the fixture, so at the
+    # cutoff it exists with exactly the January entry (one of three).
+    flags = next(f for f in anchor["fields"] if f["field"] == "flag_deleted")
+    assert len(flags["entries"]) == 1
+
+    after_all = run_export(
+        catalog,
+        kind="post-field-sources",
+        out_dir=tmp_path / "after",
+        as_of="2027-01-01T00:00:00Z",
+        clock=lambda: NOW,
+    )
+    uncutoff = run_export(
+        catalog,
+        kind="post-field-sources",
+        out_dir=tmp_path / "uncut",
+        clock=lambda: NOW,
+    )
+    # Same rows under both; different recipes (the cutoff participates in the
+    # digest), identical data content.
+    assert after_all["spec_digest"] != uncutoff["spec_digest"]
+    assert uncutoff["as_of"] == "all_retained"
+    after_files = {f["name"]: f["content_digest"] for f in after_all["files"]}
+    uncut_files = {f["name"]: f["content_digest"] for f in uncutoff["files"]}
+    assert after_files == uncut_files
+
+    before_all = plan_export(catalog, kind="post-field-sources", as_of="2025-01-01T00:00:00Z")
+    assert before_all["counts"] == {
+        "included": 0,
+        "excluded": [{"reason": "no_retained_observations", "count": 3}],
+    }
+    # Cutoffs are refused for kinds without as-of semantics, and malformed
+    # cutoffs are refused outright.
+    with pytest.raises(ValueError, match="does not support an as-of cutoff"):
+        plan_export(catalog, kind="posts", as_of="2026-01-15T00:00:00Z")
+    # A bare date parses as a datetime but lacks the timezone: refused.
+    with pytest.raises(ValueError, match="timezone"):
+        run_export(
+            catalog,
+            kind="post-field-sources",
+            out_dir=tmp_path / "bad",
+            as_of="2026-01-15",
+            clock=lambda: NOW,
+        )
+    # An impossible calendar date is refused by parsing.
+    with pytest.raises(ValueError, match="ISO-8601"):
+        run_export(
+            catalog,
+            kind="post-field-sources",
+            out_dir=tmp_path / "bad2",
+            as_of="2026-02-30T00:00:00Z",
+            clock=lambda: NOW,
+        )
+
+
+def test_as_of_boundary_handles_fractional_seconds(tmp_path: Path) -> None:
+    """Review regression: fractional seconds inside the cutoff second.
+
+    Lexicographic comparison would place ".4s after a whole-second cutoff"
+    before the cutoff ("." < "Z"); the parsed comparison must exclude it, and
+    an observation exactly at the cutoff must be included.
+    """
+
+    from media_catalog.records import PostMetadataObservationRecord
+    from media_catalog.writer import CatalogWriter
+
+    catalog = tmp_path / "catalog.sqlite3"
+    ids = _seed(catalog)
+    with CatalogDatabase(catalog) as database:
+        CatalogWriter(database).record_post_metadata(
+            ids["6001"],
+            PostMetadataObservationRecord(
+                observed_at="2026-01-01T00:00:00.400000Z", favorite_count=9
+            ),
+        )
+        database.connection.commit()
+
+    run_export(
+        catalog,
+        kind="post-field-sources",
+        out_dir=tmp_path / "whole",
+        as_of="2026-01-01T00:00:00Z",
+        clock=lambda: NOW,
+    )
+    rows = parse_jsonl(tmp_path / "whole" / "post-field-sources-projection.jsonl")
+    anchor = next(row for row in rows if row["native_post_id"] == "6001")
+    favorite = next(f for f in anchor["fields"] if f["field"] == "favorite_count")
+    # The .4s observation is after the whole-second cutoff: excluded, even
+    # though it sorts before the cutoff string lexicographically. The exact
+    # whole-second observation at the cutoff is included.
+    assert [entry["value"] for entry in favorite["entries"]] == [5]
+    assert favorite["current"]["value"] == 5
+
+    fractional = run_export(
+        catalog,
+        kind="post-field-sources",
+        out_dir=tmp_path / "frac",
+        as_of="2026-01-01T00:00:00.400000Z",
+        clock=lambda: NOW,
+    )
+    rows = parse_jsonl(tmp_path / "frac" / "post-field-sources-projection.jsonl")
+    anchor = next(row for row in rows if row["native_post_id"] == "6001")
+    favorite = next(f for f in anchor["fields"] if f["field"] == "favorite_count")
+    # At the fractional cutoff both January observations exist, in observation
+    # order, with the newest (the .4s one) current.
+    assert [entry["value"] for entry in favorite["entries"]] == [5, 9]
+    assert favorite["current"]["value"] == 9
+    assert fractional["as_of"] == "2026-01-01T00:00:00.400000Z"

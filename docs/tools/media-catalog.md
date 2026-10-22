@@ -486,6 +486,15 @@ current under the stated policy — dissenting values stay in the row, and a lat
 never erases an earlier value. Posts without retained observations are excluded with a
 counted reason.
 
+Finally, exports carry their evidence cutoff: every manifest records `as_of` — `all_retained`
+by default, or an explicit `--as-of 2026-06-01T00:00:00Z` cutoff on `post-field-sources`,
+which reconstructs field histories from observations at or before the cutoff and
+re-resolves current values within that set (the cutoff participates in the spec digest:
+different cutoffs are different recipes). Other kinds refuse a timestamp cutoff today; their
+current columns resolve against all retained observations by construction. See
+`docs/plans/temporal-semantics.md` for the five-timestamp vocabulary and the
+reconstruction rules.
+
 The manifest sidecar (`<kind>-projection.manifest.json`) is the audit record: projection kind
 and schema version, all six stated policies (selection, ordering, dedup,
 preferred-representation, field-source, URL handling), source schema version, tool version,
