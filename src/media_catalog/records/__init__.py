@@ -135,6 +135,7 @@ from media_catalog.records.lookup import (
 )
 from media_catalog.records.metadata import (
     AttributionRecord,
+    PoolObservationRecord,
     PostExternalReferenceRecord,
     PostFlagObservationRecord,
     PostMetadataObservationRecord,
@@ -278,6 +279,7 @@ __all__ = [
     "MediaOccurrenceRecord",
     "OccurrenceSourceRecord",
     "PlatformReferenceRecord",
+    "PoolObservationRecord",
     "PostExternalReferenceRecord",
     "PostFlagObservationRecord",
     "PostMetadataObservationRecord",

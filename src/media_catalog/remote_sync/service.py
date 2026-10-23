@@ -453,4 +453,5 @@ def _operation_object_kind(operation: AdapterOperation) -> str:
         AdapterOperation.FETCH_ATTRIBUTION: "attribution",
         AdapterOperation.FETCH_TAG: "tag",
         AdapterOperation.FETCH_TAG_ALIAS: "tag_alias",
+        AdapterOperation.FETCH_POOL: "pool",
     }[operation]

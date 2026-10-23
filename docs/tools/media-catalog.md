@@ -142,6 +142,7 @@ uv run catalog metadata pixiv-account-artworks catalog-output/catalog.sqlite3 10
 
 uv run catalog metadata danbooru-post catalog-output/catalog.sqlite3 3001
 uv run catalog metadata danbooru-artist catalog-output/catalog.sqlite3 4001
+uv run catalog metadata danbooru-pool catalog-output/catalog.sqlite3 17001
 uv run catalog metadata danbooru-list catalog-output/catalog.sqlite3 artist_a \
   --max-requests 3 --max-pages 2 --max-records 500
 

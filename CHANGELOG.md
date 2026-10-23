@@ -16,6 +16,17 @@ Rules:
 ## [2026-10-23]
 
 ### Added
+- **Danbooru-family pool collection (Bead `data-processing-cq0`; OpenSpec change
+  `add-danbooru-pool-collection`)** — `mcat metadata danbooru-pool` (and `aibooru-pool`) fetches a
+  single pool by id under the bounded run contract and records its provider-declared membership
+  order as evidence: one digest-deduplicated pool observation (unchanged pools re-observe
+  idempotently; any membership or order change lands as a new observation) with ordered member
+  observations carrying every native id and position, post links only for already-retained posts,
+  and post-view membership through the existing surface. `fetch_pool` joins the closed operation
+  vocabularies (migration 0016 rebuilds the three remote-operation tables following the 0010
+  idiom, preserving every row); nothing creates work-grouping conclusions. Real fixture captured
+  from pool 17001 plus a reordered variant; storage-immutability enforced from the first migration.
+
 - **Evidence dependence modeled as graph-derived lineages (Bead `data-processing-4ry`;
   OpenSpec change `model-evidence-dependence`; GitHub issue #9)** — observation count is
   now formally distinct from independent-corroboration count: the relationship vocabulary

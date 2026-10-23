@@ -27,6 +27,7 @@ def test_adapter_contract_values_are_stable_and_continuations_round_trip() -> No
         "fetch_attribution",
         "fetch_tag",
         "fetch_tag_alias",
+        "fetch_pool",
     ]
     assert {outcome.value for outcome in AdapterOutcome} >= {
         "success",

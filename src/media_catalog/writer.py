@@ -46,6 +46,7 @@ from media_catalog.records import (
     MediaOccurrenceRecord,
     OccurrenceSourceRecord,
     PlatformReferenceRecord,
+    PoolObservationRecord,
     PostExternalReferenceRecord,
     PostFlagObservationRecord,
     PostMetadataObservationRecord,
@@ -240,6 +241,14 @@ class CatalogWriter:
         return self._metadata.record_post_pool(
             post_id, record, raw_observation_id=raw_observation_id
         )
+
+    def record_pool_observation(
+        self,
+        record: PoolObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        return self._metadata.record_pool_observation(record, raw_observation_id=raw_observation_id)
 
     def record_post_flag(
         self,

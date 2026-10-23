@@ -70,6 +70,7 @@ from media_catalog.remote_sync import (
     execute_reprocess,
     plan_reprocess,
 )
+from media_catalog.remote_sync.pools import fetch_pool
 from media_catalog.seeding import SeedMaterializationService
 from media_catalog.storage.adoption import adopt_assets, plan_adoption
 from media_catalog.storage.cas import AssetStorageError, InspectionLimits
@@ -395,9 +396,11 @@ def build_parser() -> argparse.ArgumentParser:
         "pixiv-account-artworks": True,
         "danbooru-post": False,
         "danbooru-artist": False,
+        "danbooru-pool": False,
         "danbooru-list": True,
         "aibooru-post": False,
         "aibooru-artist": False,
+        "aibooru-pool": False,
         "aibooru-list": True,
         "e621-post": False,
         "e621-artist": False,
@@ -965,6 +968,17 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     limits=limits,
                     resume_from_run_id=arguments.resume_from,
                 )
+        elif command.endswith("-pool"):
+            # One request, one pool: the endpoint does not paginate, so the
+            # bounded surface is inherent rather than operator-tuned.
+            instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
+            credentials = DanbooruCredentials.from_environment(instance)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                return {
+                    "catalog": catalog_label,
+                    **fetch_pool(database, adapter, int(arguments.target), clock=_utc_now),
+                }
         else:
             instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
             operation = (

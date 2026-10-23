@@ -26,6 +26,7 @@ class AdapterOperation(StrEnum):
     FETCH_ATTRIBUTION = "fetch_attribution"
     FETCH_TAG = "fetch_tag"
     FETCH_TAG_ALIAS = "fetch_tag_alias"
+    FETCH_POOL = "fetch_pool"
 
 
 class LookupStrategy(StrEnum):

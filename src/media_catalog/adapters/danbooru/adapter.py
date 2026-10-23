@@ -367,6 +367,9 @@ class DanbooruAdapter:
         if request.operation is AdapterOperation.FETCH_POST:
             target = _stable_id(request.target, "post ID")
             return f"/posts/{target}.json", {}, f"{self.instance_key}:fetch_post:{target}"
+        if request.operation is AdapterOperation.FETCH_POOL:
+            target = _stable_id(request.target, "pool ID")
+            return f"/pools/{target}.json", {}, f"{self.instance_key}:fetch_pool:{target}"
         if request.operation is AdapterOperation.FETCH_ATTRIBUTION:
             target = _stable_id(request.target, "artist ID")
             return (

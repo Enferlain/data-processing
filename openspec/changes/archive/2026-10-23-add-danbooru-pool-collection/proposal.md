@@ -24,7 +24,8 @@ kernel wants as evidence, never as an automatic conclusion.
 - Post-view membership through the existing `record_post_pool` for retained posts; pool membership
   claims no work-grouping conclusion and creates no relationship rows — Phase D relationship
   conclusions stay review-gated as specified.
-- CLI: `mcat remote pool-fetch --provider danbooru --pool-id N`.
+- CLI: `mcat metadata danbooru-pool <catalog> <pool-id>` (and `aibooru-pool`), the
+  house single-object metadata surface.
 - Fixtures (one real captured pool document) and tests; danbooru-family spec delta.
 
 ## Capabilities

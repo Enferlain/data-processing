@@ -7,6 +7,7 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.persistence.support import WriteResult, caller_connection, platform_id
 from media_catalog.records import (
     AttributionRecord,
+    PoolObservationRecord,
     PostExternalReferenceRecord,
     PostFlagObservationRecord,
     PostMetadataObservationRecord,
@@ -406,6 +407,75 @@ class MetadataWrites:
         if row is None:
             raise RuntimeError("failed to store post pool observation")
         return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
+
+    def record_pool_observation(
+        self,
+        record: PoolObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        """Store one pool observation with its ordered members.
+
+        Idempotent by the record's digest: an unchanged pool (same members,
+        same order) does not create rows.  Members link to catalog posts only
+        where the post is already retained; every member keeps its position
+        and native identifier regardless.  Retained members also receive a
+        post-view membership observation through the existing surface.
+        """
+
+        platform_row = self.connection.execute(
+            "SELECT platform_id FROM platforms WHERE platform_key = ?", (record.platform,)
+        ).fetchone()
+        if platform_row is None:
+            raise ValueError(f"unknown platform: {record.platform}")
+        platform_id = int(platform_row[0])
+        cursor = self.connection.execute(
+            """INSERT INTO pool_observations (
+                   platform_id, pool_native_id, observed_at, raw_observation_id,
+                   observation_digest
+               ) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (platform_id, pool_native_id, observation_digest) DO NOTHING""",
+            (
+                platform_id,
+                record.pool_native_id,
+                record.observed_at,
+                raw_observation_id,
+                record.observation_digest,
+            ),
+        )
+        if not cursor.rowcount:
+            row = self.connection.execute(
+                """SELECT pool_observation_id FROM pool_observations
+                   WHERE platform_id = ? AND pool_native_id = ?
+                     AND observation_digest = ?""",
+                (platform_id, record.pool_native_id, record.observation_digest),
+            ).fetchone()
+            if row is None:  # pragma: no cover - the digest select is exact
+                raise RuntimeError("failed to locate existing pool observation")
+            return WriteResult(int(row[0]), "existing")
+        pool_observation_id = int(
+            self.connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        )
+        for position, native in enumerate(record.post_native_ids, start=1):
+            post_row = self.connection.execute(
+                """SELECT post_id FROM posts
+                    WHERE platform_id = ? AND native_post_id = ?""",
+                (platform_id, native),
+            ).fetchone()
+            post_id = int(post_row[0]) if post_row is not None else None
+            self.connection.execute(
+                """INSERT INTO pool_member_observations (
+                       pool_observation_id, position, post_native_id, post_id
+                   ) VALUES (?, ?, ?, ?)""",
+                (pool_observation_id, position, native, post_id),
+            )
+            if post_id is not None:
+                self.record_post_pool(
+                    post_id,
+                    PostPoolObservationRecord(record.pool_native_id, record.observed_at),
+                    raw_observation_id=raw_observation_id,
+                )
+        return WriteResult(pool_observation_id, "inserted")
 
     def record_post_flag(
         self,

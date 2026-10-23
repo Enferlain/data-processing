@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 
 from media_catalog.records.common import (
@@ -138,6 +140,35 @@ class PostPoolObservationRecord:
     def __post_init__(self) -> None:
         _validate_nonempty(self.pool_native_id, "pool native id", max_length=500)
         object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
+
+
+@dataclass(frozen=True, slots=True)
+class PoolObservationRecord:
+    """One observed pool with its provider-declared member order.
+
+    The observation digest covers the pool native id plus the member ids in
+    order, so a re-observed unchanged pool is idempotent and any membership
+    or ordering change lands as a new observation.
+    """
+
+    platform: str
+    pool_native_id: str
+    post_native_ids: tuple[str, ...]
+    observed_at: str
+    observation_digest: str = ""
+
+    def __post_init__(self) -> None:
+        validate_platform(self.platform)
+        _validate_nonempty(self.pool_native_id, "pool native id", max_length=100)
+        for member in self.post_native_ids:
+            _validate_nonempty(member, "pool member native id", max_length=100)
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
+        payload = json.dumps(
+            [self.pool_native_id, list(self.post_native_ids)], separators=(",", ":")
+        )
+        object.__setattr__(
+            self, "observation_digest", hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        )
 
 
 @dataclass(frozen=True, slots=True)
