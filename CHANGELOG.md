@@ -29,6 +29,16 @@ Rules:
   worked mirror-chain example live in `docs/plans/evidence-dependence.md`; kernel and
   work-relationship requirements bind corroboration to lineages and make independence
   assumptions opt-in.
+- **Second non-media consumer spike executed (Bead `data-processing-vyc`; GitHub issue #4)** — a
+  bounded PyPI package-metadata intake (`scripts/package-watchlist-spike/`: fetch → intake →
+  project) exercised the kernel end to end outside media: source identity via `platforms`,
+  append-only source reports, a mirrored bounded run with storage-immutable inputs, typed package
+  records, evidence through the shared ledger, and a rebuildable as-of projection reusing the
+  projection-spec machinery verbatim. Findings in `docs/plans/non-media-consumer-spike.md`: the
+  run-operation vocabulary is media-closed while bending it is possible (`fetch_tag` on a pypi run
+  validates), relationship endpoint kinds are media-closed, and anchorless `store_raw` re-intake
+  duplicates observation rows under a NULL identity key. Follow-ups filed as beads
+  `data-processing-6y1`, `data-processing-40x`, `data-processing-9h6`.
 
 ## [2026-10-21]
 

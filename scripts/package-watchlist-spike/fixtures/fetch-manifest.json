@@ -1,0 +1,43 @@
+{
+  "declared_budgets": {
+    "item": 10,
+    "bytes": 2000000,
+    "time_seconds": 120
+  },
+  "counts": {
+    "items": 3,
+    "bytes": 481382
+  },
+  "outcome": "success",
+  "budget_boundary": null,
+  "elapsed_seconds": 0.615,
+  "requests": [
+    {
+      "package": "six",
+      "url": "https://pypi.org/pypi/six/json",
+      "status_code": 200,
+      "byte_size": 40256,
+      "sha256": "5d33fd0c1128bc0266f96f36ced03c47abefa31a29ed185d24b490e108bd04e8",
+      "fetched_at": "2026-10-23T05:15:14Z",
+      "outcome": "success"
+    },
+    {
+      "package": "tomli",
+      "url": "https://pypi.org/pypi/tomli/json",
+      "status_code": 200,
+      "byte_size": 400882,
+      "sha256": "9d21d688cc7675457f015e2b4f6f8d1e53adad04a26335c6cd45ef584f0a17cd",
+      "fetched_at": "2026-10-23T05:15:14Z",
+      "outcome": "success"
+    },
+    {
+      "package": "imagehash",
+      "url": "https://pypi.org/pypi/imagehash/json",
+      "status_code": 200,
+      "byte_size": 40244,
+      "sha256": "3f90c34500261f314557ef53226f27b32f263b68081687a0bf2756691bf14a64",
+      "fetched_at": "2026-10-23T05:15:14Z",
+      "outcome": "success"
+    }
+  ]
+}
