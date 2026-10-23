@@ -1,5 +1,6 @@
 """Kernel Phase D services: work materialization, deterministic seeding, review, queries."""
 
+from media_catalog.relationships.dependence import lineage_components
 from media_catalog.relationships.materialize import materialize_works
 from media_catalog.relationships.materialize_candidates import materialize_candidates
 from media_catalog.relationships.queries import (
@@ -15,6 +16,7 @@ from media_catalog.relationships.seed import seed_relationships
 
 __all__ = [
     "get_relationship",
+    "lineage_components",
     "list_relationships",
     "list_works",
     "materialize_candidates",

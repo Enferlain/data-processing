@@ -13,6 +13,23 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-23]
+
+### Added
+- **Evidence dependence modeled as graph-derived lineages (Bead `data-processing-4ry`;
+  OpenSpec change `model-evidence-dependence`; GitHub issue #9)** — observation count is
+  now formally distinct from independent-corroboration count: the relationship vocabulary
+  is classified into descent, equivalence, and structural kinds, and a new
+  `lineage_components` derivation computes connected components over a stated dependence
+  edge set (descent + equivalence kinds, conclusion-grade epistemic statuses, rejected
+  edges excluded) joined through post/occurrence/work anchoring. Dependence is expressed
+  only as typed relationships carrying epistemic status — no lineage stamps on evidence or
+  observation rows — so a mirror chain keeps four observations but resolves to one lineage,
+  and inferred proposals or rejected edges do not merge. Design decisions and a generated
+  worked mirror-chain example live in `docs/plans/evidence-dependence.md`; kernel and
+  work-relationship requirements bind corroboration to lineages and make independence
+  assumptions opt-in.
+
 ## [2026-10-21]
 
 ### Added

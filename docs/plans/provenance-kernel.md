@@ -46,6 +46,7 @@ verified against migrations 0001-0012 (0012 enforcement recorded 2026-10-04).
 | Review | `account_candidate_decisions`, `post_candidate_decisions` | Strong | Recognize as the kernel review-ledger pattern; append-only with prior state |
 | Artifact / work | `works` + `work_representations` (migration 0015: one deterministic anchor per post with occurrences) | Landed (Phase D schema half, 2026-10-16) | Human-level works emerge from reviewed `same_work` links plus projections; grouping objects (series/pools/sets) remain future membership primitives |
 | Projection | Gelbooru current-projection policy; search and stats; planned exports | Nascent | Name the concept and its policy; exports become projections |
+| Evidence dependence | derived at read time from `relationships` (descent/equivalence kinds under a stated policy) via `lineage_components`; no lineage stamps on rows (change `model-evidence-dependence`, gh#9) | Landed (2026-10-23) | Corroboration surfaces count lineages, not observations; see [evidence dependence](evidence-dependence.md) |
 
 Verification also confirmed three cross-cutting disciplines the kernel spec should name:
 
