@@ -143,10 +143,12 @@ uv run catalog metadata pixiv-account-artworks catalog-output/catalog.sqlite3 10
 uv run catalog metadata danbooru-post catalog-output/catalog.sqlite3 3001
 uv run catalog metadata danbooru-artist catalog-output/catalog.sqlite3 4001
 uv run catalog metadata danbooru-pool catalog-output/catalog.sqlite3 17001
+uv run catalog metadata danbooru-commentary catalog-output/catalog.sqlite3 12436862
 uv run catalog metadata danbooru-list catalog-output/catalog.sqlite3 artist_a \
   --max-requests 3 --max-pages 2 --max-records 500
 
 uv run catalog metadata e621-post catalog-output/catalog.sqlite3 5001 --json
+uv run catalog metadata e621-notes catalog-output/catalog.sqlite3 6623509
 uv run catalog metadata e621-artist catalog-output/catalog.sqlite3 7001
 uv run catalog metadata e621-tag catalog-output/catalog.sqlite3 artist_tag
 uv run catalog metadata e621-alias catalog-output/catalog.sqlite3 old_artist_tag
@@ -197,6 +199,7 @@ they never request an image URL, download media, or create an asset or acquisiti
 ```bash
 # DAPI post — requires GELBOORU_USER_ID and GELBOORU_API_KEY environment variables
 uv run catalog metadata gelbooru-dapi-post catalog-output/catalog.sqlite3 12370900 --json
+uv run catalog metadata gelbooru-dapi-notes catalog-output/catalog.sqlite3 953320
 
 # DAPI tag metadata
 uv run catalog metadata gelbooru-dapi-tag catalog-output/catalog.sqlite3 artist_tag --json

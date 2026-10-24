@@ -57,6 +57,8 @@ REMOTE_OPERATIONS = frozenset(
         "fetch_tag",
         "fetch_tag_alias",
         "fetch_pool",
+        "fetch_commentary",
+        "fetch_notes",
     }
 )
 REMOTE_RUN_STATUSES = frozenset({"running", "complete", "paused", "failed"})

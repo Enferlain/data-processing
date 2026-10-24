@@ -13,6 +13,23 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-24]
+
+### Added
+- **Commentary and notes enrichment (Bead `data-processing-vus`; OpenSpec change
+  `add-commentary-and-notes`)** — four opt-in metadata commands enrich one retained post at a
+  time (`danbooru-commentary`, `aibooru-commentary`, `gelbooru-dapi-notes`, `e621-notes`) under
+  the pool-fetch run contract: the run commits before the fetch, every response retains its raw
+  report, provider faults end `failed`, and transport errors leave auditable runs. Commentary
+  (original/translated title and description; provider-empty strings normalized to absence) and
+  notes (body, position, e621 version) land as append-only, digest-deduplicated observations —
+  unchanged re-observation is idempotent, any text/position/version change lands a new row — and
+  nothing derives tags, attribution, or relationships from the text. Migration 0017 adds the two
+  tables and rebuilds the remote-operation tables for `fetch_commentary`/`fetch_notes` (verified
+  lossless on a copy of the real catalog). Real fixtures captured for danbooru and e621; the
+  gelbooru dapi note fixture is synthetic per the documented shape pending a credentialed capture
+  (follow-up bead). Default sync paths are untouched.
+
 ## [2026-10-23]
 
 ### Added

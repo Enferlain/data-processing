@@ -297,6 +297,8 @@ class E621Adapter:
             return _nonempty_target(request.target, "tag name")
         if request.operation is AdapterOperation.FETCH_TAG_ALIAS:
             return _nonempty_target(request.target, "alias antecedent")
+        if request.operation is AdapterOperation.FETCH_NOTES:
+            return _stable_id(request.target, "post ID")
         if request.operation is AdapterOperation.LIST_ACCOUNT_POSTS:
             return _nonempty_target(request.target, "listing tag query")
         raise ValueError(f"unsupported e621 operation: {request.operation.value}")
@@ -326,6 +328,13 @@ class E621Adapter:
                 "/tag_aliases.json",
                 {"search[antecedent_name]": target, "limit": 1},
                 f"{self.instance_key}:fetch_tag_alias:{target}",
+            )
+        if operation is AdapterOperation.FETCH_NOTES:
+            target = _stable_id(request.target, "post ID")
+            return (
+                "/notes.json",
+                {"search[post_id]": target, "limit": 100},
+                f"{self.instance_key}:fetch_notes:{target}",
             )
         if operation is AdapterOperation.LIST_ACCOUNT_POSTS:
             return self._listing_request_parts(request)

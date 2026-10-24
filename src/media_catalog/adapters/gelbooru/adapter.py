@@ -164,6 +164,8 @@ class GelbooruAdapter:
             )
         elif request.operation is AdapterOperation.FETCH_TAG:
             endpoint, params, identity, request_target = self._dapi_tag_request(request.target)
+        elif request.operation is AdapterOperation.FETCH_NOTES:
+            endpoint, params, identity, request_target = self._dapi_notes_request(request.target)
         elif request.operation is AdapterOperation.LIST_ACCOUNT_POSTS:
             endpoint, params, identity, request_target = self._dapi_listing_request(
                 request.target, request.continuation
@@ -480,6 +482,30 @@ class GelbooruAdapter:
         )
         identity = f"{self.instance_key}:dapi_json:post:{post_id}"
         request_target = f"post:{post_id}"
+        return f"{self.instance.base_url}/index.php", params, identity, request_target
+
+    def _dapi_notes_request(self, target: str) -> tuple[str, dict[str, str], str, str]:
+        """Render a DAPI note query for one post.
+
+        Response shape is provisional until a credentialed live capture
+        replaces the documented-shape fixture (see the fixture's provenance
+        label); the run contract and normalization are shape-checked against
+        that fixture.
+        """
+        post_id = _stable_id(target, "post ID")
+        if self._credentials is None:
+            raise ValueError("DAPI requests require credentials")
+        params = self._credentials.authenticated_query(
+            {
+                "page": "dapi",
+                "s": "note",
+                "q": "index",
+                "json": "1",
+                "post_id": post_id,
+            }
+        )
+        identity = f"{self.instance_key}:dapi_json:notes:{post_id}"
+        request_target = f"notes:{post_id}"
         return f"{self.instance.base_url}/index.php", params, identity, request_target
 
     def _dapi_tag_request(self, target: str) -> tuple[str, dict[str, str], str, str]:

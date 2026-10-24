@@ -70,6 +70,7 @@ from media_catalog.remote_sync import (
     execute_reprocess,
     plan_reprocess,
 )
+from media_catalog.remote_sync.enrichment import fetch_commentary, fetch_notes
 from media_catalog.remote_sync.pools import fetch_pool
 from media_catalog.seeding import SeedMaterializationService
 from media_catalog.storage.adoption import adopt_assets, plan_adoption
@@ -397,10 +398,12 @@ def build_parser() -> argparse.ArgumentParser:
         "danbooru-post": False,
         "danbooru-artist": False,
         "danbooru-pool": False,
+        "danbooru-commentary": False,
         "danbooru-list": True,
         "aibooru-post": False,
         "aibooru-artist": False,
         "aibooru-pool": False,
+        "aibooru-commentary": False,
         "aibooru-list": True,
         "e621-post": False,
         "e621-artist": False,
@@ -409,7 +412,9 @@ def build_parser() -> argparse.ArgumentParser:
         "e621-list": True,
         "gelbooru-dapi-post": False,
         "gelbooru-dapi-tag": False,
+        "gelbooru-dapi-notes": False,
         "gelbooru-dapi-list": True,
+        "e621-notes": False,
         "gelbooru-html-post": False,
     }
 
@@ -915,6 +920,30 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     limits=limits,
                     resume_from_run_id=arguments.resume_from,
                 )
+        elif command == "gelbooru-dapi-notes" or command == "e621-notes":
+            if arguments.resume_from is not None:
+                raise ValueError("--resume-from is not supported for enrichment fetches")
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                if command == "e621-notes":
+                    adapter = E621Adapter(
+                        E621, client=client, credentials=E621Credentials.from_environment(E621)
+                    )
+                else:
+                    adapter = GelbooruAdapter(
+                        GELBOORU,
+                        client=client,
+                        credentials=GelbooruCredentials.from_environment(GELBOORU),
+                    )
+                return {
+                    "catalog": catalog_label,
+                    **fetch_notes(
+                        database,
+                        adapter,
+                        arguments.target,
+                        clock=_utc_now,
+                        time_budget_seconds=int(limits.elapsed_seconds),
+                    ),
+                }
         elif command.startswith("gelbooru-"):
             # The transport is part of the command name; there is never a
             # silent fallback between the credentialed DAPI and anonymous
@@ -968,16 +997,42 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     limits=limits,
                     resume_from_run_id=arguments.resume_from,
                 )
+        elif command.endswith("-commentary"):
+            # Opt-in enrichment: never part of default post sync.
+            instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
+            if arguments.resume_from is not None:
+                raise ValueError("--resume-from is not supported for enrichment fetches")
+            credentials = DanbooruCredentials.from_environment(instance)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                return {
+                    "catalog": catalog_label,
+                    **fetch_commentary(
+                        database,
+                        adapter,
+                        arguments.target,
+                        clock=_utc_now,
+                        time_budget_seconds=int(limits.elapsed_seconds),
+                    ),
+                }
         elif command.endswith("-pool"):
-            # One request, one pool: the endpoint does not paginate, so the
-            # bounded surface is inherent rather than operator-tuned.
+            # One request, one pool: the endpoint does not paginate, so only
+            # the time budget is operator-tunable; there is nothing to resume.
+            if arguments.resume_from is not None:
+                raise ValueError("--resume-from is not supported for pool fetches")
             instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
             credentials = DanbooruCredentials.from_environment(instance)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
                 adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
                 return {
                     "catalog": catalog_label,
-                    **fetch_pool(database, adapter, int(arguments.target), clock=_utc_now),
+                    **fetch_pool(
+                        database,
+                        adapter,
+                        int(arguments.target),
+                        clock=_utc_now,
+                        time_budget_seconds=int(limits.elapsed_seconds),
+                    ),
                 }
         else:
             instance = AIBOORU if command.startswith("aibooru-") else DANBOORU

@@ -47,9 +47,11 @@ from media_catalog.records import (
     OccurrenceSourceRecord,
     PlatformReferenceRecord,
     PoolObservationRecord,
+    PostCommentaryObservationRecord,
     PostExternalReferenceRecord,
     PostFlagObservationRecord,
     PostMetadataObservationRecord,
+    PostNoteObservationRecord,
     PostPoolObservationRecord,
     PostRecord,
     RawRecord,
@@ -239,6 +241,28 @@ class CatalogWriter:
         raw_observation_id: int | None = None,
     ) -> WriteResult:
         return self._metadata.record_post_pool(
+            post_id, record, raw_observation_id=raw_observation_id
+        )
+
+    def record_post_commentary(
+        self,
+        post_id: int,
+        record: PostCommentaryObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        return self._metadata.record_post_commentary(
+            post_id, record, raw_observation_id=raw_observation_id
+        )
+
+    def record_post_note(
+        self,
+        post_id: int,
+        record: PostNoteObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        return self._metadata.record_post_note(
             post_id, record, raw_observation_id=raw_observation_id
         )
 

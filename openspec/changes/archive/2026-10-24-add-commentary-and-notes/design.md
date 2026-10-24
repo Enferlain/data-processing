@@ -50,7 +50,9 @@ lists are successful empty observation sets — absence is not a retained fact.
 ### D5: Gelbooru's contract is provisional by fixture provenance
 
 No dapi credentials exist in this environment, so the gelbooru fixture is synthetic, built from
-the documented dapi note shape and labeled as such inside the fixture file. The spec names the
+the modern dapi wrapper shape the repo's own post/tag parsers already handle
+(`{"@attributes": ..., "note": [...]}`; a bare array is also accepted as the legacy form) and
+labeled as such inside the fixture file. The spec names the
 provisionality; a follow-up bead replaces the fixture with a live capture when credentials are
 available, and only that replacement can bless the shape.
 

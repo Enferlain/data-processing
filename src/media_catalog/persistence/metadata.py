@@ -8,9 +8,11 @@ from media_catalog.persistence.support import WriteResult, caller_connection, pl
 from media_catalog.records import (
     AttributionRecord,
     PoolObservationRecord,
+    PostCommentaryObservationRecord,
     PostExternalReferenceRecord,
     PostFlagObservationRecord,
     PostMetadataObservationRecord,
+    PostNoteObservationRecord,
     PostPoolObservationRecord,
     TagAliasObservationRecord,
     TagObservationRecord,
@@ -406,6 +408,77 @@ class MetadataWrites:
         ).fetchone()
         if row is None:
             raise RuntimeError("failed to store post pool observation")
+        return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
+
+    def record_post_commentary(
+        self,
+        post_id: int,
+        record: PostCommentaryObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        cursor = self.connection.execute(
+            """INSERT INTO post_commentary_observations (
+                   post_id, original_title, original_description, translated_title,
+                   translated_description, observed_at, raw_observation_id,
+                   observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (post_id, observation_digest) DO NOTHING""",
+            (
+                post_id,
+                record.original_title,
+                record.original_description,
+                record.translated_title,
+                record.translated_description,
+                record.observed_at,
+                raw_observation_id,
+                record.observation_digest,
+            ),
+        )
+        row = self.connection.execute(
+            """SELECT post_commentary_observation_id FROM post_commentary_observations
+                WHERE post_id = ? AND observation_digest = ?""",
+            (post_id, record.observation_digest),
+        ).fetchone()
+        if row is None:  # pragma: no cover - the digest select is exact
+            raise RuntimeError("failed to locate post commentary observation")
+        return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
+
+    def record_post_note(
+        self,
+        post_id: int,
+        record: PostNoteObservationRecord,
+        *,
+        raw_observation_id: int | None = None,
+    ) -> WriteResult:
+        cursor = self.connection.execute(
+            """INSERT INTO post_note_observations (
+                   post_id, note_native_id, body, position_x, position_y, width,
+                   height, version, observed_at, raw_observation_id,
+                   observation_digest
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (post_id, note_native_id, observation_digest) DO NOTHING""",
+            (
+                post_id,
+                record.note_native_id,
+                record.body,
+                record.position_x,
+                record.position_y,
+                record.width,
+                record.height,
+                record.version,
+                record.observed_at,
+                raw_observation_id,
+                record.observation_digest,
+            ),
+        )
+        row = self.connection.execute(
+            """SELECT post_note_observation_id FROM post_note_observations
+                WHERE post_id = ? AND note_native_id = ? AND observation_digest = ?""",
+            (post_id, record.note_native_id, record.observation_digest),
+        ).fetchone()
+        if row is None:  # pragma: no cover - the digest select is exact
+            raise RuntimeError("failed to locate post note observation")
         return WriteResult(int(row[0]), "inserted" if cursor.rowcount else "existing")
 
     def record_pool_observation(

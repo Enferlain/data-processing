@@ -172,6 +172,94 @@ class PoolObservationRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class PostCommentaryObservationRecord:
+    """Provider-reported artist commentary: the artist's own caption.
+
+    The digest covers the four text facts, never the observation time --
+    re-seeing identical text is the same observation.
+    """
+
+    original_title: str | None
+    original_description: str | None
+    translated_title: str | None
+    translated_description: str | None
+    observed_at: str
+    observation_digest: str = ""
+
+    def __post_init__(self) -> None:
+        if not any(
+            (
+                self.original_title,
+                self.original_description,
+                self.translated_title,
+                self.translated_description,
+            )
+        ):
+            raise ValueError("commentary observation requires at least one text fact")
+        for name in (
+            "original_title",
+            "original_description",
+            "translated_title",
+            "translated_description",
+        ):
+            value = getattr(self, name)
+            if value is not None and not value.strip():
+                raise ValueError(f"commentary {name} must not be blank")
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
+        payload = json.dumps(
+            [
+                self.original_title,
+                self.original_description,
+                self.translated_title,
+                self.translated_description,
+            ],
+            separators=(",", ":"),
+        )
+        object.__setattr__(
+            self, "observation_digest", hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PostNoteObservationRecord:
+    """One positioned overlay note; version is e621-only today."""
+
+    note_native_id: str
+    body: str
+    observed_at: str
+    position_x: int | None = None
+    position_y: int | None = None
+    width: int | None = None
+    height: int | None = None
+    version: int | None = None
+    observation_digest: str = ""
+
+    def __post_init__(self) -> None:
+        _validate_nonempty(self.note_native_id, "note native id", max_length=100)
+        _validate_nonempty(self.body, "note body", max_length=10000)
+        for name in ("position_x", "position_y", "width", "height", "version"):
+            value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or value < 0):
+                raise ValueError(f"note {name} must be a non-negative integer")
+        object.__setattr__(self, "observed_at", normalize_timestamp(self.observed_at))
+        payload = json.dumps(
+            [
+                self.note_native_id,
+                self.body,
+                self.position_x,
+                self.position_y,
+                self.width,
+                self.height,
+                self.version,
+            ],
+            separators=(",", ":"),
+        )
+        object.__setattr__(
+            self, "observation_digest", hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PostFlagObservationRecord:
     flag_name: str
     flag_value: bool

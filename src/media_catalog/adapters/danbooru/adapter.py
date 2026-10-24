@@ -367,6 +367,13 @@ class DanbooruAdapter:
         if request.operation is AdapterOperation.FETCH_POST:
             target = _stable_id(request.target, "post ID")
             return f"/posts/{target}.json", {}, f"{self.instance_key}:fetch_post:{target}"
+        if request.operation is AdapterOperation.FETCH_COMMENTARY:
+            target = _stable_id(request.target, "post ID")
+            return (
+                "/artist_commentaries.json",
+                {"search[post_id]": target},
+                f"{self.instance_key}:fetch_commentary:{target}",
+            )
         if request.operation is AdapterOperation.FETCH_POOL:
             target = _stable_id(request.target, "pool ID")
             return f"/pools/{target}.json", {}, f"{self.instance_key}:fetch_pool:{target}"

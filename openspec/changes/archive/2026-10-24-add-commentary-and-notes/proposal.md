@@ -24,9 +24,9 @@ work, not enumeration.
 - CLI: `mcat metadata danbooru-commentary` / `aibooru-commentary` / `gelbooru-dapi-notes` /
   `e621-notes` `<catalog> <post-native-id>`.
 - Fixtures: real captures for danbooru (post 12436862, artist caption with translation fields) and
-  e621 (post 6623509, note with position and version); gelbooru fixture follows the documented
-  dapi note shape and is labeled synthetic until a credentialed live capture replaces it (follow-up
-  bead).
+  e621 (post 6623509, note with position and version); gelbooru fixture follows the modern
+  dapi wrapper shape the repo's own parsers handle and is labeled synthetic until a credentialed
+  live capture replaces it (follow-up bead).
 - Spec deltas: danbooru-family, e621, and gelbooru metadata-adapter specs each gain their
   enrichment requirement.
 

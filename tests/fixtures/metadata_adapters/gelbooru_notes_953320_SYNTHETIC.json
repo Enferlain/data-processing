@@ -1,0 +1,27 @@
+{
+  "_fixture_note": "SYNTHETIC gelbooru dapi note response following the in-repo modern dapi wrapper precedent ({'@attributes': {...}, 'note': [...]}, as the post/tag parsers handle it). No live capture: replace before treating the contract as verified (bead data-processing-r4y).",
+  "@attributes": {
+    "limit": 100,
+    "offset": 0
+  },
+  "note": [
+    {
+      "id": 1900001,
+      "post_id": 953320,
+      "x": 120,
+      "y": 84,
+      "width": 300,
+      "height": 40,
+      "body": "synthetic overlay note"
+    },
+    {
+      "id": 1900002,
+      "post_id": 953320,
+      "x": 40,
+      "y": 500,
+      "width": 200,
+      "height": 60,
+      "body": "second synthetic note"
+    }
+  ]
+}
