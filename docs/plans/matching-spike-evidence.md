@@ -131,9 +131,12 @@ positives.
   of the *same image* measures like an unrelated work (phash@8 20–30 vs
   negatives ≥ 20; corner crops worse). No threshold on any measured signal can
   propose crop relationships without drowning in false positives. Consequence:
-  crop detection requires region- or feature-based methods (the established
-  libraries' crop-resistant options) — the named next research step — and
-  until then, crops are reachable only through provider labels and exact bytes.
+  crop detection requires region- or feature-based methods — the named next research step —
+  and until then, crops are reachable only through provider labels and exact bytes.
+  Update 2026-10-24: the established library's segmentation-based crop-resistant hash
+  does **not** separate crops on this corpus at any probed parameterization — see the
+  [crop-resistant evaluation](matching-crop-resistant-evaluation.md); feature-based
+  (opencv-class) methods remain the untested candidate.
 - **Overlays and censorship are mild for phash.** Text overlays and black
   censor bars land at 4–10 — inside the existing positive band. dhash@8 is
   even tighter there (≤ 6). Color adjustment is nearly free (0–6).
@@ -176,9 +179,10 @@ positives.
   ground truth by construction, but real-world crops/edits (artist-cropped
   reposts, partial-screen reposts, real censor variants) may differ in kind;
   curated real-world pairs remain unfetched.
-- No crop-resistant or feature-based method (the libraries' ORB/keypoint
-  options) has been evaluated yet — the crop-blindness finding names it as the
-  next step rather than answering it.
+- Crop-resistant (segmentation-based) hashing is now evaluated — negatively; see the
+  [crop-resistant evaluation](matching-crop-resistant-evaluation.md). Feature-based
+  (ORB/keypoint) methods remain unevaluated: they need an opencv-class dependency the
+  research environment does not carry — a maintainer dependency decision.
 - No animated/video frame-derived class exists yet.
 - Group-3 candidate labels are unconfirmed; the distance structure is reported
   as measured.

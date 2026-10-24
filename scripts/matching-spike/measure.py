@@ -33,6 +33,7 @@ from signals import (
     ahash_from_image,
     aspect_ratio,
     aspect_ratio_close,
+    crop_resistant_hash_from_image,
     dhash_from_image,
     hamming_distance,
     hashes_equal,
@@ -53,6 +54,7 @@ def _measure_fixture(path: Path) -> dict[str, Any] | None:
         hashes = phashes_from_image(image)
         ahash8 = ahash_from_image(image)
         dhash8 = dhash_from_image(image)
+        crop_res = crop_resistant_hash_from_image(image)
         width, height = image.size
     return {
         "sha256": hashlib.sha256(data).hexdigest(),
@@ -61,6 +63,8 @@ def _measure_fixture(path: Path) -> dict[str, Any] | None:
         "phash16": hashes[16],
         "ahash8": ahash8,
         "dhash8": dhash8,
+        "crop_res": crop_res,
+        "crop_segments": len(crop_res.segment_hashes),
         "width": width,
         "height": height,
     }
@@ -84,6 +88,32 @@ def _distribution(values: list[int]) -> dict[str, Any] | None:
         "p50": statistics.median(values),
         "max": max(values),
     }
+
+
+def _sweep_float(
+    pairs: list[dict[str, Any]], field: str, positives: set[str], negatives: set[str]
+) -> list[dict[str, Any]]:
+    # Region-matching distances are small floats on a per-image scale (bounded
+    # by segment counts), so the sweep runs over observed values, not integers.
+    thresholds = sorted({float(p[field]) for p in pairs})
+    sweep = []
+    for threshold in thresholds:
+        tp = sum(1 for p in pairs if p["class"] in positives and p[field] <= threshold)
+        fn = sum(1 for p in pairs if p["class"] in positives and p[field] > threshold)
+        fp = sum(1 for p in pairs if p["class"] in negatives and p[field] <= threshold)
+        tn = sum(1 for p in pairs if p["class"] in negatives and p[field] > threshold)
+        sweep.append(
+            {
+                "threshold": threshold,
+                "true_positives": tp,
+                "false_negatives": fn,
+                "false_positives": fp,
+                "true_negatives": tn,
+                "true_positive_rate": round(tp / (tp + fn), 4) if tp + fn else None,
+                "false_positive_rate": round(fp / (fp + tn), 4) if fp + tn else None,
+            }
+        )
+    return sweep
 
 
 def _sweep(
@@ -152,6 +182,17 @@ def measure(
                 "distance16": hamming_distance(left["phash16"], right["phash16"]),
                 "ahash8_distance": hamming_distance(left["ahash8"], right["ahash8"]),
                 "dhash8_distance": hamming_distance(left["dhash8"], right["dhash8"]),
+                # Region-matching distance is direction-sensitive when segment
+                # counts differ; the symmetric value is the honest one.
+                "crop_resistant_distance": round(
+                    max(
+                        float(left["crop_res"] - right["crop_res"]),
+                        float(right["crop_res"] - left["crop_res"]),
+                    ),
+                    3,
+                ),
+                "crop_segments_a": left["crop_segments"],
+                "crop_segments_b": right["crop_segments"],
                 "same_dimensions": same_dimensions(
                     left["width"], left["height"], right["width"], right["height"]
                 ),
@@ -184,6 +225,10 @@ def measure(
             "distance16": _distribution([r["distance16"] for r in records]),
             "ahash8_distance": _distribution([r["ahash8_distance"] for r in records]),
             "dhash8_distance": _distribution([r["dhash8_distance"] for r in records]),
+            "crop_resistant_distance": _distribution(
+                [r["crop_resistant_distance"] for r in records]
+            ),
+            "crop_segments_median": statistics.median([r["crop_segments_a"] for r in records]),
         }
         for name, records in sorted(by_class.items())
     }
@@ -209,6 +254,9 @@ def measure(
         "sweep_distance16": _sweep(pair_records, "distance16", positives, negatives),
         "sweep_ahash8": _sweep(pair_records, "ahash8_distance", positives, negatives),
         "sweep_dhash8": _sweep(pair_records, "dhash8_distance", positives, negatives),
+        "sweep_crop_resistant": _sweep_float(
+            pair_records, "crop_resistant_distance", positives, negatives
+        ),
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)

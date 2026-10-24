@@ -79,6 +79,21 @@ def phash_from_image(image: Image.Image, *, size: int = 8) -> str:
     return str(_imagehash.phash(image, hash_size=size)).lower()
 
 
+def crop_resistant_hash_from_image(image: Image.Image) -> Any:
+    """Established-library crop-resistant hash (imagehash 4.3.2, defaults).
+
+    Segments the image and hashes each region (dhash@8 per segment by the
+    library default); comparison is region matching, not whole-image hashing
+    -- the named candidate for the crop blindness measured on whole-image
+    signals.  The returned ImageMultiHash stays in memory; pair rows record
+    derived numbers only.
+    """
+
+    if _imagehash is None:  # pragma: no cover - declared runtime dependency
+        raise SimilarityError("imagehash is not installed")
+    return _imagehash.crop_resistant_hash(image)
+
+
 def ahash_from_image(image: Image.Image, *, size: int = 8) -> str:
     """Return the average hash of a loaded image as lowercase hex."""
 

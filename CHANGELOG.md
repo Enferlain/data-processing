@@ -16,6 +16,16 @@ Rules:
 ## [2026-10-24]
 
 ### Added
+- **Crop-resistant hashing evaluated — negative result (Bead `data-processing-qi7`, remaining
+  scope)** — the established library's segmentation-based `crop_resistant_hash` was added to the
+  matching-spike harness and measured over the full fixture set: crops land inside the negative
+  distribution under library defaults (crop p50 ≈ 4.5 vs negative p50 6–7; zero-FP threshold
+  ≈ 1.1 rejects nearly every crop), and parameter sensitivity probing (segment threshold, minimum
+  segment size, segmentation resolution — six configurations) rescues none of it. Two families are
+  now eliminated for crop detection on this corpus: whole-image hashing and segmentation-based
+  region matching. Feature-based (ORB/SIFT-class) methods remain the untested candidate and need
+  an opencv-class dependency — a maintainer decision. Findings and probe table in
+  `docs/plans/matching-crop-resistant-evaluation.md`; the spike evidence doc cross-links it.
 - **Multi-size hash storage decision recorded (Bead `data-processing-yn1`)** — no schema change
   now: phash@16 stays a matching-research fact until a concrete metadata consumer needs finer
   fingerprints; when one does, it lands as a new fingerprint kind (never an `phash` algorithm
