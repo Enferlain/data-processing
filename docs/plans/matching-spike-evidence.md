@@ -217,3 +217,16 @@ positives.
 - The kernel Phase D schema half (Bead `data-processing-t08`) remains the
   consumer of this evidence when relationship types and review-gated
   conclusions are designed.
+
+## Standing decision on multi-size hash storage (Bead `data-processing-yn1`)
+
+phash@16's wider margin (positives <= 36, negatives >= 114) is a *matching-research* fact, not a
+storage requirement. Per the maintainer framing (2026-10-05): hashes are identification metadata,
+and storing an additional fingerprint size is a metadata decision that stands only on a concrete
+consumer's usefulness. **No schema change is made now.** When a concrete metadata consumer needs
+finer fingerprints, phash@16 lands as a **new fingerprint kind** (`FINGERPRINT_KINDS` gains a
+value plus a migration — `asset_fingerprints` rows are identification facts keyed by kind and
+algorithm version, and a new kind keeps each size's lineage explicit), never as a new "algorithm
+version" of `phash` (which would blur the @8 legacy values already stored in `assets.phash` — see
+the managed-vs-legacy caveat above). The matching-quality side remains open on qi7
+(crop-resistant/feature-based evaluation), which this decision deliberately does not prejudice.

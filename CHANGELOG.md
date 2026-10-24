@@ -16,6 +16,19 @@ Rules:
 ## [2026-10-24]
 
 ### Added
+- **Multi-size hash storage decision recorded (Bead `data-processing-yn1`)** — no schema change
+  now: phash@16 stays a matching-research fact until a concrete metadata consumer needs finer
+  fingerprints; when one does, it lands as a new fingerprint kind (never an `phash` algorithm
+  version, which would blur the legacy @8 lineage). Recorded in
+  `docs/plans/matching-spike-evidence.md`.
+- **Mirror-vs-live strategy recorded (Bead `data-processing-6cu`)** — `docs/plans/mirror-vs-live.md`
+  sizes the provider-metadata problem from live counts (danbooru 12,386,307 posts) and measured
+  per-post footprint (1,669 B/post, raw payloads 62%), splits query classes into local-served
+  (offline joins over the retained corpus) and live-served (bounded point lookups and
+  enumeration), and records the decision: stay selective — local is the retained evidence layer,
+  live is the bounded surfaces, no full-provider mirror (~21 GB + ~62 k-request refresh sweeps
+  for danbooru alone) — with explicit revisit triggers (a provider-wide offline capability,
+  retained fraction > ~10%, or a blessed bulk dataset).
 - **Commentary and notes enrichment (Bead `data-processing-vus`; OpenSpec change
   `add-commentary-and-notes`)** — four opt-in metadata commands enrich one retained post at a
   time (`danbooru-commentary`, `aibooru-commentary`, `gelbooru-dapi-notes`, `e621-notes`) under
