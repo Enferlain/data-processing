@@ -20,6 +20,10 @@ EPISTEMIC_STATUSES = frozenset({"observed", "verified", "derived", "inferred", "
 # family needs typed linking; never widen with a generic "object" endpoint kind.
 ENDPOINT_KINDS = frozenset({"work", "media_occurrence", "post", "asset"})
 
+# Quote/reply discourse stays in post_relations as provider import facts; it
+# joins this typed vocabulary by addition only when a consumer needs typed
+# discourse linking (mirrors the ENDPOINT_KINDS policy above).
+
 # relation kind -> (symmetric, allowed subject kinds, allowed target kinds).
 # Directional kinds place the derivative, page, thumbnail, repost, or declaring
 # parent on the subject side and the origin, original, source, or child on the

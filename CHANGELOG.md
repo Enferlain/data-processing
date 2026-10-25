@@ -21,6 +21,12 @@ Rules:
   family needs typed linking; when it does, the vocabulary extends by addition, never via a
   generic `object` endpoint. Policy recorded at the declaration in
   `src/media_catalog/records/relationships.py`.
+- **Seeding boundary decisions recorded (Bead `data-processing-2mq`)** — quote/reply stay
+  provider import discourse facts in `post_relations` (join the typed relationship vocabulary by
+  addition only when a consumer needs typed discourse linking), and danbooru variant-level
+  thumbnail linking defers to Phase D occurrence-variant objects rather than flattening
+  `variants_json` roles into occurrence relations. Policies recorded at `RELATIONSHIP_KINDS` and
+  in the thumbnail seeder.
 
 ### Changed
 - **Per-source remote-run operation registry (Bead `data-processing-6y1`,
@@ -31,6 +37,11 @@ Rules:
   checkpoints, which carry no platform) validates against the registry union. A non-media family
   registers its own operation names when it lands, widening the SQL CHECK constraints by
   migration.
+- **Repost seeding reports dropped source URLs (Bead `data-processing-2mq`)** — the
+  `reposted_from` seeding pass now counts `source_url` references that have no resolvable
+  platform reference instead of dropping them at the JOIN, reporting skip reasons typed as
+  `source_url_unresolved` / `target_post_unresolved` / `self_reference` under `skipped_reasons`
+  (`skipped` remains the total).
 
 ## [2026-10-24]
 

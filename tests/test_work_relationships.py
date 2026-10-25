@@ -168,6 +168,22 @@ def _seed(catalog: Path) -> dict[str, int]:
                VALUES (?, ?, 'source_url', ?, '2026-01-01T00:00:00Z')""",
             (ids["3002"], reference, raw),
         )
+        # An unresolved source URL (external link only, no typed platform
+        # reference) must be counted as a skip, not dropped by the JOIN.
+        c.execute(
+            """INSERT INTO external_links (canonical_url, canonicalization_version,
+                                           resolution_state, resolution_reason)
+               VALUES ('https://example.com/unresolved-source', 'url-v1',
+                       'unresolved', 'no recognizer')"""
+        )
+        link = int(c.execute("SELECT external_link_id FROM external_links").fetchone()[0])
+        c.execute(
+            """INSERT INTO post_external_references (post_id, external_link_id,
+                                                     reference_kind, raw_observation_id,
+                                                     observed_at)
+               VALUES (?, ?, 'source_url', ?, '2026-01-01T00:00:00Z')""",
+            (ids["3003"], link, raw),
+        )
         c.execute(
             """INSERT INTO post_relations (source_post_id, target_post_id, relation_type,
                                            raw_observation_id)
@@ -357,8 +373,18 @@ def test_seeder_materializes_deterministic_kinds_with_evidence(tmp_path: Path) -
     assert result["same_bytes"] == {"materialized": 3, "existing": 0}
     # thumbnail_of: 3001:1 (sample) -> 3001:0 (original).
     assert result["thumbnail_of"] == {"materialized": 1, "existing": 0, "skipped": 0}
-    # reposted_from: post 3002 cites post 3001.
-    assert result["reposted_from"] == {"materialized": 1, "existing": 0, "skipped": 0}
+    # reposted_from: post 3002 cites post 3001; the unresolved source URL
+    # declared by post 3003 is counted as a skip, not dropped.
+    assert result["reposted_from"] == {
+        "materialized": 1,
+        "existing": 0,
+        "skipped": 1,
+        "skipped_reasons": {
+            "source_url_unresolved": 1,
+            "target_post_unresolved": 0,
+            "self_reference": 0,
+        },
+    }
     # parent_of: 3003 -> 3001 with a raw observation, 3002 -> 3001 without one
     # (still materializes), and the 3003 self-link is skipped.
     assert result["parent_of"] == {"materialized": 2, "existing": 0, "skipped": 1}
@@ -397,7 +423,16 @@ def test_seeder_materializes_deterministic_kinds_with_evidence(tmp_path: Path) -
         again = seed_relationships(database, clock=lambda: NOW)
     assert again["same_bytes"] == {"materialized": 0, "existing": 3}
     assert again["thumbnail_of"] == {"materialized": 0, "existing": 1, "skipped": 0}
-    assert again["reposted_from"] == {"materialized": 0, "existing": 1, "skipped": 0}
+    assert again["reposted_from"] == {
+        "materialized": 0,
+        "existing": 1,
+        "skipped": 1,
+        "skipped_reasons": {
+            "source_url_unresolved": 1,
+            "target_post_unresolved": 0,
+            "self_reference": 0,
+        },
+    }
     assert again["parent_of"] == {"materialized": 0, "existing": 2, "skipped": 1}
 
 

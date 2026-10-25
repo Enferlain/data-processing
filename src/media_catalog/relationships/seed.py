@@ -94,6 +94,11 @@ def _seed_thumbnail_of(
     database: CatalogDatabase, writer: CatalogWriter, now: str
 ) -> dict[str, int]:
     materialized = existing = skipped = 0
+    # Occurrence-level roles only: e621 declares original/sample/preview per
+    # occurrence, while danbooru carries role NULL with variant roles inside
+    # variants_json below occurrence level.  Variant-level thumbnail linking
+    # waits for Phase D occurrence-variant objects; do not flatten
+    # sub-occurrence variants into occurrence relations here.
     rows = database.connection.execute(
         """SELECT t.media_occurrence_id AS thumbnail_id, t.role AS role,
                   o.media_occurrence_id AS original_id
@@ -145,8 +150,24 @@ def _seed_thumbnail_of(
 
 def _seed_reposted_from(
     database: CatalogDatabase, writer: CatalogWriter, now: str
-) -> dict[str, int]:
-    materialized = existing = skipped = 0
+) -> dict[str, Any]:
+    # Source URLs retained only as external links (no platform reference, or
+    # one that does not name a post) can never resolve to a catalog post; the
+    # JOIN below drops them silently, so count them as skippable up front.
+    reasons = {
+        "source_url_unresolved": int(
+            database.connection.execute(
+                """SELECT COUNT(*) FROM post_external_references per
+                    LEFT JOIN platform_references pr
+                      ON pr.platform_reference_id = per.platform_reference_id
+                   WHERE per.reference_kind = 'source_url'
+                     AND (per.platform_reference_id IS NULL OR pr.object_kind != 'post')"""
+            ).fetchone()[0]
+        ),
+        "target_post_unresolved": 0,
+        "self_reference": 0,
+    }
+    materialized = existing = 0
     rows = database.connection.execute(
         """SELECT per.post_id AS citing_post_id,
                   COALESCE(pr.resolved_post_id,
@@ -164,8 +185,11 @@ def _seed_reposted_from(
     ).fetchall()
     for row in rows:
         cited = row["cited_post_id"]
-        if cited is None or int(cited) == int(row["citing_post_id"]):
-            skipped += 1
+        if cited is None:
+            reasons["target_post_unresolved"] += 1
+            continue
+        if int(cited) == int(row["citing_post_id"]):
+            reasons["self_reference"] += 1
             continue
         outcome = _add(
             writer,
@@ -188,7 +212,12 @@ def _seed_reposted_from(
         )
         materialized += outcome == "inserted"
         existing += outcome == "existing"
-    return {"materialized": materialized, "existing": existing, "skipped": skipped}
+    return {
+        "materialized": materialized,
+        "existing": existing,
+        "skipped": sum(reasons.values()),
+        "skipped_reasons": reasons,
+    }
 
 
 def _seed_parent_of(database: CatalogDatabase, writer: CatalogWriter, now: str) -> dict[str, int]:
