@@ -42,6 +42,12 @@ Rules:
   platform reference instead of dropping them at the JOIN, reporting skip reasons typed as
   `source_url_unresolved` / `target_post_unresolved` / `self_reference` under `skipped_reasons`
   (`skipped` remains the total).
+- **Anchorless raw observations dedup on re-intake (Bead `data-processing-40x`, spike F4)** —
+  migration `0018` gives anchorless observations (no import run, no remote run/request) a
+  content-addressed identity — object kind, native id when present, payload bytes — via two
+  disjoint partial unique indexes. `store_raw` targets them with typed conflict clauses, so
+  byte-identical re-intake resolves to the earliest observation instead of appending duplicates;
+  anchored rows keep the pre-existing identity.
 
 ## [2026-10-24]
 

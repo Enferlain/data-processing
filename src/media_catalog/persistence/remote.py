@@ -89,7 +89,7 @@ class RemoteWrites:
                    WHERE remote_request_id = ?""",
                 (remote_request_id,),
             ).fetchone()
-        else:
+        elif import_run_id is not None:
             self.connection.execute(
                 """INSERT INTO raw_observations (
                        raw_payload_id, import_run_id, platform_id, object_kind, native_id,
@@ -97,7 +97,8 @@ class RemoteWrites:
                        remote_request_id, adapter_version, schema_version,
                        transport_key, transport_version
                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(import_run_id, object_kind, native_id, raw_payload_id) DO NOTHING""",
+                   ON CONFLICT(import_run_id, object_kind, native_id, raw_payload_id)
+                   DO NOTHING""",
                 values,
             )
             row = self.connection.execute(
@@ -106,6 +107,42 @@ class RemoteWrites:
                          AND raw_payload_id = ?
                    ORDER BY raw_observation_id LIMIT 1""",
                 (import_run_id, record.object_kind, record.native_id, payload_id),
+            ).fetchone()
+        else:
+            # Anchorless identity is content addressing (spike F4, Bead
+            # data-processing-40x): object kind, native id when present, and
+            # payload bytes, enforced by the 0018 partial unique indexes.
+            # Re-intake of identical payloads resolves to the earliest
+            # observation instead of appending a duplicate row.
+            if record.native_id is not None:
+                conflict_target = (
+                    "(object_kind, native_id, raw_payload_id)"
+                    " WHERE import_run_id IS NULL AND remote_run_id IS NULL"
+                    " AND remote_request_id IS NULL AND native_id IS NOT NULL"
+                )
+            else:
+                conflict_target = (
+                    "(object_kind, raw_payload_id)"
+                    " WHERE import_run_id IS NULL AND remote_run_id IS NULL"
+                    " AND remote_request_id IS NULL AND native_id IS NULL"
+                )
+            self.connection.execute(
+                f"""INSERT INTO raw_observations (
+                       raw_payload_id, import_run_id, platform_id, object_kind, native_id,
+                       media_type, source_schema, status, observed_at, remote_run_id,
+                       remote_request_id, adapter_version, schema_version,
+                       transport_key, transport_version
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT{conflict_target} DO NOTHING""",
+                values,
+            )
+            row = self.connection.execute(
+                """SELECT raw_observation_id FROM raw_observations
+                   WHERE import_run_id IS NULL AND remote_run_id IS NULL
+                         AND remote_request_id IS NULL AND object_kind = ?
+                         AND native_id IS ? AND raw_payload_id = ?
+                   ORDER BY raw_observation_id LIMIT 1""",
+                (record.object_kind, record.native_id, payload_id),
             ).fetchone()
         if row is None:
             raise RuntimeError("failed to store raw observation")

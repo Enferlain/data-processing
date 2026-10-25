@@ -105,6 +105,37 @@ def test_raw_payload_is_deduplicated_across_observations(tmp_path: Path) -> None
         assert database.connection.execute("SELECT COUNT(*) FROM raw_payloads").fetchone()[0] == 1
 
 
+def test_anchorless_raw_observations_dedup_on_reintake(tmp_path: Path) -> None:
+    with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            named = RawRecord(b'{"a":1}', "application/json", "post", "42", NOW)
+            first_named = writer.store_raw(named)
+            assert writer.store_raw(named) == first_named
+            # Identity is content, not time: a later observation of the same
+            # payload still resolves to the earliest row.
+            later = RawRecord(b'{"a":1}', "application/json", "post", "42", "2026-08-06T00:00:00Z")
+            assert writer.store_raw(later) == first_named
+            anonymous = RawRecord(b'{"b":2}', "application/json", "post", None, NOW)
+            first_anonymous = writer.store_raw(anonymous)
+            assert writer.store_raw(anonymous) == first_anonymous
+            distinct = writer.store_raw(
+                RawRecord(b'{"c":3}', "application/json", "post", "42", NOW)
+            )
+            # Same payload and native id under a different object kind keeps
+            # its own observation: kind is part of the identity.
+            other_kind = writer.store_raw(
+                RawRecord(b'{"a":1}', "application/json", "account", "42", NOW)
+            )
+        # The count is the regression pin: under the pre-0018 identity this
+        # sequence appended one duplicate row per re-intake.
+        observations = database.connection.execute(
+            "SELECT COUNT(*) FROM raw_observations"
+        ).fetchone()[0]
+        assert observations == 4
+        assert len({first_named, first_anonymous, distinct, other_kind}) == 4
+
+
 def test_validation_rejects_invalid_roles_ids_and_hashes(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="platform"):
         AccountRecord("Bad Platform", "7", NOW)
