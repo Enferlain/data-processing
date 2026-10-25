@@ -22,6 +22,16 @@ Rules:
   generic `object` endpoint. Policy recorded at the declaration in
   `src/media_catalog/records/relationships.py`.
 
+### Changed
+- **Per-source remote-run operation registry (Bead `data-processing-6y1`,
+  non-media-consumer spike F2)** — `RemoteRunRecord` now validates its operation against
+  `SOURCE_OPERATIONS`, a per-platform registry: shipped media platform keys map to the shared
+  media set (behavior unchanged for media runs), unregistered platform keys are refused, and a
+  platform cannot declare another family's operations. `validate_remote_operation` (requests and
+  checkpoints, which carry no platform) validates against the registry union. A non-media family
+  registers its own operation names when it lands, widening the SQL CHECK constraints by
+  migration.
+
 ## [2026-10-24]
 
 ### Added

@@ -14,7 +14,7 @@ from media_catalog.adapters import (
     ResponseEnvelope,
     load_fixture_suite,
 )
-from media_catalog.records import RemoteRunRecord
+from media_catalog.records import SOURCE_OPERATIONS, RemoteRunRecord
 
 FIXTURES = Path(__file__).parent / "fixtures" / "metadata_adapters"
 
@@ -57,6 +57,39 @@ def test_tag_operations_are_valid_remote_run_operations(operation: str) -> None:
         started_at="2026-08-13T00:00:00Z",
     )
     assert record.operation == operation
+
+
+def _remote_run(platform: str, operation: str) -> RemoteRunRecord:
+    return RemoteRunRecord(
+        platform=platform,
+        operation=operation,
+        target="fox",
+        adapter_version="adapter-v1",
+        schema_version="schema-v1",
+        request_budget=1,
+        page_budget=1,
+        record_budget=1,
+        time_budget_seconds=1,
+        started_at="2026-08-13T00:00:00Z",
+    )
+
+
+def test_remote_run_operations_are_registered_per_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(ValueError, match="unregistered remote platform: pypi"):
+        _remote_run("pypi", "fetch_tag")
+    monkeypatch.setitem(SOURCE_OPERATIONS, "pypi", frozenset({"fetch_package"}))
+    assert _remote_run("pypi", "fetch_package").operation == "fetch_package"
+    with pytest.raises(ValueError, match="unsupported remote operation for pypi"):
+        _remote_run("pypi", "fetch_tag")
+
+
+def test_source_operation_registry_covers_the_adapter_vocabulary() -> None:
+    assert set(SOURCE_OPERATIONS) == {"aibooru", "danbooru", "e621", "gelbooru", "pixiv"}
+    assert set().union(*SOURCE_OPERATIONS.values()) == {
+        operation.value for operation in AdapterOperation
+    }
 
 
 def test_page_record_count_budgets_top_level_entities_not_child_metadata() -> None:

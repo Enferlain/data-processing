@@ -61,6 +61,19 @@ REMOTE_OPERATIONS = frozenset(
         "fetch_notes",
     }
 )
+# Per-platform remote-operation registry (non-media-consumer spike F2,
+# docs/plans/non-media-consumer-spike.md): a platform key maps to the
+# operations its runs may honestly declare. The media family maps every
+# shipped platform key to the shared media set; a non-media family registers
+# its own operation names under its own platform key, never borrows the media
+# set, and widens the SQL CHECK constraints by migration when it lands.
+SOURCE_OPERATIONS: dict[str, frozenset[str]] = {
+    "aibooru": REMOTE_OPERATIONS,
+    "danbooru": REMOTE_OPERATIONS,
+    "e621": REMOTE_OPERATIONS,
+    "gelbooru": REMOTE_OPERATIONS,
+    "pixiv": REMOTE_OPERATIONS,
+}
 REMOTE_RUN_STATUSES = frozenset({"running", "complete", "paused", "failed"})
 REMOTE_OUTCOMES = frozenset(
     {
@@ -188,7 +201,21 @@ def validate_event_type(event_type: str) -> str:
 
 
 def validate_remote_operation(value: str) -> str:
-    return _validate_choice(value, REMOTE_OPERATIONS, "remote operation")
+    return _validate_choice(
+        value, frozenset(set().union(*SOURCE_OPERATIONS.values())), "remote operation"
+    )
+
+
+def validate_source_operation(platform: str, operation: str) -> str:
+    """Validate an operation against the declaring platform's registered set."""
+
+    allowed = SOURCE_OPERATIONS.get(platform)
+    if allowed is None:
+        raise ValueError(
+            f"unregistered remote platform: {platform}"
+            " (register its operations in SOURCE_OPERATIONS)"
+        )
+    return _validate_choice(operation, allowed, f"remote operation for {platform}")
 
 
 def validate_remote_run_status(value: str) -> str:

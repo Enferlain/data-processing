@@ -15,6 +15,7 @@ from media_catalog.records.common import (
     validate_remote_operation,
     validate_remote_outcome,
     validate_secret_free_identity,
+    validate_source_operation,
     validate_transport_pair,
 )
 
@@ -40,7 +41,7 @@ class RemoteRunRecord:
 
     def __post_init__(self) -> None:
         validate_platform(self.platform)
-        validate_remote_operation(self.operation)
+        validate_source_operation(self.platform, self.operation)
         validate_native_id(self.target)
         _validate_nonempty(self.adapter_version, "remote adapter version", max_length=200)
         _validate_nonempty(self.schema_version, "remote schema version", max_length=200)
