@@ -13,6 +13,15 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-25]
+
+### Added
+- **Endpoint-kind generalization decided: conscious deferral (Bead `data-processing-9h6`,
+  non-media-consumer spike F3)** — `ENDPOINT_KINDS` stays media-closed until a non-media
+  family needs typed linking; when it does, the vocabulary extends by addition, never via a
+  generic `object` endpoint. Policy recorded at the declaration in
+  `src/media_catalog/records/relationships.py`.
+
 ## [2026-10-24]
 
 ### Added

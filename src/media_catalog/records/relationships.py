@@ -15,6 +15,9 @@ from dataclasses import dataclass
 
 WORK_KINDS = frozenset({"single", "multi_page", "unknown"})
 EPISTEMIC_STATUSES = frozenset({"observed", "verified", "derived", "inferred", "reviewed"})
+# Media-closed by conscious decision (non-media-consumer spike F3,
+# docs/plans/non-media-consumer-spike.md): extend by addition when a non-media
+# family needs typed linking; never widen with a generic "object" endpoint kind.
 ENDPOINT_KINDS = frozenset({"work", "media_occurrence", "post", "asset"})
 
 # relation kind -> (symmetric, allowed subject kinds, allowed target kinds).
