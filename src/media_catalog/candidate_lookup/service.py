@@ -349,6 +349,12 @@ class CandidateLookupService:
             raise
 
     def _retain_response(self, run_id: int, attempt: int, response: ResponseEnvelope) -> int:
+        # Anchorless retention is content addressing scoped to this adapter's
+        # source (Bead data-processing-7o0): a retry returning byte-identical
+        # bytes resolves to the SAME observation, shared with the earlier
+        # request.  Sharing is intended -- each request below keeps its own
+        # outcome, status, and timestamps; the observation is the payload
+        # fact "this source reported these bytes".
         outcome = _response_outcome(response.status_code)
         with self.database.transaction():
             raw_id = self.writer.store_raw(

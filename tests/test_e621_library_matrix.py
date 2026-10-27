@@ -126,7 +126,9 @@ def test_e621_attribution_ambiguity_requires_explicit_selection_and_never_confir
             second_attribution = _e621_attribution(writer, "tag:67890")
             _e621_tag(writer, provider_tag_id="12345", name="artist_a")
             _e621_tag(writer, provider_tag_id="67890", name="artist_b")
-            raw_id = writer.store_raw(RawRecord(b"{}", "application/json", "post", "5001", NOW))
+            raw_id = writer.store_raw(
+                RawRecord(b"{}", "application/json", "post", "5001", NOW, platform="e621")
+            )
             for provider_id in ("tag:12345", "tag:67890"):
                 writer.add_post_external_reference(
                     seed_id,

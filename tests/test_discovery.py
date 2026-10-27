@@ -26,7 +26,9 @@ def _catalog(path: Path) -> CatalogDatabase:
         sort_keys=True,
     ).encode()
     with database.transaction():
-        raw_id = writer.store_raw(RawRecord(raw, "application/json", "post", "42", NOW))
+        raw_id = writer.store_raw(
+            RawRecord(raw, "application/json", "post", "42", NOW, platform="gelbooru")
+        )
         account = writer.upsert_account(
             AccountRecord(
                 "x",
@@ -337,7 +339,14 @@ def test_malformed_retained_record_is_counted_without_leaking_payload(tmp_path: 
         writer = CatalogWriter(database)
         with database.transaction():
             raw_id = writer.store_raw(
-                RawRecord(b"{private malformed", "application/json", "post", "bad", NOW)
+                RawRecord(
+                    b"{private malformed",
+                    "application/json",
+                    "post",
+                    "bad",
+                    NOW,
+                    platform="gelbooru",
+                )
             )
             writer.upsert_post(PostRecord("x", "bad", NOW), raw_observation_id=raw_id)
         result = DiscoveryService(database).discover()

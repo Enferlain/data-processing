@@ -49,6 +49,23 @@ Rules:
   byte-identical re-intake resolves to the earliest observation instead of appending duplicates;
   anchored rows keep the pre-existing identity.
 
+## [2026-10-26]
+
+### Added
+- **Source-scoped anchorless identity + repair path (Bead `data-processing-7o0`; OpenSpec change
+  `source-scoped-anchorless-identity`)** — migration 0019 replaces 0018's anchorless partial
+  unique indexes with platform-scoped ones: byte-identical payloads from the same source share one
+  observation (blessed by decision at the candidate-lookup and library-probe call sites), while
+  different sources never fold — 0018's key conflated danbooru/aibooru lookups returning
+  identical bodies (two real-catalog collisions verified). Anchorless retention now requires a
+  declared source platform. `scripts/repair_anchorless_observations.py` (dry-run by default)
+  performs the 0018-comment trigger surgery under the strict definition — keep the earliest row,
+  dynamically re-point referencing rows, delete unreferenced members, recreate triggers verbatim,
+  verify foreign keys and zero remaining groups — reporting same-platform and cross-platform
+  folds separately; proven against a copy of the real catalog (5 folds: 3 same-platform, 2
+  cross-platform), which then migrates through 0019 cleanly. A kernel requirement now names the
+  identity rule (anchor-scoped or source-scoped content addressing).
+
 ## [2026-10-24]
 
 ### Added

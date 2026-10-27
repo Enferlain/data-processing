@@ -24,7 +24,6 @@ call/dependency tracing, impact analysis, and related structural queries.
 Prefer its graph workflow before broad grep/glob/file exploration.
 <!-- codebase-memory-mcp:end -->
 
-
 ## Python Quality Gates
 
 Use the project environment through `uv`.

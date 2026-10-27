@@ -26,7 +26,15 @@ def test_writer_preserves_raw_profiles_roles_events_and_assets(tmp_path: Path) -
         raw = json.dumps({"unknown": {"future": True}}, separators=(",", ":")).encode()
         with database.transaction():
             raw_id = writer.store_raw(
-                RawRecord(raw, "application/json", "post", "42", NOW, "fixture-v1")
+                RawRecord(
+                    raw,
+                    "application/json",
+                    "post",
+                    "42",
+                    NOW,
+                    "fixture-v1",
+                    platform="danbooru",
+                )
             )
             account_id = writer.upsert_account(
                 AccountRecord("x", "7", NOW, handle=None, display_name=None),
@@ -98,7 +106,9 @@ def test_account_snapshots_keep_history_and_deduplicate_same_source(tmp_path: Pa
 def test_raw_payload_is_deduplicated_across_observations(tmp_path: Path) -> None:
     with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
         writer = CatalogWriter(database)
-        record = RawRecord(b'{"same":true}', "application/json", "post", "42", NOW)
+        record = RawRecord(
+            b'{"same":true}', "application/json", "post", "42", NOW, platform="danbooru"
+        )
         with database.transaction():
             writer.store_raw(record)
             writer.store_raw(record)
@@ -109,31 +119,78 @@ def test_anchorless_raw_observations_dedup_on_reintake(tmp_path: Path) -> None:
     with CatalogDatabase(tmp_path / "catalog.sqlite3") as database:
         writer = CatalogWriter(database)
         with database.transaction():
-            named = RawRecord(b'{"a":1}', "application/json", "post", "42", NOW)
+            named = RawRecord(
+                b'{"a":1}', "application/json", "post", "42", NOW, platform="danbooru"
+            )
             first_named = writer.store_raw(named)
             assert writer.store_raw(named) == first_named
             # Identity is content, not time: a later observation of the same
             # payload still resolves to the earliest row.
-            later = RawRecord(b'{"a":1}', "application/json", "post", "42", "2026-08-06T00:00:00Z")
+            later = RawRecord(
+                b'{"a":1}',
+                "application/json",
+                "post",
+                "42",
+                "2026-08-06T00:00:00Z",
+                platform="danbooru",
+            )
             assert writer.store_raw(later) == first_named
-            anonymous = RawRecord(b'{"b":2}', "application/json", "post", None, NOW)
+            # Different source, identical bytes: never folds (7o0).  An
+            # observation is "this source reported these bytes".
+            mirror = writer.store_raw(
+                RawRecord(
+                    b'{"a":1}',
+                    "application/json",
+                    "post",
+                    "42",
+                    NOW,
+                    platform="aibooru",
+                )
+            )
+            assert mirror != first_named
+            anonymous = RawRecord(
+                b'{"b":2}', "application/json", "post", None, NOW, platform="danbooru"
+            )
             first_anonymous = writer.store_raw(anonymous)
             assert writer.store_raw(anonymous) == first_anonymous
             distinct = writer.store_raw(
-                RawRecord(b'{"c":3}', "application/json", "post", "42", NOW)
+                RawRecord(b'{"c":3}', "application/json", "post", "42", NOW, platform="danbooru")
             )
             # Same payload and native id under a different object kind keeps
             # its own observation: kind is part of the identity.
             other_kind = writer.store_raw(
-                RawRecord(b'{"a":1}', "application/json", "account", "42", NOW)
+                RawRecord(
+                    b'{"a":1}',
+                    "application/json",
+                    "account",
+                    "42",
+                    NOW,
+                    platform="danbooru",
+                )
             )
         # The count is the regression pin: under the pre-0018 identity this
-        # sequence appended one duplicate row per re-intake.
+        # sequence appended one duplicate row per re-intake; under 0018 the
+        # aibooru mirror folded into the danbooru row.
         observations = database.connection.execute(
             "SELECT COUNT(*) FROM raw_observations"
         ).fetchone()[0]
-        assert observations == 4
-        assert len({first_named, first_anonymous, distinct, other_kind}) == 4
+        assert observations == 5
+        assert len({first_named, mirror, first_anonymous, distinct, other_kind}) == 5
+        attribution = {
+            (row[0], row[1])
+            for row in database.connection.execute(
+                """SELECT pl.platform_key, ro.raw_observation_id
+                     FROM raw_observations ro
+                     JOIN platforms pl ON pl.platform_id = ro.platform_id
+                     JOIN raw_payloads rp ON rp.raw_payload_id = ro.raw_payload_id
+                    WHERE ro.object_kind = 'post' AND rp.payload = x'7b2261223a317d'"""
+            )
+        }
+        assert attribution == {("danbooru", first_named), ("aibooru", mirror)}
+        # Anchorless retention requires a declared source (7o0): platform-less
+        # source reports must anchor to a run instead.
+        with pytest.raises(ValueError, match="declared source platform"):
+            writer.store_raw(RawRecord(b'{"x":1}', "application/json", "post", "7", NOW))
 
 
 def test_validation_rejects_invalid_roles_ids_and_hashes(tmp_path: Path) -> None:

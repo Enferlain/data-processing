@@ -109,20 +109,25 @@ class RemoteWrites:
                 (import_run_id, record.object_kind, record.native_id, payload_id),
             ).fetchone()
         else:
-            # Anchorless identity is content addressing (spike F4, Bead
-            # data-processing-40x): object kind, native id when present, and
-            # payload bytes, enforced by the 0018 partial unique indexes.
-            # Re-intake of identical payloads resolves to the earliest
-            # observation instead of appending a duplicate row.
+            # Anchorless identity is content addressing scoped to the source
+            # (spike F4, Bead data-processing-40x and data-processing-7o0):
+            # platform, object kind, native id when present, and payload
+            # bytes, enforced by the 0019 partial unique indexes.  Identical
+            # bytes from the SAME source resolve to one observation shared by
+            # any number of requesting rows; different sources never fold --
+            # an observation is "this source reported these bytes", so
+            # anchorless retention requires a declared platform.
+            if record_platform_id is None:
+                raise ValueError("anchorless raw observations require a declared source platform")
             if record.native_id is not None:
                 conflict_target = (
-                    "(object_kind, native_id, raw_payload_id)"
+                    "(platform_id, object_kind, native_id, raw_payload_id)"
                     " WHERE import_run_id IS NULL AND remote_run_id IS NULL"
                     " AND remote_request_id IS NULL AND native_id IS NOT NULL"
                 )
             else:
                 conflict_target = (
-                    "(object_kind, raw_payload_id)"
+                    "(platform_id, object_kind, raw_payload_id)"
                     " WHERE import_run_id IS NULL AND remote_run_id IS NULL"
                     " AND remote_request_id IS NULL AND native_id IS NULL"
                 )
@@ -139,10 +144,11 @@ class RemoteWrites:
             row = self.connection.execute(
                 """SELECT raw_observation_id FROM raw_observations
                    WHERE import_run_id IS NULL AND remote_run_id IS NULL
-                         AND remote_request_id IS NULL AND object_kind = ?
-                         AND native_id IS ? AND raw_payload_id = ?
+                         AND remote_request_id IS NULL AND platform_id = ?
+                         AND object_kind = ? AND native_id IS ?
+                         AND raw_payload_id = ?
                    ORDER BY raw_observation_id LIMIT 1""",
-                (record.object_kind, record.native_id, payload_id),
+                (record_platform_id, record.object_kind, record.native_id, payload_id),
             ).fetchone()
         if row is None:
             raise RuntimeError("failed to store raw observation")

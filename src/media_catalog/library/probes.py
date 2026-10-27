@@ -234,6 +234,11 @@ class LibraryCountProbeService:
                 outcome = AdapterOutcome.MALFORMED_RESPONSE
                 diagnostic = str(error)
         with self.database.transaction():
+            # Anchorless retention is content addressing scoped to the probed
+            # source (Bead data-processing-7o0): a re-probe returning
+            # byte-identical bytes resolves to the SAME observation, shared
+            # with the earlier probe.  Sharing is intended -- the probe row
+            # keeps its own outcome and timestamps.
             raw_id = self.writer.store_raw(
                 RawRecord(
                     response.payload,
