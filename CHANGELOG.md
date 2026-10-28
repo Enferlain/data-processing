@@ -25,6 +25,15 @@ Rules:
   `malformed_response`); the synthetic fixture and the spec's provisional clause are gone; the
   capture utility gained `capture_gelbooru_dapi_notes`.
 
+### Added
+- **Crop-matching next-experiment direction recorded (Bead `data-processing-qi7`)** —
+  maintainer guidance appended to `docs/plans/matching-crop-resistant-evaluation.md`: SIFT +
+  RANSAC first (ORB deprioritized; learned features only if SIFT struggles; custom tiled
+  matching last), a per-pair metric set (RANSAC inliers/ratio, spatial coverage, scale/rotation,
+  reprojection error, crop-rectangle containment, symmetric test) instead of raw match counts,
+  and the Lowe-ratio + homography pipeline shape. Nothing implemented; the opencv dependency
+  decision stays open.
+
 ## [2026-10-25]
 
 ### Added

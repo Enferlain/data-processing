@@ -57,3 +57,34 @@ custom tile-subset method, which the bead's standing rule defers until establish
 exhausted (they now are, within the current dependency set). Crop proposals therefore remain
 **not available** to any product surface; the evidence stays research-only per the standing
 constraint.
+
+## Next experiment direction (maintainer guidance, 2026-10-28)
+
+Direction recorded for whoever picks this up; nothing implemented yet, and the opencv-class
+dependency decision remains open.
+
+**Ranking.** 1) SIFT + RANSAC — the strongest boring established method left, and almost exactly
+the crop-detection problem (does a subset of local features in one image geometrically agree with
+features in the other?). 2) LightGlue/SuperPoint-class learned features, only if SIFT struggles —
+anime/art-style images yield fewer natural-texture keypoints than photographs, so learned
+features may matter more here than in ordinary photo dedup. 3) Custom tiled/subimage matching
+only afterward (the standing rule: established options first). ORB is not the starting point:
+SIFT is noticeably more robust to scaling and difficult transforms, and crops may also be
+resized or transcoded; ORB only wins on dependency/compute constraints.
+
+**Metric design — do not reduce to a match count.** A rule like ">= N matches = crop" is the
+anti-pattern: repeated line art, eyes, hair strands, signatures, and UI decorations generate
+convincing-but-wrong local matches. The signal is *many matches agreeing on one geometrically
+coherent transform*. Per pair, record: tentative matches; RANSAC inliers; inlier ratio; spatial
+coverage of the matched region; estimated scale/rotation; reprojection error; whether the
+inferred crop rectangle lies plausibly inside the parent; and a symmetric test, since the crop
+side is not known a priori.
+
+**Pipeline.** SIFT descriptors on both images -> nearest-neighbor matching -> Lowe ratio test ->
+RANSAC homography -> inliers + reprojection error -> map crop corners into the parent ->
+geometric sanity checks. Same 239-file / 212-pair harness; add the metrics above as sweep
+columns.
+
+**Failure is informative.** Unlike hashing, local features are inspectable: on failure, examine
+matched keypoints and the recovered transform to decide whether the next step is learned
+features, tiled matching, or something illustration-specific.
