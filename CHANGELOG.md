@@ -49,6 +49,18 @@ Rules:
   byte-identical re-intake resolves to the earliest observation instead of appending duplicates;
   anchored rows keep the pre-existing identity.
 
+## [2026-10-28]
+
+### Added
+- **Replay-stamp repair (Bead `data-processing-3qq`)** — `scripts/repair_replay_stamps.py`
+  (dry-run by default) repairs the damage the 2026-10-08 pre-fix reprocess runs left: fact rows
+  whose timestamp equals a reprocess run's `started_at` with an identical-facts earlier twin are
+  deleted via trigger surgery (6 metadata, 1 snapshot, 172 post-tag observations on the audited
+  catalog — every replay row had a twin, zero orphans), occurrence timestamps are restored from
+  their retained raw observations, and current-projection fields (3 posts, 55 tags, 87 post_tags,
+  2 accounts) are recomputed from the surviving history. Verified end to end on a copy of the
+  real catalog: zero replay-stamped rows remain anywhere, foreign keys clean, originals restored.
+
 ## [2026-10-26]
 
 ### Added

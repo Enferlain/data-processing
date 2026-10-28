@@ -228,9 +228,7 @@ def test_post_typed_artist_reference_resolves_existing_attribution(tmp_path: Pat
                 )
             ).id
             raw_id = writer.store_raw(
-                RawRecord(
-                    b"{}", "application/json", "post", "55", NOW, platform="danbooru"
-                )
+                RawRecord(b"{}", "application/json", "post", "55", NOW, platform="danbooru")
             )
             writer.add_post_external_reference(
                 post_id,
