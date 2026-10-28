@@ -169,8 +169,9 @@ the dapi note endpoint under the bounded run contract, as an explicit operator a
 from default post sync, using the adapter's credentialed transport. Each note observation SHALL
 retain the provider note identifier, body text, and position, deduplicated by a digest over those
 facts. The operation SHALL require an already-retained post and SHALL retain the raw source report
-with provenance. Until a credentialed live capture replaces the current documented-shape fixture,
-the response contract SHALL be treated as provisional.
+with provenance. The response contract is verified by credentialed live capture (2026-10-28):
+the dapi note index returns XML regardless of json=1, and the retained fixture carries the
+captured bytes.
 
 #### Scenario: Notes land with position
 - **WHEN** an operator enriches a retained post whose dapi note query returns note entries

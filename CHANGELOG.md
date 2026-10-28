@@ -13,6 +13,18 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-28]
+
+### Fixed
+- **Gelbooru dapi note contract verified live: XML, not JSON (Bead `data-processing-r4y`)** —
+  a credentialed capture of the dapi note index (`s=note`) shows the endpoint serves XML
+  regardless of `json=1`, disproving the synthetic JSON-wrapper fixture; post 953320 carries no
+  notes, so the fixture subject is post 15172350 (two active notes, captured bytes retained in
+  `gelbooru_notes_15172350.xml`). The enrichment parser now reads the XML notes document with
+  strict attribute typing (any violation still classifies the whole response
+  `malformed_response`); the synthetic fixture and the spec's provisional clause are gone; the
+  capture utility gained `capture_gelbooru_dapi_notes`.
+
 ## [2026-10-25]
 
 ### Added

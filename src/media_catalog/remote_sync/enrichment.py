@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from typing import Any
+from xml.etree import ElementTree
 
 from media_catalog.adapters import AdapterOperation, AdapterRequest, ResponseEnvelope
 from media_catalog.database import CatalogDatabase
@@ -331,20 +332,44 @@ def _require_post(database: CatalogDatabase, platform_key: str, native_post_id: 
 
 
 def _parse_document(payload: bytes) -> list[Any] | None:
-    """Accept a bare JSON array or the modern dapi wrapper dict."""
+    """Accept a bare JSON array (danbooru/e621) or dapi XML notes (gelbooru)."""
 
     try:
         document = json.loads(payload)
     except ValueError:
-        return None
+        return _parse_xml_notes(payload)
     if isinstance(document, list):
         return document
-    if isinstance(document, dict):
-        # Modern dapi json=1 responses wrap arrays under a result key --
-        # "note" for note queries, following the in-repo dapi precedent
-        # ("post"/"tag" for the existing operations).
-        for key in ("note", "notes"):
-            entries = document.get(key)
-            if isinstance(entries, list):
-                return entries
     return None
+
+
+def _parse_xml_notes(payload: bytes) -> list[dict[str, Any]] | None:
+    """Gelbooru dapi serves the note index as XML regardless of json=1.
+
+    Verified by credentialed live capture 2026-10-28 (Bead data-processing-r4y,
+    fixture gelbooru_notes_15172350.xml).  Attributes are typed strictly and
+    any violation rejects the whole document, matching the JSON paths.
+    """
+
+    if b"<!DOCTYPE" in payload:
+        return None
+    try:
+        root = ElementTree.fromstring(payload)
+    except ElementTree.ParseError:
+        return None
+    if root.tag != "notes":
+        return None
+    entries: list[dict[str, Any]] = []
+    for element in root:
+        if element.tag != "note":
+            return None
+        entry: dict[str, Any] = {"body": element.get("body", "")}
+        for name in ("id", "post_id", "x", "y", "width", "height", "version"):
+            raw = element.get(name)
+            if raw is None:
+                continue
+            if not (raw.isascii() and raw.isdigit()):
+                return None
+            entry[name] = int(raw)
+        entries.append(entry)
+    return entries

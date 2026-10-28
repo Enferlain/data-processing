@@ -487,10 +487,10 @@ class GelbooruAdapter:
     def _dapi_notes_request(self, target: str) -> tuple[str, dict[str, str], str, str]:
         """Render a DAPI note query for one post.
 
-        Response shape is provisional until a credentialed live capture
-        replaces the documented-shape fixture (see the fixture's provenance
-        label); the run contract and normalization are shape-checked against
-        that fixture.
+        The dapi note index serves XML regardless of json=1 (verified by the
+        credentialed live capture behind fixture gelbooru_notes_15172350.xml,
+        Bead data-processing-r4y); the enrichment parser reads that XML, and
+        json=1 stays on the wire exactly as captured.
         """
         post_id = _stable_id(target, "post ID")
         if self._credentials is None:

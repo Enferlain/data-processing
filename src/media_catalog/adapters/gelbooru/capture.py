@@ -1,4 +1,4 @@
-"""Credential-safe fixture capture utility for Gelbooru DAPI and HTML post requests."""
+"""Credential-safe fixture capture utility for Gelbooru DAPI post, note, and HTML requests."""
 
 from __future__ import annotations
 
@@ -134,23 +134,11 @@ class GelbooruCaptureResult:
         }
 
 
-def capture_gelbooru_post(
-    transport: GelbooruTransport | str,
-    post_id: int | str,
-    *,
-    client: httpx.Client,
-    credentials: GelbooruCredentials | None = None,
-    instance: GelbooruInstance = GELBOORU,
-    max_response_bytes: int | None = None,
-    request_timeout_seconds: float | None = None,
-    clock: Callable[[], str] = _utc_now,
-    monotonic: Callable[[], float] = time.monotonic,
-) -> GelbooruCaptureResult:
-    """Capture a single Gelbooru post response using the specified transport."""
-    resolved = (
-        transport if isinstance(transport, GelbooruTransport) else GelbooruTransport(transport)
-    )
-    validated_id = validate_post_id(post_id)
+def _capture_limits(
+    instance: GelbooruInstance,
+    max_response_bytes: int | None,
+    request_timeout_seconds: float | None,
+) -> tuple[int, float]:
     max_bytes = instance.max_response_bytes if max_response_bytes is None else max_response_bytes
     timeout_sec = (
         instance.request_timeout_seconds
@@ -164,35 +152,21 @@ def capture_gelbooru_post(
         or timeout_sec <= 0
     ):
         raise ValueError("max_response_bytes and request_timeout_seconds must be positive numbers")
+    return max_bytes, timeout_sec
 
-    url = f"{instance.base_url}/index.php"
-    headers = {"user-agent": instance.user_agent}
-    transport_key = resolved.value
-    transport_version = instance.transport_version(resolved)
-    parser_version = (
-        DAPI_SCHEMA_VERSION if resolved is GelbooruTransport.DAPI_JSON else HTML_PARSER_VERSION
-    )
-    request_identity = f"{instance.platform_key}:{transport_key}:post:{validated_id}"
 
-    if resolved is GelbooruTransport.DAPI_JSON:
-        if credentials is None:
-            raise ValueError("both Gelbooru user ID and API key are required")
-        # Credential values join the query only here, at the final DAPI HTTP boundary.
-        params = credentials.authenticated_query(
-            {
-                "page": "dapi",
-                "s": "post",
-                "q": "index",
-                "json": "1",
-                "id": validated_id,
-            }
-        )
-    elif resolved is GelbooruTransport.HTML_POST:
-        if credentials is not None:
-            raise ValueError("HTML transport does not accept credentials")
-        params = {"page": "post", "s": "view", "id": validated_id}
-    else:
-        raise ValueError(f"unsupported transport: {resolved}")
+def _bounded_payload(
+    client: httpx.Client,
+    url: str,
+    params: dict[str, str],
+    headers: dict[str, str],
+    *,
+    max_bytes: int,
+    timeout_sec: float,
+    credentials: GelbooruCredentials | None,
+    monotonic: Callable[[], float],
+) -> tuple[int, str, bytes]:
+    """Send one bounded GET and return (status, content type, payload) or raise."""
 
     request = httpx.Request(
         "GET",
@@ -246,10 +220,71 @@ def capture_gelbooru_post(
         ) from None
 
     payload = b"".join(chunks)
-    # Numeric user IDs are ordinary provider data and may legitimately occur in a post response.
+    # Numeric user IDs are ordinary provider data and may legitimately occur in a response.
     # The high-entropy API key must never be admitted into captured response bytes.
     if credentials is not None and credentials.api_key.encode() in payload:
         raise GelbooruCaptureError("Response payload contains credential material")
+    return status_code, content_type, payload
+
+
+def capture_gelbooru_post(
+    transport: GelbooruTransport | str,
+    post_id: int | str,
+    *,
+    client: httpx.Client,
+    credentials: GelbooruCredentials | None = None,
+    instance: GelbooruInstance = GELBOORU,
+    max_response_bytes: int | None = None,
+    request_timeout_seconds: float | None = None,
+    clock: Callable[[], str] = _utc_now,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> GelbooruCaptureResult:
+    """Capture a single Gelbooru post response using the specified transport."""
+    resolved = (
+        transport if isinstance(transport, GelbooruTransport) else GelbooruTransport(transport)
+    )
+    validated_id = validate_post_id(post_id)
+    max_bytes, timeout_sec = _capture_limits(instance, max_response_bytes, request_timeout_seconds)
+
+    url = f"{instance.base_url}/index.php"
+    headers = {"user-agent": instance.user_agent}
+    transport_key = resolved.value
+    transport_version = instance.transport_version(resolved)
+    parser_version = (
+        DAPI_SCHEMA_VERSION if resolved is GelbooruTransport.DAPI_JSON else HTML_PARSER_VERSION
+    )
+    request_identity = f"{instance.platform_key}:{transport_key}:post:{validated_id}"
+
+    if resolved is GelbooruTransport.DAPI_JSON:
+        if credentials is None:
+            raise ValueError("both Gelbooru user ID and API key are required")
+        # Credential values join the query only here, at the final DAPI HTTP boundary.
+        params = credentials.authenticated_query(
+            {
+                "page": "dapi",
+                "s": "post",
+                "q": "index",
+                "json": "1",
+                "id": validated_id,
+            }
+        )
+    elif resolved is GelbooruTransport.HTML_POST:
+        if credentials is not None:
+            raise ValueError("HTML transport does not accept credentials")
+        params = {"page": "post", "s": "view", "id": validated_id}
+    else:
+        raise ValueError(f"unsupported transport: {resolved}")
+
+    status_code, content_type, payload = _bounded_payload(
+        client,
+        url,
+        params,
+        headers,
+        max_bytes=max_bytes,
+        timeout_sec=timeout_sec,
+        credentials=credentials,
+        monotonic=monotonic,
+    )
 
     return GelbooruCaptureResult(
         provider=instance.platform_key,
@@ -282,4 +317,55 @@ def capture_gelbooru_html_post(
     """Capture a single Gelbooru HTML post response."""
     return capture_gelbooru_post(
         GelbooruTransport.HTML_POST, post_id, client=client, credentials=None, **kw
+    )
+
+
+def capture_gelbooru_dapi_notes(
+    post_id: int | str,
+    *,
+    client: httpx.Client,
+    credentials: GelbooruCredentials,
+    instance: GelbooruInstance = GELBOORU,
+    max_response_bytes: int | None = None,
+    request_timeout_seconds: float | None = None,
+    clock: Callable[[], str] = _utc_now,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> GelbooruCaptureResult:
+    """Capture one DAPI note-index response for a post (Bead data-processing-r4y)."""
+
+    validated_id = validate_post_id(post_id)
+    max_bytes, timeout_sec = _capture_limits(instance, max_response_bytes, request_timeout_seconds)
+    # Credential values join the query only here, at the final DAPI HTTP boundary.
+    params = credentials.authenticated_query(
+        {
+            "page": "dapi",
+            "s": "note",
+            "q": "index",
+            "json": "1",
+            "post_id": validated_id,
+        }
+    )
+    status_code, content_type, payload = _bounded_payload(
+        client,
+        f"{instance.base_url}/index.php",
+        params,
+        {"user-agent": instance.user_agent},
+        max_bytes=max_bytes,
+        timeout_sec=timeout_sec,
+        credentials=credentials,
+        monotonic=monotonic,
+    )
+    return GelbooruCaptureResult(
+        provider=instance.platform_key,
+        post_id=validated_id,
+        transport_key=GelbooruTransport.DAPI_JSON.value,
+        transport_version=instance.transport_version(GelbooruTransport.DAPI_JSON),
+        parser_version=DAPI_SCHEMA_VERSION,
+        schema_version=instance.schema_version(GelbooruTransport.DAPI_JSON),
+        status_code=status_code,
+        content_type=content_type,
+        observed_at=_validate_timestamp(clock()),
+        request_identity=f"{instance.platform_key}:dapi_json:notes:{validated_id}",
+        byte_count=len(payload),
+        payload=payload,
     )

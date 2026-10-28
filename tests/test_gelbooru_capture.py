@@ -16,6 +16,7 @@ from media_catalog.adapters.gelbooru import (
     GelbooruCaptureTimeoutError,
     GelbooruCredentials,
     GelbooruTransport,
+    capture_gelbooru_dapi_notes,
     capture_gelbooru_dapi_post,
     capture_gelbooru_html_post,
     capture_gelbooru_post,
@@ -93,6 +94,45 @@ def test_dapi_exact_wire_request_and_auth_cookie_stripping() -> None:
     assert result.request_identity == "gelbooru:dapi_json:post:12370900"
     assert result.byte_count == len(result.payload)
     assert result.payload == b'{"post": [{"id": 12370900}]}'
+    assert result.response_bytes == result.payload
+
+
+def test_dapi_notes_wire_request_matches_the_note_index_query() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            stream=httpx.ByteStream(b'{"@attributes": {"limit": 100}, "note": []}'),
+            headers={"content-type": "application/json; charset=utf-8"},
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = capture_gelbooru_dapi_notes(
+        953320, client=client, credentials=CREDENTIALS, clock=lambda: NOW
+    )
+    assert len(requests) == 1
+    req = requests[0]
+    assert req.url.host == "gelbooru.com"
+    assert req.url.path == "/index.php"
+    assert dict(req.url.params) == {
+        "page": "dapi",
+        "s": "note",
+        "q": "index",
+        "json": "1",
+        "post_id": "953320",
+        "api_key": SENTINEL_KEY,
+        "user_id": SENTINEL_USER,
+    }
+    assert result.provider == "gelbooru"
+    assert result.post_id == "953320"
+    assert result.transport_key == GelbooruTransport.DAPI_JSON.value
+    assert result.parser_version == DAPI_SCHEMA_VERSION
+    assert result.request_identity == "gelbooru:dapi_json:notes:953320"
+    assert result.status_code == 200
+    assert result.payload == b'{"@attributes": {"limit": 100}, "note": []}'
+    assert result.byte_count == len(result.payload)
     assert result.response_bytes == result.payload
 
 

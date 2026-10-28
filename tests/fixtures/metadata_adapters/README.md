@@ -1,8 +1,11 @@
 # Metadata adapter contract fixtures
 
-These files are deliberately small, redacted JSON contracts. They contain provider response
-shapes and expected normalized summaries, not downloaded media, credentials, or full private
-profiles. Default tests load them without contacting any provider.
+These files are deliberately small, redacted contracts. Most are JSON; raw captured response
+bodies keep their provider bytes and extension exactly as captured (for example
+`e621_notes_*.json` and `gelbooru_notes_*.xml` are literal response payloads, outside the
+manifest format). They contain provider response shapes and expected normalized summaries, not
+downloaded media, credentials, or full private profiles. Default tests load them without
+contacting any provider.
 
 The gallery-dl comparison fixture is pinned to version 1.32.2 at commit
 `2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5`. It is an oracle for reviewed field mappings only;

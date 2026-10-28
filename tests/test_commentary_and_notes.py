@@ -91,8 +91,9 @@ def _e621_notes_payload() -> bytes:
 
 
 def _gelbooru_notes_payload() -> bytes:
-    # The fixture is the modern dapi wrapper; the parser unwraps "note".
-    return (FIXTURES / "gelbooru_notes_953320_SYNTHETIC.json").read_bytes()
+    # Real credentialed capture: the dapi note index serves XML even with
+    # json=1 on the wire (Bead data-processing-r4y).
+    return (FIXTURES / "gelbooru_notes_15172350.xml").read_bytes()
 
 
 def test_commentary_lands_with_the_artist_caption(tmp_path: Path) -> None:
@@ -213,7 +214,7 @@ def test_notes_land_with_position_and_version(tmp_path: Path) -> None:
 
 def test_gelbooru_notes_land_and_an_edit_bumps_the_row(tmp_path: Path) -> None:
     catalog = tmp_path / "catalog.sqlite3"
-    _seed(catalog, platform="gelbooru", natives=("953320",))
+    _seed(catalog, platform="gelbooru", natives=("15172350",))
     with CatalogDatabase(catalog) as database:
         first = fetch_notes(
             database,
@@ -222,7 +223,7 @@ def test_gelbooru_notes_land_and_an_edit_bumps_the_row(tmp_path: Path) -> None:
                 payload=_gelbooru_notes_payload(),
                 operation=AdapterOperation.FETCH_NOTES,
             ),
-            "953320",
+            "15172350",
             clock=_now,
         )
         connection = database.connection
@@ -231,25 +232,45 @@ def test_gelbooru_notes_land_and_an_edit_bumps_the_row(tmp_path: Path) -> None:
             "SELECT note_native_id, version FROM post_note_observations ORDER BY note_native_id"
         ).fetchall()
         assert [(row["note_native_id"], row["version"]) for row in rows] == [
-            ("1900001", None),
-            ("1900002", None),
+            ("918622", 1),
+            ("918623", 1),
         ]
         # A moved note lands as a new observation for the same note id.
-        moved = _gelbooru_notes_payload().replace(b'"x": 120', b'"x": 999')
+        moved = _gelbooru_notes_payload().replace(b'x="2224"', b'x="9999"')
         fetch_notes(
             database,
             _StubAdapter(
                 platform="gelbooru", payload=moved, operation=AdapterOperation.FETCH_NOTES
             ),
-            "953320",
+            "15172350",
             clock=_now,
         )
         assert (
             connection.execute(
-                "SELECT COUNT(*) FROM post_note_observations WHERE note_native_id = '1900001'"
+                "SELECT COUNT(*) FROM post_note_observations WHERE note_native_id = '918623'"
             ).fetchone()[0]
             == 2
         )
+
+
+def test_gelbooru_empty_notes_are_absence_not_failure(tmp_path: Path) -> None:
+    # The verified empty shape from the live capture: the note index serves
+    # <notes type="array"/> even with json=1 on the wire.
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog, platform="gelbooru", natives=("953320",))
+    with CatalogDatabase(catalog) as database:
+        report = fetch_notes(
+            database,
+            _StubAdapter(
+                platform="gelbooru",
+                payload=b'<notes type="array"/>',
+                operation=AdapterOperation.FETCH_NOTES,
+            ),
+            "953320",
+            clock=_now,
+        )
+        assert report["outcome"] == "success"
+        assert report["observations"] == 0
 
 
 def test_unknown_post_is_refused_before_any_run(tmp_path: Path) -> None:
@@ -457,7 +478,7 @@ def test_contract_violations_classify_malformed_without_zombie_runs(
 
 
 def test_gelbooru_legacy_bare_array_still_parses(tmp_path: Path) -> None:
-    """The parser accepts both the modern dapi wrapper and a bare array."""
+    """The parser is provider-neutral: bare JSON arrays remain accepted (the e621 shape)."""
 
     catalog = tmp_path / "catalog.sqlite3"
     _seed(catalog, platform="gelbooru", natives=("953320",))
