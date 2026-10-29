@@ -1,4 +1,4 @@
-# Spec Delta
+# Sankaku Metadata Adapter Specification
 
 ## Purpose
 
@@ -6,11 +6,11 @@ Metadata-only integration with Sankaku's capi-v2 API: bounded, credentialed, cap
 synchronization of post facts and tag-enumerated listings into the catalog kernel without ever
 requesting media bytes.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Sankaku instance identity is explicit and registered
 The adapter SHALL serve the registered Sankaku instance (platform key `sankaku`, canonical
-capi-v2 HTTPS base) with per-instance schema and adapter versions. A metadata operation SHALL be
+HTTPS base at the live-verified `sankakuapi.com` host) with per-instance schema and adapter versions. A metadata operation SHALL be
 admitted only because the platform key is registered in the kernel's per-platform operation
 registry and its platform row is migration-seeded; runs, requests, raw observations, and
 platform rows SHALL carry the `sankaku` platform key.
@@ -45,7 +45,7 @@ the token endpoint.
 - **THEN** the adapter re-exchanges once from the external credentials and retries the request; repeated failure ends the run typed as an authentication outcome
 
 ### Requirement: Sankaku post and listing operations are bounded
-Post fetch SHALL resolve exactly one post by stable numeric id via the provider's id-range
+Post fetch SHALL resolve exactly one post by its opaque provider id via the id-range
 query, and listings SHALL enumerate a tag query through the provider's keyset cursor under the
 shared bounded-run contract (finite request, page, record, body-size, and elapsed-time limits;
 cursor continuation is retained per run). Provider rate-limit responses SHALL end or pause the
@@ -68,7 +68,8 @@ never retried past the admitted budget.
 The adapter SHALL retain stable post id, observation time, availability and status, rating,
 score, declared MD5, dimensions, returned media representations (original/sample/preview URLs
 as metadata only), source URL, parent-post references as directional relations, and tag
-spelling with unknown category (typed categories are a deferred surface) — each only when the
+spelling with typed categories from the embedded tag objects (kernel categories only; other
+provider types and the fuller tag-name array land as unknown category) — each only when the
 captured contract supplies and validates it. Nothing SHALL be invented, and media hosts receive
 zero requests.
 

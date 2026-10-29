@@ -32,6 +32,7 @@ from media_catalog.adapters.gelbooru import (
     GelbooruHtmlAdapter,
 )
 from media_catalog.adapters.pixiv import PixivAdapter
+from media_catalog.adapters.sankaku import SANKAKU, SankakuAdapter, SankakuCredentials
 from media_catalog.candidate_lookup import (
     CandidateLookupQueryService,
     CandidateLookupService,
@@ -124,6 +125,13 @@ GELBOORU_DAPI_CREDENTIAL_GUIDANCE = (
 GELBOORU_HTML_GUIDANCE = (
     "The anonymous Gelbooru HTML transport uses no credentials and never falls back "
     "to the credentialed DAPI transport."
+)
+
+SANKAKU_CREDENTIAL_GUIDANCE = (
+    "Sankaku credentials are resolved from external SANKAKU_LOGIN and "
+    "SANKAKU_PASSWORD environment references and exchanged for a bearer token "
+    "at request time; neither credentials nor tokens are ever CLI flags or "
+    "retained durably."
 )
 
 
@@ -419,6 +427,8 @@ def build_parser() -> argparse.ArgumentParser:
         "gelbooru-dapi-list": True,
         "e621-notes": False,
         "gelbooru-html-post": False,
+        "sankaku-post": False,
+        "sankaku-list": True,
     }
 
     def _metadata_description(name: str) -> str | None:
@@ -428,6 +438,8 @@ def build_parser() -> argparse.ArgumentParser:
             return GELBOORU_DAPI_CREDENTIAL_GUIDANCE
         if name == "gelbooru-html-post":
             return GELBOORU_HTML_GUIDANCE
+        if name.startswith("sankaku-"):
+            return SANKAKU_CREDENTIAL_GUIDANCE
         return None
 
     for name, listing in operations.items():
@@ -1000,6 +1012,24 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     arguments.target,
                     limits=limits,
                     resume_from_run_id=resume_from,
+                )
+        elif command.startswith("sankaku-"):
+            operation = {
+                "sankaku-post": AdapterOperation.FETCH_POST,
+                "sankaku-list": AdapterOperation.LIST_ACCOUNT_POSTS,
+            }[command]
+            credentials = SankakuCredentials.from_environment(SANKAKU)
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = SankakuAdapter(SANKAKU, client=client, credentials=credentials)
+                result = MetadataSyncService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=SANKAKU.minimum_interval_seconds,
+                ).synchronize(
+                    operation,
+                    arguments.target,
+                    limits=limits,
+                    resume_from_run_id=arguments.resume_from,
                 )
         elif command.startswith("e621-"):
             operation = {

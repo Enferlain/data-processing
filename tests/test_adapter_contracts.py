@@ -93,6 +93,7 @@ def test_source_operation_registry_covers_the_adapter_vocabulary() -> None:
         "gelbooru",
         "pixiv",
         "safebooru",
+        "sankaku",
     }
     assert set().union(*SOURCE_OPERATIONS.values()) == {
         operation.value for operation in AdapterOperation
@@ -192,6 +193,13 @@ def test_redacted_fixture_suites_cover_required_contract_cases() -> None:
     assert {case.name for case in safebooru.cases} == {"post_7272295"}
     assert safebooru.manifest.instance == "safebooru"
     assert safebooru.manifest.schema_version == "safebooru-json-v1"
+    sankaku = load_fixture_suite(FIXTURES / "sankaku.json")
+    assert {case.name for case in sankaku.cases} == {
+        "post_wvaemE6YDaz",
+        "keyset_rating_g_first_page",
+    }
+    assert sankaku.manifest.provider == "sankaku"
+    assert sankaku.manifest.schema_version == "sankaku-api-v2-v1"
     e621 = load_fixture_suite(FIXTURES / "e621.json")
     assert {case.name for case in e621.cases} >= {
         "normal_post",

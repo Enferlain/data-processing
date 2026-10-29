@@ -13,6 +13,24 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-29]
+
+### Added
+- **Sankaku metadata adapter (Bead `data-processing-4ly`, change
+  `add-sankaku-metadata-adapter`)** — new provider family speaking Sankaku's API v2
+  (live-verified host `sankakuapi.com`; the historical `capi-v2` host refuses this client):
+  `sankaku-post` via the `/v2/posts` id-range query and `sankaku-list` via `/v2/posts/keyset`
+  with `next`-cursor continuation, both under the bounded-run contract. Credentials
+  (`SANKAKU_LOGIN`/`SANKAKU_PASSWORD`) are exchanged once per process for a bearer token that
+  exists only in HTTP headers — one re-exchange on an invalid-token signal, no persistent token
+  cache, and token/credential absence from all durable material is test-enforced with sentinels.
+  Migration `0021` seeds the platform row and `SOURCE_OPERATIONS` admits `sankaku`. Contract is
+  capture-verified only: the fixture suite carries live credentialed captures (post
+  `wvaemE6YDaz` — opaque base62 string ids, ruby-Time `created_at`, embedded typed tags
+  (kernel categories land typed; studio/genre/medium stay unknown), signed expiring media URLs —
+  plus a `rating:g` keyset page), scanned for login/password/token before commit. Typed
+  per-post tag fetching, notes, pools, and the Idol instance remain deferred.
+
 ## [2026-10-28]
 
 ### Fixed

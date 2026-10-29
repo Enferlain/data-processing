@@ -49,12 +49,17 @@ the `next` cursor as the continuation payload (digest-checked like gelbooru's co
 429 responses end or pause the run typed `rate_limited`, retaining `X-RateLimit-Reset` when
 present; no speculative retries.
 
-### D4: Tags land with unknown category; typed categories are a deferred surface
-Post records embed `tag_names` without categories; the catalog already accepts
-unknown-category tag observations (safebooru precedent). Typed categories need one request per
-post (`/posts/{id}/tags`) — a real budget decision plus its own captured fixture — and stay
-out of this change. `created_at` is a unix-seconds object (`{s}`) and lands as the provider
-fact it is; `parent_id` lands as the directional `parent_of` relation.
+### D4: Tags land typed from the embedded objects (revised by capture)
+Post records embed typed tag objects (`tagName` + numeric `type`), so categories land typed
+via the capture-corroborated type map, restricted to kernel categories (studio/genre/medium
+stay `unknown` rather than approximated); the original deferral of typed categories — and the
+per-post `/posts/{id}/tags` fetch it assumed — is unnecessary for this slice. `created_at` is
+a unix-seconds object (`{s}`) and lands as the provider fact it is; `parent_id` lands as the
+directional `parent_of` relation.
+
+Live-verified host correction (2026-10-29): the token AND data host is `sankakuapi.com` — the
+historical `capi-v2.sankakucomplex.com` host returns nginx 403 to this client — so the
+instance's canonical base is `sankakuapi.com` and the schema version is `sankaku-api-v2-v1`.
 
 ### D5: Admission is complete or absent
 `SOURCE_OPERATIONS` gains `sankaku`; migration `0021` seeds the platform row; the CLI commands
