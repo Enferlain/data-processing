@@ -73,6 +73,7 @@ SOURCE_OPERATIONS: dict[str, frozenset[str]] = {
     "e621": REMOTE_OPERATIONS,
     "gelbooru": REMOTE_OPERATIONS,
     "pixiv": REMOTE_OPERATIONS,
+    "safebooru": REMOTE_OPERATIONS,
 }
 REMOTE_RUN_STATUSES = frozenset({"running", "complete", "paused", "failed"})
 REMOTE_OUTCOMES = frozenset(

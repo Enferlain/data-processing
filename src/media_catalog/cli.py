@@ -26,6 +26,7 @@ from media_catalog.adapters.danbooru import (
 from media_catalog.adapters.e621 import E621, E621Adapter, E621Credentials
 from media_catalog.adapters.gelbooru import (
     GELBOORU,
+    GELBOORU_INSTANCES,
     GelbooruAdapter,
     GelbooruCredentials,
     GelbooruHtmlAdapter,
@@ -114,8 +115,10 @@ E621_CREDENTIAL_GUIDANCE = (
 )
 
 GELBOORU_DAPI_CREDENTIAL_GUIDANCE = (
-    "Gelbooru DAPI credentials are resolved from external GELBOORU_USER_ID and "
-    "GELBOORU_API_KEY environment references; credentials are never CLI flags."
+    "Gelbooru-family DAPI credentials resolve per instance from external environment "
+    "references: gelbooru requires GELBOORU_USER_ID and GELBOORU_API_KEY; safebooru's "
+    "DAPI is anonymous and uses SAFEBOORU_USER_ID/SAFEBOORU_API_KEY only when both are "
+    "configured. Credentials are never CLI flags."
 )
 
 GELBOORU_HTML_GUIDANCE = (
@@ -146,8 +149,8 @@ def _offline_replay_adapter(provider: str):
         raise AssertionError("reprocessing must not contact the provider")
 
     client = httpx.Client(transport=httpx.MockTransport(refuse))
-    if provider == "gelbooru":
-        return GelbooruAdapter(GELBOORU, client=client)
+    if provider in GELBOORU_INSTANCES:
+        return GelbooruAdapter(GELBOORU_INSTANCES[provider], client=client)
     if provider == "e621":
         return E621Adapter(E621, client=client)
     return DanbooruAdapter(AIBOORU if provider == "aibooru" else DANBOORU, client=client)
@@ -432,6 +435,12 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("catalog", type=Path)
         command.add_argument("target")
         _add_sync_limits(command, listing=listing)
+        if name.startswith("gelbooru-dapi-"):
+            # Instance selection is explicit on every gelbooru-engine DAPI
+            # surface; the HTML transport stays canonical-gelbooru only.
+            command.add_argument(
+                "--instance", choices=tuple(GELBOORU_INSTANCES), default="gelbooru"
+            )
     remote_runs = metadata_commands.add_parser("runs")
     remote_runs.add_argument("catalog", type=Path)
     remote_runs.add_argument("--limit", type=int, default=100)
@@ -578,14 +587,18 @@ def build_parser() -> argparse.ArgumentParser:
     reprocess_plan = reprocess_commands.add_parser("plan")
     reprocess_plan.add_argument("catalog", type=Path)
     reprocess_plan.add_argument(
-        "--provider", choices=("danbooru", "aibooru", "gelbooru", "e621"), required=True
+        "--provider",
+        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "e621"),
+        required=True,
     )
     reprocess_plan.add_argument("--limit", type=int, default=100)
     _add_json(reprocess_plan)
     reprocess_run = reprocess_commands.add_parser("run")
     reprocess_run.add_argument("catalog", type=Path)
     reprocess_run.add_argument(
-        "--provider", choices=("danbooru", "aibooru", "gelbooru", "e621"), required=True
+        "--provider",
+        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "e621"),
+        required=True,
     )
     reprocess_run.add_argument("--raw-id", action="append", type=int, required=True)
     _add_json(reprocess_run)
@@ -929,10 +942,15 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                         E621, client=client, credentials=E621Credentials.from_environment(E621)
                     )
                 else:
+                    instance = GELBOORU_INSTANCES[arguments.instance]
                     adapter = GelbooruAdapter(
-                        GELBOORU,
+                        instance,
                         client=client,
-                        credentials=GelbooruCredentials.from_environment(GELBOORU),
+                        credentials=(
+                            GelbooruCredentials.from_environment(instance)
+                            if instance.dapi_credentials_required
+                            else GelbooruCredentials.optional_from_environment(instance)
+                        ),
                     )
                 return {
                     "catalog": catalog_label,
@@ -955,21 +973,28 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 if command == "gelbooru-html-post":
                     adapter = GelbooruHtmlAdapter(GELBOORU, client=client)
                     operation = AdapterOperation.FETCH_POST
+                    interval = GELBOORU.minimum_interval_seconds
                 else:
                     operation = {
                         "gelbooru-dapi-post": AdapterOperation.FETCH_POST,
                         "gelbooru-dapi-tag": AdapterOperation.FETCH_TAG,
                         "gelbooru-dapi-list": AdapterOperation.LIST_ACCOUNT_POSTS,
                     }[command]
+                    instance = GELBOORU_INSTANCES[arguments.instance]
                     adapter = GelbooruAdapter(
-                        GELBOORU,
+                        instance,
                         client=client,
-                        credentials=GelbooruCredentials.from_environment(GELBOORU),
+                        credentials=(
+                            GelbooruCredentials.from_environment(instance)
+                            if instance.dapi_credentials_required
+                            else GelbooruCredentials.optional_from_environment(instance)
+                        ),
                     )
+                    interval = instance.minimum_interval_seconds
                 result = MetadataSyncService(
                     database,
                     adapter,
-                    minimum_interval_seconds=GELBOORU.minimum_interval_seconds,
+                    minimum_interval_seconds=interval,
                 ).synchronize(
                     operation,
                     arguments.target,

@@ -33,7 +33,6 @@ from media_catalog.adapters.contracts import (
 from media_catalog.adapters.gelbooru.config import (
     ADAPTER_VERSION,
     CONTINUATION_VERSION,
-    DAPI_SCHEMA_VERSION,
     DAPI_TRANSPORT_VERSION,
     GELBOORU,
     MAX_PAGE_SIZE,
@@ -129,7 +128,7 @@ class GelbooruAdapter:
     ) -> None:
         self.instance = instance
         self.instance_key = instance.platform_key
-        self.schema_version = DAPI_SCHEMA_VERSION
+        self.schema_version = instance.dapi_schema_version
         self._client = client
         self._credentials = credentials
         self._clock = clock
@@ -323,10 +322,8 @@ class GelbooruAdapter:
             tags = f"md5:{value}"
         else:  # pragma: no cover - capabilities reject undeclared strategies first
             raise ValueError(f"Gelbooru does not render lookup strategy {strategy.value}")
-        if self._credentials is None:
-            raise ValueError("DAPI requests require credentials")
         limit = min(request.limit, self.instance.page_size)
-        params = self._credentials.authenticated_query(
+        params = self._dapi_query(
             {
                 "page": "dapi",
                 "s": "post",
@@ -461,14 +458,27 @@ class GelbooruAdapter:
 
     # ── Request rendering ──────────────────────────────────────────────
 
+    def _dapi_query(self, params: dict[str, str]) -> dict[str, str]:
+        """Join credential-free DAPI parameters per instance policy.
+
+        Credential values join the query only here, at the final DAPI HTTP
+        boundary, when credentials are supplied; instances that require them
+        refuse the request before any network access, and anonymous instances
+        proceed without credential parameters.
+        """
+
+        if self._credentials is None:
+            if self.instance.dapi_credentials_required:
+                raise ValueError("DAPI requests require credentials")
+            return dict(params)
+        return self._credentials.authenticated_query(params)
+
     def _dapi_post_request(
         self, target: str, continuation: Continuation | None
     ) -> tuple[str, dict[str, str], str, str]:
         """Render a DAPI single-post fetch request."""
         post_id = _stable_id(target, "post ID")
-        if self._credentials is None:
-            raise ValueError("DAPI requests require credentials")
-        params = self._credentials.authenticated_query(
+        params = self._dapi_query(
             {
                 "page": "dapi",
                 "s": "post",
@@ -493,9 +503,7 @@ class GelbooruAdapter:
         json=1 stays on the wire exactly as captured.
         """
         post_id = _stable_id(target, "post ID")
-        if self._credentials is None:
-            raise ValueError("DAPI requests require credentials")
-        params = self._credentials.authenticated_query(
+        params = self._dapi_query(
             {
                 "page": "dapi",
                 "s": "note",
@@ -510,9 +518,7 @@ class GelbooruAdapter:
 
     def _dapi_tag_request(self, target: str) -> tuple[str, dict[str, str], str, str]:
         """Render a DAPI tag metadata request."""
-        if self._credentials is None:
-            raise ValueError("DAPI requests require credentials")
-        params = self._credentials.authenticated_query(
+        params = self._dapi_query(
             {
                 "page": "dapi",
                 "s": "tag",
@@ -540,9 +546,7 @@ class GelbooruAdapter:
         limit = MAX_PAGE_SIZE
         if continuation is not None:
             pid, limit = self._validate_listing_continuation(continuation, target=listing_target)
-        if self._credentials is None:
-            raise ValueError("DAPI requests require credentials")
-        params = self._credentials.authenticated_query(
+        params = self._dapi_query(
             {
                 "page": "dapi",
                 "s": "post",
@@ -816,19 +820,24 @@ class GelbooruAdapter:
         if status == "deleted":
             availability = "deleted"
 
-        created_at = post.get("created_at")
-        if not isinstance(created_at, str) or not created_at:
-            raise AdapterFailure(
-                AdapterOutcome.MALFORMED_RESPONSE,
-                "DAPI post record has no created_at timestamp",
-            )
-        try:
-            created_iso = _gelbooru_timestamp(created_at)
-        except ValueError as error:
-            raise AdapterFailure(
-                AdapterOutcome.MALFORMED_RESPONSE,
-                "DAPI post record has an unparseable created_at timestamp",
-            ) from error
+        # created_at lands only when the instance's captured contract supplies
+        # it (gelbooru.com does; safebooru's bare-array DAPI omits the key).  A
+        # present-but-null or non-text value is malformed, not absent.
+        created_iso: str | None = None
+        if "created_at" in post:
+            created_at = post["created_at"]
+            if not isinstance(created_at, str) or not created_at:
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE,
+                    "DAPI post record has a malformed created_at timestamp",
+                )
+            try:
+                created_iso = _gelbooru_timestamp(created_at)
+            except ValueError as error:
+                raise AdapterFailure(
+                    AdapterOutcome.MALFORMED_RESPONSE,
+                    "DAPI post record has an unparseable created_at timestamp",
+                ) from error
 
         score = post.get("score")
         title = post.get("title")

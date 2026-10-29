@@ -23,6 +23,9 @@ CONTINUATION_VERSION = "gelbooru-pid-v2"
 
 GELBOORU_BASE_URL = "https://gelbooru.com"
 GELBOORU_HOST = "gelbooru.com"
+SAFEBOORU_BASE_URL = "https://safebooru.org"
+SAFEBOORU_HOST = "safebooru.org"
+SAFEBOORU_DAPI_SCHEMA_VERSION = "safebooru-json-v1"
 GELBOORU_USER_AGENT = "data-processing-tools/0.1 (metadata-only Gelbooru catalog)"
 
 # Gelbooru documents a maximum DAPI page size of 100 but no public numeric rate
@@ -43,13 +46,15 @@ class GelbooruTransport(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class GelbooruInstance:
-    """Validated single-instance Gelbooru policy and external secret references."""
+    """Validated gelbooru-engine instance policy and external secret references."""
 
     platform_key: str = PROVIDER_KEY
     base_url: str = GELBOORU_BASE_URL
     host: str = GELBOORU_HOST
     user_id_env: str = "GELBOORU_USER_ID"
     api_key_env: str = "GELBOORU_API_KEY"
+    dapi_credentials_required: bool = True
+    dapi_schema_version: str = DAPI_SCHEMA_VERSION
     user_agent: str = GELBOORU_USER_AGENT
     minimum_interval_seconds: float = MINIMUM_INTERVAL_SECONDS
     page_size: int = MAX_PAGE_SIZE
@@ -58,8 +63,8 @@ class GelbooruInstance:
     lookup_capabilities: LookupCapabilities = field(default_factory=lambda: LookupCapabilities(()))
 
     def __post_init__(self) -> None:
-        if self.platform_key != PROVIDER_KEY:
-            raise ValueError(f"Gelbooru platform key must be {PROVIDER_KEY!r}")
+        if not self.platform_key.strip() or self.platform_key != self.platform_key.lower():
+            raise ValueError("Gelbooru instance requires a lowercase platform key")
         parsed = urlsplit(self.base_url)
         if (
             parsed.scheme != "https"
@@ -101,13 +106,13 @@ class GelbooruInstance:
             provider=PROVIDER_KEY,
             instance_key=self.platform_key,
             adapter_version=ADAPTER_VERSION,
-            schema_version=DAPI_SCHEMA_VERSION,
+            schema_version=self.dapi_schema_version,
             lookup_capabilities=self.lookup_capabilities,
         )
 
     def schema_version(self, transport: GelbooruTransport) -> str:
         if transport is GelbooruTransport.DAPI_JSON:
-            return DAPI_SCHEMA_VERSION
+            return self.dapi_schema_version
         return HTML_SCHEMA_VERSION
 
     def transport_version(self, transport: GelbooruTransport) -> str:
@@ -135,3 +140,27 @@ GELBOORU = GelbooruInstance(
         )
     ),
 )
+
+
+# Safebooru runs the same gelbooru 0.2 engine with an anonymous DAPI: no
+# credential dance is required, and its response contract is verified only by
+# live capture (never synthetic shapes; Bead data-processing-r4y rule).
+# Bounded reverse lookup stays undeclared until each strategy earns its own
+# captured fixture.
+SAFEBOORU = GelbooruInstance(
+    platform_key="safebooru",
+    base_url=SAFEBOORU_BASE_URL,
+    host=SAFEBOORU_HOST,
+    user_id_env="SAFEBOORU_USER_ID",
+    api_key_env="SAFEBOORU_API_KEY",
+    dapi_credentials_required=False,
+    dapi_schema_version=SAFEBOORU_DAPI_SCHEMA_VERSION,
+)
+
+# The registered gelbooru-engine family: platform key -> instance.  Kernel
+# operation admission (SOURCE_OPERATIONS) and CLI instance selection resolve
+# through this registry; instances outside it are not shipped surfaces.
+GELBOORU_INSTANCES: dict[str, GelbooruInstance] = {
+    GELBOORU.platform_key: GELBOORU,
+    SAFEBOORU.platform_key: SAFEBOORU,
+}

@@ -86,7 +86,14 @@ def test_remote_run_operations_are_registered_per_platform(
 
 
 def test_source_operation_registry_covers_the_adapter_vocabulary() -> None:
-    assert set(SOURCE_OPERATIONS) == {"aibooru", "danbooru", "e621", "gelbooru", "pixiv"}
+    assert set(SOURCE_OPERATIONS) == {
+        "aibooru",
+        "danbooru",
+        "e621",
+        "gelbooru",
+        "pixiv",
+        "safebooru",
+    }
     assert set().union(*SOURCE_OPERATIONS.values()) == {
         operation.value for operation in AdapterOperation
     }
@@ -181,6 +188,10 @@ def test_redacted_fixture_suites_cover_required_contract_cases() -> None:
         "malformed_json",
     }
     assert gelbooru.manifest.provider == "gelbooru"
+    safebooru = load_fixture_suite(FIXTURES / "safebooru.json")
+    assert {case.name for case in safebooru.cases} == {"post_7272295"}
+    assert safebooru.manifest.instance == "safebooru"
+    assert safebooru.manifest.schema_version == "safebooru-json-v1"
     e621 = load_fixture_suite(FIXTURES / "e621.json")
     assert {case.name for case in e621.cases} >= {
         "normal_post",

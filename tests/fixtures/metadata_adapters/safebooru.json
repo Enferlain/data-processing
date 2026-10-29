@@ -1,0 +1,77 @@
+{
+ "manifest": {
+  "format_version": 1,
+  "provider": "gelbooru",
+  "instance": "safebooru",
+  "captured_at": "2026-10-28T10:41:00Z",
+  "adapter_version": "gelbooru-native-v2",
+  "schema_version": "safebooru-json-v1",
+  "redactions": [
+   "anonymous DAPI: the capture carried no credentials to redact",
+   "no credential-bearing URLs retained",
+   "response body otherwise as captured without media bytes"
+  ],
+  "source": "live safebooru.org anonymous DAPI captures 2026-10-28: post 7272295 from the dapi post index (bare-array gelbooru 0.2 generation: no @attributes wrapper, no created_at, score null, tags as one string, hash instead of md5) and the empty note index (text/xml <notes type=array/>, the same shape as the verified gelbooru notes contract)"
+ },
+ "cases": [
+  {
+   "name": "post_7272295",
+   "operation": "fetch_post",
+   "target": "7272295",
+   "request_identity": "safebooru:dapi_json:post:7272295",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": [
+     {
+      "preview_url": "https://safebooru.org/thumbnails/4438/thumbnail_5c50d2b7101afdcda1431b6a80a2ea203ddd1fcd.jpg",
+      "sample_url": "https://safebooru.org/samples/4438/sample_5c50d2b7101afdcda1431b6a80a2ea203ddd1fcd.jpg",
+      "file_url": "https://safebooru.org/images/4438/5c50d2b7101afdcda1431b6a80a2ea203ddd1fcd.jpg",
+      "directory": 4438,
+      "hash": "9aeaf2ae11f3f276622380f5a93ee62c",
+      "width": 1916,
+      "height": 2285,
+      "id": 7272295,
+      "image": "5c50d2b7101afdcda1431b6a80a2ea203ddd1fcd.jpg",
+      "change": 1793208667,
+      "owner": "danbooru",
+      "parent_id": 0,
+      "rating": "general",
+      "sample": true,
+      "sample_height": 1014,
+      "sample_width": 850,
+      "score": null,
+      "tags": "1boy alien angry black_skin bridge colored_skin corinthian_helmet gloves greek_helmet green_helmet green_shoes green_skirt gun helmet highres holding holding_gun holding_weapon looking_at_viewer looney_tunes male_focus mars_(planet) marvin_the_martian n0ctyrra no_humans red_shirt shirt shoes skirt space weapon white_gloves",
+      "source": "https://x.com/n0ctyrra/status/2115185553964458121",
+      "status": "active",
+      "has_notes": false,
+      "comment_count": 0
+     }
+    ]
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "7272295"
+    ],
+    "created_at": null,
+    "declared_md5": null,
+    "width": 1916,
+    "height": 2285,
+    "rating": "general",
+    "score": null,
+    "status": "active",
+    "source": "https://x.com/n0ctyrra/status/2115185553964458121",
+    "owner": "danbooru",
+    "tag_count": 32,
+    "variants": [
+     "original",
+     "sample",
+     "preview"
+    ]
+   }
+  }
+ ]
+}

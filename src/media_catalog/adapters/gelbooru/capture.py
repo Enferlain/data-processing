@@ -11,7 +11,6 @@ from typing import Any
 import httpx
 
 from media_catalog.adapters.gelbooru.config import (
-    DAPI_SCHEMA_VERSION,
     GELBOORU,
     HTML_PARSER_VERSION,
     GelbooruInstance,
@@ -251,23 +250,24 @@ def capture_gelbooru_post(
     transport_key = resolved.value
     transport_version = instance.transport_version(resolved)
     parser_version = (
-        DAPI_SCHEMA_VERSION if resolved is GelbooruTransport.DAPI_JSON else HTML_PARSER_VERSION
+        instance.dapi_schema_version
+        if resolved is GelbooruTransport.DAPI_JSON
+        else HTML_PARSER_VERSION
     )
     request_identity = f"{instance.platform_key}:{transport_key}:post:{validated_id}"
 
     if resolved is GelbooruTransport.DAPI_JSON:
-        if credentials is None:
+        if credentials is None and instance.dapi_credentials_required:
             raise ValueError("both Gelbooru user ID and API key are required")
+        query: dict[str, str] = {
+            "page": "dapi",
+            "s": "post",
+            "q": "index",
+            "json": "1",
+            "id": validated_id,
+        }
         # Credential values join the query only here, at the final DAPI HTTP boundary.
-        params = credentials.authenticated_query(
-            {
-                "page": "dapi",
-                "s": "post",
-                "q": "index",
-                "json": "1",
-                "id": validated_id,
-            }
-        )
+        params = credentials.authenticated_query(query) if credentials is not None else query
     elif resolved is GelbooruTransport.HTML_POST:
         if credentials is not None:
             raise ValueError("HTML transport does not accept credentials")
@@ -324,7 +324,7 @@ def capture_gelbooru_dapi_notes(
     post_id: int | str,
     *,
     client: httpx.Client,
-    credentials: GelbooruCredentials,
+    credentials: GelbooruCredentials | None = None,
     instance: GelbooruInstance = GELBOORU,
     max_response_bytes: int | None = None,
     request_timeout_seconds: float | None = None,
@@ -336,15 +336,16 @@ def capture_gelbooru_dapi_notes(
     validated_id = validate_post_id(post_id)
     max_bytes, timeout_sec = _capture_limits(instance, max_response_bytes, request_timeout_seconds)
     # Credential values join the query only here, at the final DAPI HTTP boundary.
-    params = credentials.authenticated_query(
-        {
-            "page": "dapi",
-            "s": "note",
-            "q": "index",
-            "json": "1",
-            "post_id": validated_id,
-        }
-    )
+    query: dict[str, str] = {
+        "page": "dapi",
+        "s": "note",
+        "q": "index",
+        "json": "1",
+        "post_id": validated_id,
+    }
+    if credentials is None and instance.dapi_credentials_required:
+        raise ValueError("both Gelbooru user ID and API key are required")
+    params = credentials.authenticated_query(query) if credentials is not None else query
     status_code, content_type, payload = _bounded_payload(
         client,
         f"{instance.base_url}/index.php",
@@ -360,7 +361,7 @@ def capture_gelbooru_dapi_notes(
         post_id=validated_id,
         transport_key=GelbooruTransport.DAPI_JSON.value,
         transport_version=instance.transport_version(GelbooruTransport.DAPI_JSON),
-        parser_version=DAPI_SCHEMA_VERSION,
+        parser_version=instance.dapi_schema_version,
         schema_version=instance.schema_version(GelbooruTransport.DAPI_JSON),
         status_code=status_code,
         content_type=content_type,

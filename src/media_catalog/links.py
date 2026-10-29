@@ -22,6 +22,7 @@ BOORU_INSTANCES = {
     "danbooru.donmai.us": "danbooru",
     "gelbooru.com": "gelbooru",
     "e621.net": "e621",
+    "safebooru.org": "safebooru",
 }
 MASTODON_INSTANCES = frozenset({"baraag.net"})
 

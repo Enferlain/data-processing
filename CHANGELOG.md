@@ -33,6 +33,17 @@ Rules:
   reprojection error, crop-rectangle containment, symmetric test) instead of raw match counts,
   and the Lowe-ratio + homography pipeline shape. Nothing implemented; the opencv dependency
   decision stays open.
+- **Gelbooru-engine adapter family: safebooru.org as the first family instance (Bead
+  `data-processing-x5w`, change `extend-gelbooru-family-instances`)** — `GelbooruInstance`
+  generalizes to a registered multi-instance family (`GELBOORU_INSTANCES`) with per-instance
+  platform key, canonical base URL, credential envs, dapi schema version, and credential
+  policy. `SAFEBOORU` (anonymous dapi, `safebooru-json-v1`) ships with a live-captured fixture
+  suite: post 7272295 proves the bare-array gelbooru 0.2 generation (no wrapper, no created_at,
+  `hash` instead of `md5`, null score) — pinned as contract facts, never synthetic. The dapi
+  normalizer lands `created_at` only when the instance supplies it; `SOURCE_OPERATIONS` admits
+  `safebooru`; gelbooru dapi CLI commands gain `--instance` (default `gelbooru`); reprocess
+  accepts `safebooru`; the capture utility honors per-instance credential policy. rule34.xxx
+  stays deferred until credentials allow a live capture.
 
 ## [2026-10-25]
 

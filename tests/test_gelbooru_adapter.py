@@ -872,8 +872,8 @@ class TestResponseShapeHandling:
 class TestReviewHardening:
     """Malformed post records, continuations, and transport failures stay typed."""
 
-    def test_missing_created_at_fails_malformed(self) -> None:
-        """Post record without created_at → malformed_response, not KeyError."""
+    def test_absent_created_at_normalizes_without_inventing_one(self) -> None:
+        """Post record without created_at (safebooru generation) → absent fact."""
         credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
         body = _dapi_post_body("12370900")
         del body["post"][0]["created_at"]
@@ -883,9 +883,9 @@ class TestReviewHardening:
         adapter = GelbooruAdapter(client=client, credentials=credentials)
         envelope = adapter.fetch(AdapterRequest(AdapterOperation.FETCH_POST, "12370900"))
 
-        with pytest.raises(AdapterFailure) as exc_info:
-            adapter.normalize(envelope)
-        assert exc_info.value.outcome == AdapterOutcome.MALFORMED_RESPONSE
+        page = adapter.normalize(envelope)
+        post = next(item for item in page.items if item.object_kind == "post")
+        assert post.data["created_at"] is None
 
     def test_unparseable_created_at_fails_malformed(self) -> None:
         """Post record with an unparseable created_at → malformed_response."""
@@ -903,10 +903,10 @@ class TestReviewHardening:
         assert exc_info.value.outcome == AdapterOutcome.MALFORMED_RESPONSE
 
     def test_non_string_created_at_fails_malformed(self) -> None:
-        """Post record with a null created_at → malformed_response."""
+        """Post record with a non-text created_at → malformed_response."""
         credentials = GelbooruCredentials("12345", "abcdef1234567890abcdef1234567890")
         body = _dapi_post_body("12370900")
-        body["post"][0]["created_at"] = None
+        body["post"][0]["created_at"] = 12345
         response = _mock_response(200, json.dumps(body).encode())
         client = _make_client([response])
 

@@ -37,6 +37,27 @@ class GelbooruCredentials:
             raise ValueError(f"configure both {instance.user_id_env} and {instance.api_key_env}")
         return cls(user_id, api_key)
 
+    @classmethod
+    def optional_from_environment(
+        cls,
+        instance: GelbooruInstance,
+        environ: Mapping[str, str] | None = None,
+    ) -> GelbooruCredentials | None:
+        """Resolve credentials for instances with anonymous DAPI: absent is None.
+
+        Both references unset means anonymous; exactly one set is a
+        misconfiguration and refuses rather than half-authenticating.
+        """
+
+        values = os.environ if environ is None else environ
+        user_id = values.get(instance.user_id_env)
+        api_key = values.get(instance.api_key_env)
+        if user_id is None and api_key is None:
+            return None
+        if user_id is None or api_key is None:
+            raise ValueError(f"configure both {instance.user_id_env} and {instance.api_key_env}")
+        return cls(user_id, api_key)
+
     def secret_values(self) -> tuple[str, str]:
         """Credential values for sanitization passes; never rendered directly."""
         return (self.user_id, self.api_key)
