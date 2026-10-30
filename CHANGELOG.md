@@ -13,6 +13,18 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-30]
+
+### Added
+- **Togeari architectural investigation recorded (Bead `data-processing-164`)** —
+  `docs/plans/togeari-investigation.md`: the out-of-order KIR machine mapped (lanes, engine
+  contract B1–B7, dual Python/Rust cores, replay conformance), the bead's engineering-idea
+  attribution corrected (paged KV / CUDA graphs / Triton kernels live in KohakuvLLM and
+  kohakugbc_models, not Togeari), and the verdict: no adoption now — it fits a future
+  in-repo branching multi-model enrichment lane, not the bounded single-request metadata sync
+  the catalog runs today; the kernel bookkeeping boundary stands. Revisit trigger: the
+  KohakuGBC evaluation (`dhb`) revealing a concrete pipeline need.
+
 ## [2026-10-29]
 
 ### Added
