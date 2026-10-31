@@ -13,6 +13,19 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-10-31]
+
+### Added
+- **KohakuGBC evaluated on the local stack (Bead `data-processing-dhb`)** —
+  `docs/plans/kohakugbc-evaluation.md`: 12 maintainer-selected images through the GBC program
+  with the VLM on llama-swap (`llama.cpp` flavour) and detectors on the RTX 3090 — OWLv2 pass
+  25.5 s/image (median 16/24/36 vertices/captions/edges), SAM 3.1 pass 41.5 s/image (median
+  28/51/49; the scene layer and object sub-structure OWLv2 misses), both 12/12 graphs with
+  zero retries once inflight was throttled (the unthrottled first attempt wedged the server
+  with fault-swallowed empty graphs). Gated models (EmbeddingGemma-300m, sam3.1) load from
+  local snapshots under `eval-input/models/`; maintainer quality review of the graphs
+  pending. Evaluation only — no product surface changes.
+
 ## [2026-10-30]
 
 ### Added

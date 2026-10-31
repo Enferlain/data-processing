@@ -221,6 +221,7 @@ __marimo__/
 # Local outputs (may contain sensitive account activity)
 x-likes-output/
 catalog-output/
+eval-input/
 private-exports/
 
 # Beads / Dolt files (added by bd init)
