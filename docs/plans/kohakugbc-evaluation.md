@@ -57,13 +57,16 @@ hallucination/region review.
 - `ComfyUI_05211_.png`, `ComfyUI_10630_.png`: mostly okay. `ComfyUI_08315_.png`: okay —
   **NSFW content mostly ignored** by the VLM (qwen3.5-4b under-describes it; a real
   coverage limitation for this corpus).
-- `ComfyUI_03874_.png`: judged pretty bad, with a suspected caption-for-another-image
-  mismatch. Verified NOT a mismatch: an independent single-request probe of the image
-  returns the same scene both runs captioned (muscular figure with black tail over a
-  white-haired girl with cat ears), and both runs' graphs are stable and distinct from
-  `10630`'s dragon scene — both images share white-haired subjects, which reads as the
-  confusion source. The quality judgment on that image stands as a datapoint.
+- `ComfyUI_03874_.png`: **full-scene confabulation confirmed.** The image shows a single
+  character (maintainer ground truth), but the served VLM consistently describes a
+  two-character interaction (a black-tailed male figure over a white-haired cat-eared girl)
+  — stable across the run and two independent differently-phrased probes, so re-asking the
+  same model cannot catch this class of failure; it needs cross-model or human verification.
+  (The earlier suspected caption/image mismatch was disproven: the wrong description is
+  consistently attached to the right file.)
 
-Verdict: the pipeline and graphs are usable on this stack; reliability caveats are the
-fragility of the llama-swap VLM under burst (throttle or verify), the NSFW blind spot of the
-served model, and occasional weak images. SAM 3.1's structural advantage is real.
+Verdict: the pipeline and graphs are usable on this stack, with three reliability caveats:
+the fragility of the llama-swap VLM under burst (throttle; the failures file is the truth),
+the NSFW blind spot of the served model, and confirmed whole-scene confabulation on at least
+one image — per-image sanity checks must not trust the same model to check itself. SAM 3.1's
+structural advantage is real.

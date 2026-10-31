@@ -27,11 +27,11 @@ Rules:
   pending. Evaluation only — no product surface changes.
 - **KohakuGBC maintainer review recorded, bead closed (Bead `data-processing-dhb`)** —
   graphs judged mostly okay with two findings: the served VLM mostly ignores NSFW content
-  (coverage limitation for this corpus), and one suspected caption/image mismatch on
-  `ComfyUI_03874_.png` was verified NOT a mismatch (independent probe returns the same scene
-  both runs captioned; both images share white-haired subjects). Verdict: usable on this
-  stack with throttled inflight and per-image sanity verification; SAM 3.1's structural
-  advantage confirmed by review.
+  (coverage limitation for this corpus), and `ComfyUI_03874_.png` is confirmed
+  full-scene confabulation — a single-character image consistently described as a
+  two-character interaction across the run and two independent probes, so the same model
+  cannot self-verify. Verdict: usable on this stack with throttled inflight and
+  cross-model/human verification; SAM 3.1's structural advantage confirmed by review.
 
 ## [2026-10-30]
 
