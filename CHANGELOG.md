@@ -33,6 +33,19 @@ Rules:
   cannot self-verify. Verdict: usable on this stack with throttled inflight and
   cross-model/human verification; SAM 3.1's structural advantage confirmed by review.
 
+- **Batch A instance adapters: e926 and rule34 (Bead `data-processing-2e5`, change
+  `add-e926-rule34-instances`)** — the e621 engine gains its SFW sibling through a new
+  `E621_INSTANCES` registry (e926.net, `e926-json-v1`, anonymous, lookup deliberately
+  undeclared until captured fixtures exist), and the gelbooru 0.2 family gains rule34.xxx
+  as a credentials-required instance on `api.rule34.xxx` (`rule34-json-v1`; the www host
+  serves a CAPTCHA wall). Both land with live-captured fixtures (post 6823045; post
+  19210742 + notes XML 11899541 — rule34's dapi notes serve XML too, matching the r4y
+  finding). Platform rows are migration-seeded (`0022`), `SOURCE_OPERATIONS` grows to nine
+  keys, and CLI surfaces select instances explicitly. **Fixed:** live verification against
+  both e621.net and e926.net proved the singular post endpoint now wraps payloads in
+  `{"post": ...}` — the e621 adapter normalizes both the wrapped wire and the archived
+  bare-post fixture shape.
+
 ## [2026-10-30]
 
 ### Added
@@ -44,6 +57,7 @@ Rules:
   in-repo branching multi-model enrichment lane, not the bounded single-request metadata sync
   the catalog runs today; the kernel bookkeeping boundary stands. Revisit trigger: the
   KohakuGBC evaluation (`dhb`) revealing a concrete pipeline need.
+
 
 ## [2026-10-29]
 

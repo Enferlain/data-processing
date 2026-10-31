@@ -23,7 +23,7 @@ from media_catalog.adapters.danbooru import (
     DanbooruAdapter,
     DanbooruCredentials,
 )
-from media_catalog.adapters.e621 import E621, E621Adapter, E621Credentials
+from media_catalog.adapters.e621 import E621_INSTANCES, E621Adapter, E621Credentials
 from media_catalog.adapters.gelbooru import (
     GELBOORU,
     GELBOORU_INSTANCES,
@@ -159,8 +159,8 @@ def _offline_replay_adapter(provider: str):
     client = httpx.Client(transport=httpx.MockTransport(refuse))
     if provider in GELBOORU_INSTANCES:
         return GelbooruAdapter(GELBOORU_INSTANCES[provider], client=client)
-    if provider == "e621":
-        return E621Adapter(E621, client=client)
+    if provider in E621_INSTANCES:
+        return E621Adapter(E621_INSTANCES[provider], client=client)
     return DanbooruAdapter(AIBOORU if provider == "aibooru" else DANBOORU, client=client)
 
 
@@ -453,6 +453,9 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--instance", choices=tuple(GELBOORU_INSTANCES), default="gelbooru"
             )
+        if name.startswith("e621-"):
+            # Instance selection is explicit on every e621-engine surface.
+            command.add_argument("--instance", choices=tuple(E621_INSTANCES), default="e621")
     remote_runs = metadata_commands.add_parser("runs")
     remote_runs.add_argument("catalog", type=Path)
     remote_runs.add_argument("--limit", type=int, default=100)
@@ -600,7 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
     reprocess_plan.add_argument("catalog", type=Path)
     reprocess_plan.add_argument(
         "--provider",
-        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "e621"),
+        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "rule34", "e621", "e926"),
         required=True,
     )
     reprocess_plan.add_argument("--limit", type=int, default=100)
@@ -609,7 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
     reprocess_run.add_argument("catalog", type=Path)
     reprocess_run.add_argument(
         "--provider",
-        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "e621"),
+        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "rule34", "e621", "e926"),
         required=True,
     )
     reprocess_run.add_argument("--raw-id", action="append", type=int, required=True)
@@ -950,8 +953,11 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 raise ValueError("--resume-from is not supported for enrichment fetches")
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
                 if command == "e621-notes":
+                    e621_instance = E621_INSTANCES[arguments.instance]
                     adapter = E621Adapter(
-                        E621, client=client, credentials=E621Credentials.from_environment(E621)
+                        e621_instance,
+                        client=client,
+                        credentials=E621Credentials.from_environment(e621_instance),
                     )
                 else:
                     instance = GELBOORU_INSTANCES[arguments.instance]
@@ -1039,13 +1045,14 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 "e621-alias": AdapterOperation.FETCH_TAG_ALIAS,
                 "e621-list": AdapterOperation.LIST_ACCOUNT_POSTS,
             }[command]
-            credentials = E621Credentials.from_environment(E621)
+            instance = E621_INSTANCES[arguments.instance]
+            credentials = E621Credentials.from_environment(instance)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = E621Adapter(E621, client=client, credentials=credentials)
+                adapter = E621Adapter(instance, client=client, credentials=credentials)
                 result = MetadataSyncService(
                     database,
                     adapter,
-                    minimum_interval_seconds=E621.minimum_interval_seconds,
+                    minimum_interval_seconds=instance.minimum_interval_seconds,
                 ).synchronize(
                     operation,
                     arguments.target,
@@ -1142,11 +1149,12 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             arguments.max_seconds,
         )
         if arguments.lookup_command == "plan":
+            registry_instance = E621_INSTANCES.get(arguments.provider) or GELBOORU_INSTANCES.get(
+                arguments.provider
+            )
             plan_configuration: LookupPlanConfiguration = (
-                E621
-                if arguments.provider == "e621"
-                else GELBOORU
-                if arguments.provider == "gelbooru"
+                registry_instance
+                if registry_instance is not None
                 else DANBOORU
                 if arguments.provider == "danbooru"
                 else AIBOORU
@@ -1160,14 +1168,15 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 search_term=arguments.search_term,
             )
             return {"catalog": catalog_label, "status": "planned", **plan.as_dict()}
-        if arguments.provider == "e621":
-            credentials = E621Credentials.from_environment(E621)
+        if arguments.provider in E621_INSTANCES:
+            e621_instance = E621_INSTANCES[arguments.provider]
+            credentials = E621Credentials.from_environment(e621_instance)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = E621Adapter(E621, client=client, credentials=credentials)
+                adapter = E621Adapter(e621_instance, client=client, credentials=credentials)
                 service = CandidateLookupService(
                     database,
                     adapter,
-                    minimum_interval_seconds=E621.minimum_interval_seconds,
+                    minimum_interval_seconds=e621_instance.minimum_interval_seconds,
                 )
                 return _execute_lookup(arguments, catalog_label, service, limits)
         if arguments.provider == "gelbooru":
@@ -1373,14 +1382,15 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                         if arguments.library_command == "resume"
                         else service.run(plan)
                     )
-            elif provider == "e621":
-                credentials = E621Credentials.from_environment(E621)
+            elif provider in E621_INSTANCES:
+                e621_instance = E621_INSTANCES[provider]
+                credentials = E621Credentials.from_environment(e621_instance)
                 with httpx.Client() as client:
-                    adapter = E621Adapter(E621, client=client, credentials=credentials)
+                    adapter = E621Adapter(e621_instance, client=client, credentials=credentials)
                     service = ArtistLibraryExpansionService(
                         database,
                         adapter,
-                        minimum_interval_seconds=E621.minimum_interval_seconds,
+                        minimum_interval_seconds=e621_instance.minimum_interval_seconds,
                     )
                     result = (
                         service.resume(plan, arguments.execution_id)

@@ -229,15 +229,136 @@ def test_e621_metadata_cli_routes_operations_with_provider_limits_and_resume(
         "diagnostic": None,
     }
     assert len(adapter_calls) == 1
-    assert adapter_calls[0][0] is cli_module.E621
+    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e621"]
     assert adapter_calls[0][2] is None
-    assert service_intervals == [cli_module.E621.minimum_interval_seconds]
+    assert service_intervals == [cli_module.E621_INSTANCES["e621"].minimum_interval_seconds]
     assert len(service_calls) == 1
     actual_operation, actual_target, limits, resumed_from = service_calls[0]
     assert actual_operation is operation
     assert actual_target == target
     assert (limits.requests, limits.pages, limits.records, limits.elapsed_seconds) == (7, 8, 9, 11)
     assert resumed_from == 13
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_e926_instance_selection_routes_the_sfw_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, as_json: bool
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    adapter_calls: list[tuple[object, object, object]] = []
+
+    class FakeAdapter:
+        adapter_version = "e621-native-v2"
+        schema_version = "e926-json-v1"
+        instance_key = "e926"
+
+        def __init__(self, instance: object, *, client: object, credentials: object) -> None:
+            adapter_calls.append((instance, client, credentials))
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: FakeAdapter,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            self.minimum_interval_seconds = minimum_interval_seconds
+
+        def synchronize(
+            self,
+            actual_operation: AdapterOperation,
+            actual_target: str,
+            *,
+            limits: object,
+            resume_from_run_id: int | None,
+        ) -> SyncResult:
+            return SyncResult(
+                remote_run_id=41,
+                platform="e926",
+                operation=actual_operation.value,
+                target=actual_target,
+                status="complete",
+                outcome="success",
+                request_count=1,
+                page_count=1,
+                record_count=1,
+                resumed_from_run_id=resume_from_run_id,
+            )
+
+    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.delenv("E621_USERNAME", raising=False)
+    monkeypatch.delenv("E621_API_KEY", raising=False)
+
+    argv = ["metadata", "e621-post", str(catalog), "6823045", "--instance", "e926"]
+    if as_json:
+        argv.append("--json")
+    main(argv)
+
+    assert len(adapter_calls) == 1
+    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e926"]
+
+
+def test_rule34_instance_selection_routes_the_credentialed_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    adapter_calls: list[tuple[object, object, object]] = []
+
+    class FakeAdapter:
+        adapter_version = "gelbooru-native-v2"
+        schema_version = "rule34-json-v1"
+        instance_key = "rule34"
+
+        def __init__(self, instance: object, *, client: object, credentials: object) -> None:
+            adapter_calls.append((instance, client, credentials))
+
+    class FakeService:
+        def __init__(
+            self,
+            _database: CatalogDatabase,
+            _adapter: FakeAdapter,
+            *,
+            minimum_interval_seconds: float,
+        ) -> None:
+            self.minimum_interval_seconds = minimum_interval_seconds
+
+        def synchronize(
+            self,
+            actual_operation: AdapterOperation,
+            actual_target: str,
+            *,
+            limits: object,
+            resume_from_run_id: int | None,
+        ) -> SyncResult:
+            return SyncResult(
+                remote_run_id=42,
+                platform="rule34",
+                operation=actual_operation.value,
+                target=actual_target,
+                status="complete",
+                outcome="success",
+                request_count=1,
+                page_count=1,
+                record_count=1,
+                resumed_from_run_id=resume_from_run_id,
+            )
+
+    monkeypatch.setattr(cli_module, "GelbooruAdapter", FakeAdapter)
+    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setenv("RULE34_USER_ID", "external-user")
+    monkeypatch.setenv("RULE34_API_KEY", "external-key")
+
+    main(["metadata", "gelbooru-dapi-post", str(catalog), "19210742", "--instance", "rule34"])
+
+    assert len(adapter_calls) == 1
+    assert adapter_calls[0][0] is cli_module.GELBOORU_INSTANCES["rule34"]
+    assert adapter_calls[0][2].user_id == "external-user"
 
 
 @pytest.mark.parametrize("as_json", [False, True])
@@ -738,10 +859,10 @@ def test_e621_lookup_run_and_resume_route_through_adapter_with_provider_floor(
     main(argv)
 
     assert len(adapter_calls) == 1
-    assert adapter_calls[0][0] is cli_module.E621
+    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e621"]
     assert adapter_calls[0][1] is not None
     assert adapter_calls[0][2] is None
-    assert service_intervals == [cli_module.E621.minimum_interval_seconds]
+    assert service_intervals == [cli_module.E621_INSTANCES["e621"].minimum_interval_seconds]
     forwarded = LookupLimits(3, 3, 5, 60)
     if lookup_command == "run":
         assert plan_limits == [forwarded]
@@ -1370,11 +1491,11 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
     assert "canonical_artist_tag" not in rendered
     assert "external-user" not in rendered
     assert "external-secret" not in rendered
-    assert adapter_calls[0][0] is cli_module.E621
+    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e621"]
     credentials = adapter_calls[0][1]
     assert credentials.username == "external-user"
     assert credentials.api_key == "external-secret"
-    assert service_intervals == [cli_module.E621.minimum_interval_seconds]
+    assert service_intervals == [cli_module.E621_INSTANCES["e621"].minimum_interval_seconds]
     assert len(service_calls) == 1
     called, plan, execution_id = service_calls[0]
     assert called == library_command

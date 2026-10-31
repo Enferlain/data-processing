@@ -26,6 +26,9 @@ GELBOORU_HOST = "gelbooru.com"
 SAFEBOORU_BASE_URL = "https://safebooru.org"
 SAFEBOORU_HOST = "safebooru.org"
 SAFEBOORU_DAPI_SCHEMA_VERSION = "safebooru-json-v1"
+RULE34_BASE_URL = "https://api.rule34.xxx"
+RULE34_HOST = "api.rule34.xxx"
+RULE34_DAPI_SCHEMA_VERSION = "rule34-json-v1"
 GELBOORU_USER_AGENT = "data-processing-tools/0.1 (metadata-only Gelbooru catalog)"
 
 # Gelbooru documents a maximum DAPI page size of 100 but no public numeric rate
@@ -157,10 +160,26 @@ SAFEBOORU = GelbooruInstance(
     dapi_schema_version=SAFEBOORU_DAPI_SCHEMA_VERSION,
 )
 
+# rule34.xxx runs the gelbooru 0.2 engine behind a credentialed dapi on a dedicated
+# API host (the www host serves a CAPTCHA wall, not an API).  Its response contract is
+# verified only by live capture under maintainer-supplied credentials (Bead
+# data-processing-2e5, change add-e926-rule34-instances); notes serve XML there too,
+# exactly like the r4y gelbooru finding.
+RULE34 = GelbooruInstance(
+    platform_key="rule34",
+    base_url=RULE34_BASE_URL,
+    host=RULE34_HOST,
+    user_id_env="RULE34_USER_ID",
+    api_key_env="RULE34_API_KEY",
+    dapi_credentials_required=True,
+    dapi_schema_version=RULE34_DAPI_SCHEMA_VERSION,
+)
+
 # The registered gelbooru-engine family: platform key -> instance.  Kernel
 # operation admission (SOURCE_OPERATIONS) and CLI instance selection resolve
 # through this registry; instances outside it are not shipped surfaces.
 GELBOORU_INSTANCES: dict[str, GelbooruInstance] = {
     GELBOORU.platform_key: GELBOORU,
     SAFEBOORU.platform_key: SAFEBOORU,
+    RULE34.platform_key: RULE34,
 }

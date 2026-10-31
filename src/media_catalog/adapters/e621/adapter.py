@@ -851,6 +851,13 @@ class E621Adapter:
             )
 
     def _post_items(self, body: object) -> list[NormalizedItem]:
+        # Live captures on both family instances (e621.net and e926.net,
+        # 2026-10-31) show the singular post endpoint wraps its payload in a
+        # single-key {"post": ...} object; the historical fixture predates that
+        # wire shape and stores the bare post.  Both forms are accepted here
+        # so the captured contract and the archived fixture stay truthful.
+        if isinstance(body, dict) and set(body) == {"post"} and isinstance(body["post"], dict):
+            body = body["post"]
         if (
             not isinstance(body, dict)
             or not isinstance(body.get("id"), int)

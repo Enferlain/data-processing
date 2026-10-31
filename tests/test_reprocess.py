@@ -242,6 +242,19 @@ def test_reprocess_cli_is_offline(tmp_path: Path, capsys, monkeypatch) -> None:
         socket.socket.connect = socket_default
 
 
+def test_offline_replay_resolves_registered_family_instances() -> None:
+    from media_catalog.adapters.e621 import E621_INSTANCES, E621Adapter
+    from media_catalog.adapters.gelbooru import GELBOORU_INSTANCES, GelbooruAdapter
+    from media_catalog.cli import _offline_replay_adapter
+
+    for platform_key in (*E621_INSTANCES, *GELBOORU_INSTANCES):
+        adapter = _offline_replay_adapter(platform_key)
+        assert adapter is not None, platform_key
+        assert adapter.instance_key == platform_key
+    assert isinstance(_offline_replay_adapter("e926"), E621Adapter)
+    assert isinstance(_offline_replay_adapter("rule34"), GelbooruAdapter)
+
+
 def test_fixture_manifests_pin_live_adapter_versions() -> None:
     from media_catalog.adapters.e621 import ADAPTER_VERSION as E621_VERSION
     from media_catalog.adapters.gelbooru import ADAPTER_VERSION as GELBOORU_VERSION

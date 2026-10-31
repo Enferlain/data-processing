@@ -184,6 +184,7 @@ class E621Instance:
     user_agent: str = E621_USER_AGENT
     minimum_interval_seconds: float = MINIMUM_INTERVAL_SECONDS
     page_size: int = MAX_PAGE_SIZE
+    declared_lookup_capabilities: LookupCapabilities | None = None
 
     def __post_init__(self) -> None:
         if not self.platform_key or self.platform_key != self.platform_key.lower():
@@ -230,10 +231,12 @@ class E621Instance:
 
     @property
     def lookup_capabilities(self) -> LookupCapabilities:
-        # The closed, exact reverse-lookup contract declared in task 5.2.  This
-        # is the single source of truth for both the adapter and the neutral
-        # planning context, so a plan's capability set is provider configuration
-        # rather than a hardcoded provider string.
+        # The closed, exact reverse-lookup contract declared in task 5.2.  The
+        # canonical instance serves all six strategies; family siblings ship
+        # with empty capabilities until each strategy earns its own captured
+        # fixture (the safebooru/rule34 precedent).
+        if self.declared_lookup_capabilities is not None:
+            return self.declared_lookup_capabilities
         return E621_LOOKUP_CAPABILITIES
 
     @property
@@ -255,3 +258,25 @@ class E621Instance:
 
 
 E621 = E621Instance()
+
+# e926.net is the SFW sibling of the e621 engine: same API, same anonymous
+# policy, same pacing floors.  Its response contract is verified by live
+# capture of post 6823045 (2026-10-31), which also proved today's wire wraps
+# the singular post endpoint in {"post": ...} on both instances.
+E926 = E621Instance(
+    platform_key="e926",
+    base_url="https://e926.net",
+    host="e926.net",
+    schema_version="e926-json-v1",
+    # Bounded reverse lookup stays undeclared until each strategy earns its
+    # own e926 captured fixture (the safebooru/rule34 precedent).
+    declared_lookup_capabilities=LookupCapabilities(()),
+)
+
+# The registered e621-engine family: platform key -> instance.  Kernel
+# operation admission (SOURCE_OPERATIONS) and CLI instance selection resolve
+# through this registry; instances outside it are not shipped surfaces.
+E621_INSTANCES: dict[str, E621Instance] = {
+    E621.platform_key: E621,
+    E926.platform_key: E926,
+}

@@ -90,8 +90,10 @@ def test_source_operation_registry_covers_the_adapter_vocabulary() -> None:
         "aibooru",
         "danbooru",
         "e621",
+        "e926",
         "gelbooru",
         "pixiv",
+        "rule34",
         "safebooru",
         "sankaku",
     }

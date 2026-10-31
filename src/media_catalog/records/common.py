@@ -71,8 +71,10 @@ SOURCE_OPERATIONS: dict[str, frozenset[str]] = {
     "aibooru": REMOTE_OPERATIONS,
     "danbooru": REMOTE_OPERATIONS,
     "e621": REMOTE_OPERATIONS,
+    "e926": REMOTE_OPERATIONS,
     "gelbooru": REMOTE_OPERATIONS,
     "pixiv": REMOTE_OPERATIONS,
+    "rule34": REMOTE_OPERATIONS,
     "safebooru": REMOTE_OPERATIONS,
     "sankaku": REMOTE_OPERATIONS,
 }

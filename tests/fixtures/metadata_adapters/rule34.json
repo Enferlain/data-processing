@@ -1,0 +1,78 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "gelbooru",
+    "instance": "rule34",
+    "captured_at": "2026-10-31T20:00:00Z",
+    "adapter_version": "gelbooru-native-v2",
+    "schema_version": "rule34-json-v1",
+    "capture_note": "Live capture from https://api.rule34.xxx dapi (json=1, maintainer-supplied credentials) on 2026-10-31. The www host serves a CAPTCHA wall; the dapi base is the api host and rejects anonymous requests. Notes serve XML there too (see rule34_notes_11899541.xml), matching the gelbooru r4y finding. Credentials and their query parameters are never retained in this fixture.",
+    "redactions": [
+      "credentials traveled as dapi query parameters on the wire and are not retained anywhere in this fixture; the suite records response bodies only",
+      "no credential-bearing URLs retained",
+      "response body otherwise exactly as served, without media bytes"
+    ],
+    "source": "live api.rule34.xxx credentialed DAPI captures 2026-10-31: post 19210742 from the dapi post index (bare-array gelbooru 0.2 generation: no created_at, hash instead of md5, tags as one string) and the note index for noted post 11899541 (text/xml <notes> document, rule34_notes_11899541.xml)"
+  },
+  "cases": [
+    {
+      "name": "post_19210742",
+      "operation": "fetch_post",
+      "target": "19210742",
+      "request_identity": "rule34:dapi_json:post:19210742",
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "preview_url": "https://api-cdn.rule34.xxx/thumbnails/3504/thumbnail_a7ba34a9d9e42d1d16cfc6703adf3b58.jpg",
+            "sample_url": "https://api-cdn.rule34.xxx/samples/3504/sample_a7ba34a9d9e42d1d16cfc6703adf3b58.jpg",
+            "file_url": "https://api-cdn.rule34.xxx/images/3504/a7ba34a9d9e42d1d16cfc6703adf3b58.jpeg",
+            "directory": 3504,
+            "hash": "a7ba34a9d9e42d1d16cfc6703adf3b58",
+            "width": 1100,
+            "height": 833,
+            "id": 19210742,
+            "image": "a7ba34a9d9e42d1d16cfc6703adf3b58.jpeg",
+            "change": 1793476662,
+            "owner": "ardham",
+            "parent_id": 0,
+            "rating": "explicit",
+            "sample": true,
+            "sample_height": 644,
+            "sample_width": 850,
+            "score": 2,
+            "tags": "action_lines aramyx ass ass_focus ass_smack big_ass big_butt bursting_butt caked_up cheesecake child-bearing_hips dialogue emma_(pokemon) emma_(pokemon_legends:_z-a) female huge_ass matiere_(pokemon) matiere_(pokemon_legends:_z-a) more_at_source patreon_reward pokemon pokemon_legends:_z-a pokemon_legends_z-a reward_available sexual_assault short_jacket skintight skintight_bodysuit slapping_ass slapping_butt smacking_ass straining_clothing thick_ass thick_thighs tight_clothes tight_clothing tight_fit tight_pants tight_suit wide_hips",
+            "source": "https://x.com/AramyxDraws/status/2115599186473435518",
+            "status": "active",
+            "has_notes": false,
+            "comment_count": 0
+          }
+        ]
+      },
+      "expected": {
+        "outcome": "success",
+        "post_ids": [
+          "19210742"
+        ],
+        "created_at": null,
+        "declared_md5": null,
+        "width": 1100,
+        "height": 833,
+        "rating": "explicit",
+        "score": 2,
+        "status": "active",
+        "source": "https://x.com/AramyxDraws/status/2115599186473435518",
+        "owner": "ardham",
+        "tag_count": 40,
+        "variants": [
+          "original",
+          "sample",
+          "preview"
+        ]
+      }
+    }
+  ]
+}

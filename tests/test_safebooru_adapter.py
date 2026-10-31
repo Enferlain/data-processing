@@ -24,7 +24,7 @@ NOW = "2026-10-28T00:00:00Z"
 
 
 def test_family_registry_and_instance_policy() -> None:
-    assert set(GELBOORU_INSTANCES) == {"gelbooru", "safebooru"}
+    assert set(GELBOORU_INSTANCES) == {"gelbooru", "safebooru", "rule34"}
     assert GELBOORU_INSTANCES["safebooru"] is SAFEBOORU
     assert GELBOORU.dapi_credentials_required is True
     assert SAFEBOORU.dapi_credentials_required is False
