@@ -45,6 +45,16 @@ Rules:
   both e621.net and e926.net proved the singular post endpoint now wraps payloads in
   `{"post": ...}` — the e621 adapter normalizes both the wrapped wire and the archived
   bare-post fixture shape.
+- **Kemono-family investigation recorded (pointer: Anzhc/kemono-browser)** —
+  `docs/plans/kemono-family-investigation.md`: the Electron app itself is not adopted
+  (interactive media downloader, single hardcoded pawchive instance), but it is recorded
+  as a third reference implementation of the Kemono `/api/v1` contract alongside gallery-dl
+  and Grabber — including the post-detail `server`-backfill quirk, the file/img CDN split,
+  and the `Accept: text/css` spoof. Live probe: `pawchive.pw` serves `/api/v1/creators`
+  anonymously (200, 15.8 MB) and `.st` 301s to `.pw`. Assessed as a viable future adapter
+  family (maintainer note: only pawchive itself is currently maintained — kemono.su and
+  coomer.su are dead or stale by months to a year, so a future adapter ships pawchive
+  alone); nothing built.
 
 ## [2026-10-30]
 
