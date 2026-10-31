@@ -51,3 +51,19 @@ hallucination/region review.
   observation family, the enrichment-contract pattern (bounded run, raw report retained) is
   the natural surface, and Togeari's investigation (Bead `164`) already frames the execution
   boundary.
+
+## Maintainer review (2026-10-31)
+
+- `ComfyUI_05211_.png`, `ComfyUI_10630_.png`: mostly okay. `ComfyUI_08315_.png`: okay —
+  **NSFW content mostly ignored** by the VLM (qwen3.5-4b under-describes it; a real
+  coverage limitation for this corpus).
+- `ComfyUI_03874_.png`: judged pretty bad, with a suspected caption-for-another-image
+  mismatch. Verified NOT a mismatch: an independent single-request probe of the image
+  returns the same scene both runs captioned (muscular figure with black tail over a
+  white-haired girl with cat ears), and both runs' graphs are stable and distinct from
+  `10630`'s dragon scene — both images share white-haired subjects, which reads as the
+  confusion source. The quality judgment on that image stands as a datapoint.
+
+Verdict: the pipeline and graphs are usable on this stack; reliability caveats are the
+fragility of the llama-swap VLM under burst (throttle or verify), the NSFW blind spot of the
+served model, and occasional weak images. SAM 3.1's structural advantage is real.

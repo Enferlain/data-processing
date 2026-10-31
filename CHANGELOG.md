@@ -25,6 +25,13 @@ Rules:
   with fault-swallowed empty graphs). Gated models (EmbeddingGemma-300m, sam3.1) load from
   local snapshots under `eval-input/models/`; maintainer quality review of the graphs
   pending. Evaluation only — no product surface changes.
+- **KohakuGBC maintainer review recorded, bead closed (Bead `data-processing-dhb`)** —
+  graphs judged mostly okay with two findings: the served VLM mostly ignores NSFW content
+  (coverage limitation for this corpus), and one suspected caption/image mismatch on
+  `ComfyUI_03874_.png` was verified NOT a mismatch (independent probe returns the same scene
+  both runs captioned; both images share white-haired subjects). Verdict: usable on this
+  stack with throttled inflight and per-image sanity verification; SAM 3.1's structural
+  advantage confirmed by review.
 
 ## [2026-10-30]
 
