@@ -112,6 +112,18 @@ Rules:
   on e926 and pawchive. Reviewer pass hardened the variant test, tightened the
   pawchive service grammar, and pinned the DAPI-credential decision in design.
 
+- **Development roadmap adopted (docs/plans/priority.md)** — maintainer-provided
+  roadmap: project goal and target workflow, honest foundation inventory, P0/P1/P2
+  backlog (discovery orchestration, external index search, targeted remote discovery,
+  multi-method reconciliation, integration/CI; organization + acquisition; downstream
+  projections, scaling, temporal knowledge, enrichment, expansion), delivery milestones
+  A–D with required demonstrations, a persistent reference acceptance scenario, and
+  architectural constraints (reuse the provenance kernel; discovery produces evidence,
+  reconciliation produces conclusions; generalize only when justified). Milestone A
+  (unified multi-source discovery) is the active priority; first unit bead opened
+  (`v28`, P0.1 discovery orchestration). Existing beads reconciled against it:
+  `2ai` → P2.3, `cyp` → P1, `qi7` deferral ratified by P0.4.
+
 ## [2026-10-30]
 
 ### Added
