@@ -88,6 +88,13 @@ Rules:
   pixiv probe, uncontained transport/normalizer exceptions, unused danbooru credentials,
   double-printed report, registration-failure semantics).
 
+- **Catalog doctor surfaces adapter health (Bead `data-processing-lvc`, change
+  `compose-doctor-adapter-summary`)** — `catalog doctor` now composes the adapter
+  doctor's offline replay summary (overall ok, per-surface status, named failures)
+  alongside storage integrity, so one command answers "is everything healthy"; full
+  per-case detail and `--live` probing stay on `catalog adapter-doctor`. The report's
+  top-level ok keeps its storage-only meaning (pinned by comment, spec, and test).
+
 ## [2026-10-30]
 
 ### Added

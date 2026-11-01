@@ -264,6 +264,72 @@ def test_cli_json_report_is_complete(capsys: pytest.CaptureFixture[str]) -> None
     assert payload["surfaces"][0]["probe"] is None
 
 
+def test_catalog_doctor_surfaces_the_adapter_summary(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from media_catalog.cli import main
+    from media_catalog.database import CatalogDatabase
+
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    main(["doctor", str(catalog), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    adapters = payload["adapters"]
+    assert adapters["ok"] is True
+    assert adapters["surfaces"]["pawchive"] is True
+    assert adapters["failures"] == []
+
+
+def test_catalog_doctor_names_adapter_failures(
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from media_catalog.cli import main
+    from media_catalog.database import CatalogDatabase
+
+    failing = DoctorReport(surfaces=(), errors=("synthetic adapter error",))
+    monkeypatch.setattr("media_catalog.cli.run_doctor", lambda **kwargs: failing)
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    main(["doctor", str(catalog), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["adapters"]["ok"] is False
+    assert payload["adapters"]["errors"] == ["synthetic adapter error"]
+
+
+def test_catalog_doctor_names_failing_surfaces(
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from media_catalog.cli import main
+    from media_catalog.database import CatalogDatabase
+    from media_catalog.doctor import CaseResult, SurfaceReport
+
+    failing_surface = SurfaceReport(
+        platform="pawchive",
+        suite_file="pawchive.json",
+        case_results=(CaseResult("pawchive", "post_case", ok=False, reason="synthetic drift"),),
+    )
+    report = DoctorReport(surfaces=(failing_surface,))
+    monkeypatch.setattr("media_catalog.cli.run_doctor", lambda **kwargs: report)
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+    main(["doctor", str(catalog), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    adapters = payload["adapters"]
+    assert adapters["ok"] is False
+    assert adapters["surfaces"]["pawchive"] is False
+    assert adapters["failures"] == ["pawchive: post_case: synthetic drift"]
+    # Top-level ok reflects storage only; adapter health is the summary.
+    assert payload["ok"] is True
+
+
 def test_cli_failure_exits_nonzero(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

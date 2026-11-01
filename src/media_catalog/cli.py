@@ -741,7 +741,28 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             if arguments.command == "schema":
                 return {"catalog": public_path(database.path), **database.schema_info()}
             if arguments.command == "doctor":
-                return {"catalog": public_path(database.path), **database.doctor()}
+                # The catalog doctor reports storage integrity and the
+                # adapters' offline contract health together; the full
+                # per-case detail and live probing stay on adapter-doctor.
+                # The top-level "ok" reflects storage only (the database
+                # spread comes last); adapter health is the "adapters"
+                # summary.
+                adapters = run_doctor()
+                adapter_summary = {
+                    "ok": adapters.ok,
+                    "surfaces": {surface.platform: surface.ok for surface in adapters.surfaces},
+                    "failures": [
+                        f"{surface.platform}: {reason}"
+                        for surface in adapters.surfaces
+                        for reason in surface.failure_reasons
+                    ],
+                    "errors": list(adapters.errors),
+                }
+                return {
+                    "catalog": public_path(database.path),
+                    "adapters": adapter_summary,
+                    **database.doctor(),
+                }
             if arguments.command == "stats":
                 return {
                     "catalog": public_path(database.path),
