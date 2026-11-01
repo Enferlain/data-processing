@@ -43,6 +43,7 @@ from media_catalog.candidate_lookup import (
 from media_catalog.database import CatalogDatabase
 from media_catalog.discovery import DiscoveryService
 from media_catalog.discovery.support import parse_match_ref
+from media_catalog.doctor import DOCTOR_PLATFORMS, render_report, run_doctor
 from media_catalog.imports.x_likes_db import import_x_likes_database
 from media_catalog.imports.xarchive import import_xarchive
 from media_catalog.library import (
@@ -230,6 +231,13 @@ def build_parser() -> argparse.ArgumentParser:
         command = commands.add_parser(name)
         command.add_argument("catalog", type=Path)
         _add_json(command)
+    adapter_doctor = commands.add_parser(
+        "adapter-doctor",
+        description="Verify every adapter against its captured contract; --live probes providers",
+    )
+    adapter_doctor.add_argument("--live", action="store_true")
+    adapter_doctor.add_argument("--platform", action="append", choices=DOCTOR_PLATFORMS)
+    _add_json(adapter_doctor)
 
     stats = commands.add_parser("stats")
     stats.add_argument("catalog", type=Path)
@@ -718,6 +726,16 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 "catalog": public_path(database.path),
                 **database.schema_info(),
             }
+    if arguments.command == "adapter-doctor":
+        report = run_doctor(live=arguments.live, platforms=tuple(arguments.platform or ()))
+        if not arguments.json:
+            print(render_report(report, live=arguments.live))
+        result = report.as_dict()
+        if not report.ok:
+            result["status"] = "failed"
+        else:
+            result["status"] = "ok"
+        return result
     if arguments.command in {"schema", "doctor", "stats", "search"}:
         with CatalogDatabase(arguments.catalog) as database:
             if arguments.command == "schema":
@@ -1460,7 +1478,10 @@ def main(argv: list[str] | None = None) -> None:
         if arguments.json:
             raise SystemExit(json.dumps({"error": message}, ensure_ascii=False)) from error
         raise SystemExit(f"error: {message}") from error
-    print(render_result(result, as_json=arguments.json))
+    if arguments.command == "adapter-doctor" and not arguments.json:
+        pass  # the doctor rendered its own human report inside _run
+    else:
+        print(render_result(result, as_json=arguments.json))
     if (
         arguments.command == "assets"
         and arguments.asset_command not in {"download-plan", "download-runs", "download-run-show"}
@@ -1472,6 +1493,8 @@ def main(argv: list[str] | None = None) -> None:
         and arguments.metadata_command not in {"runs", "run-show"}
         and result.get("status") in {"paused", "failed"}
     ):
+        raise SystemExit(2)
+    if arguments.command == "adapter-doctor" and result.get("status") == "failed":
         raise SystemExit(2)
     if (
         arguments.command == "library"

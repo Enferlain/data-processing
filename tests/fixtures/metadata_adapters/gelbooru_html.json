@@ -156,7 +156,7 @@
    "target": "999999999",
    "request_identity": "gelbooru:html_post:post:999999999",
    "response": {
-    "status_code": 200,
+    "status_code": 404,
     "headers": {
      "content-type": "text/html; charset=UTF-8"
     },

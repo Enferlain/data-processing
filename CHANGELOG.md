@@ -73,6 +73,21 @@ Rules:
   1.5 MiB). Reviewer pass caught and fixed an offline-replay failure mode for full
   listing pages.
 
+- **Adapter doctor (Bead `data-processing-dm3`, change `add-adapter-doctor`)** — new
+  `catalog adapter-doctor` command answering "do all adapters still work?": offline it
+  replays every committed fixture suite under the current adapters (11 surfaces, 59
+  cases — version agreement, expected outcomes including normalized deleted/unavailable
+  states, post/account id membership, platform attribution), and with `--live` it probes
+  each provider once through the real adapter (metadata-only, pacing-floored, creds from
+  the established env files; credential-gated platforms skip with a named reason).
+  Per-surface failure reporting with case names and reasons, `--json`, `--platform`
+  filter, nonzero exit on any failure. Its first run caught a real fixture bug:
+  `gelbooru_html.json`'s `html_not_found` recorded status 200 against its own expected
+  `unavailable` outcome (the family test had been forcing 404 to mask it) — corrected to
+  404. Reviewer pass fixed six doctor defects (phantom gelbooru-html probe case, vacuous
+  pixiv probe, uncontained transport/normalizer exceptions, unused danbooru credentials,
+  double-printed report, registration-failure semantics).
+
 ## [2026-10-30]
 
 ### Added
