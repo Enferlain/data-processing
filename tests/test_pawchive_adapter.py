@@ -293,3 +293,15 @@ def test_tags_contract_brace_string_and_null() -> None:
     assert _parse_tags("{}") == []
     with pytest.raises(Exception, match="tags must be text or null"):
         _parse_tags(["not", "text"])
+
+
+def test_zoneless_provider_timestamps_qualify_as_utc() -> None:
+    # Kemono serializes naive stamps; the catalog's temporal layer requires
+    # offsets. The repo's established interpretation (gelbooru HTML adapter)
+    # qualifies zoneless provider stamps as UTC.
+    from media_catalog.adapters.pawchive.adapter import _timestamp
+
+    assert _timestamp("2022-08-12T19:42:29") == "2022-08-12T19:42:29Z"
+    assert _timestamp("2026-10-31T15:33:47.339-04:00") == "2026-10-31T19:33:47.339000Z"
+    assert _timestamp(None) is None
+    assert _timestamp("not-a-time") is None

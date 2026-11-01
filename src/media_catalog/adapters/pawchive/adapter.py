@@ -231,8 +231,8 @@ class PawchiveAdapter:
                     "name": body.get("name"),
                     "service": service,
                     "public_id": body.get("public_id"),
-                    "indexed_at": body.get("indexed"),
-                    "updated_at": body.get("updated"),
+                    "indexed_at": _timestamp(body.get("indexed")),
+                    "updated_at": _timestamp(body.get("updated")),
                     "availability": "available",
                 },
             )
@@ -273,8 +273,8 @@ class PawchiveAdapter:
                     ),
                     "title": body.get("title"),
                     "content": body.get("content"),
-                    "created_at": body.get("published"),
-                    "updated_at": body.get("edited"),
+                    "created_at": _timestamp(body.get("published")),
+                    "updated_at": _timestamp(body.get("edited")),
                     "availability": "available",
                 },
             ),
@@ -427,6 +427,27 @@ def _listing_offset(continuation: Continuation | None) -> int:
     if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
         raise ValueError("incompatible pawchive listing continuation")
     return offset
+
+
+def _timestamp(value: object) -> str | None:
+    """Qualify the provider's zoneless ISO stamps as UTC (gelbooru precedent).
+
+    Kemono serializes naive local timestamps; the catalog's temporal layer
+    requires offset-qualified values, and the repo's established
+    interpretation for zoneless provider stamps is UTC (the gelbooru HTML
+    adapter qualifies its ``Posted:`` stamps the same way).
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        parsed = _datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_datetime.UTC)
+    return parsed.astimezone(_datetime.UTC).isoformat().replace("+00:00", "Z")
 
 
 def _target_offset(request_target: str) -> int | None:

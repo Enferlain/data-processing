@@ -95,6 +95,23 @@ Rules:
   per-case detail and `--live` probing stay on `catalog adapter-doctor`. The report's
   top-level ok keeps its storage-only meaning (pinned by comment, spec, and test).
 
+- **Link-driven ingest (Bead `data-processing-qz2`, change `add-link-driven-ingest`)** —
+  `catalog fetch <catalog> <url>` closes the loop the maintainer asked for: paste a
+  post URL from any of the ten platforms and its metadata syncs through the
+  platform's real adapter path (credentials from the established environment,
+  pacing floors, sync budgets, resume). A pure `link_resolution` module maps each
+  platform's URL grammar — including pasted variants (`www.`/`en/`/`.json`,
+  `rule34.xxx`/`www.`/`api.` hosts, `sankaku.app`/`chan.sankakucomplex.com`,
+  pixiv's legacy `member_illust.php` form) — to platform+target offline, failing
+  with actionable errors on unsupported links; `--resolve-only` resolves without
+  touching the catalog. Gelbooru-family links use the DAPI transport and need that
+  family's credentials (the HTML transport stays an explicit command). **Fixed:**
+  live end-to-end fetch exposed that pawchive serializes zoneless timestamps the
+  temporal layer must reject — the adapter now qualifies them as UTC (the gelbooru
+  HTML adapter's shipped interpretation); verified live against the real catalog
+  on e926 and pawchive. Reviewer pass hardened the variant test, tightened the
+  pawchive service grammar, and pinned the DAPI-credential decision in design.
+
 ## [2026-10-30]
 
 ### Added

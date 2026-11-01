@@ -5,6 +5,7 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -55,6 +56,7 @@ from media_catalog.library import (
     replan_library_execution,
     target_capabilities,
 )
+from media_catalog.link_resolution import resolve_link
 from media_catalog.media_queries import MediaQueryService
 from media_catalog.output import bounded_error, public_path, render_result
 from media_catalog.projections import DEFAULT_LIMIT, FORMATS, plan_export, run_export
@@ -237,6 +239,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     adapter_doctor.add_argument("--live", action="store_true")
     adapter_doctor.add_argument("--platform", action="append", choices=DOCTOR_PLATFORMS)
+    fetch = commands.add_parser(
+        "fetch",
+        description=(
+            "Resolve a supported-site URL and sync its metadata"
+            " (gelbooru-family links need DAPI credentials in the environment)"
+        ),
+    )
+    fetch.add_argument("catalog", type=Path)
+    fetch.add_argument("url", help="https post URL from any supported platform")
+    _add_sync_limits(fetch, listing=False)
+    fetch.add_argument("--resolve-only", action="store_true")
+
     _add_json(adapter_doctor)
 
     stats = commands.add_parser("stats")
@@ -718,6 +732,70 @@ def _execute_lookup(
     return {"catalog": catalog_label, **result.as_dict()}
 
 
+def _fetch_adapter_for(platform: str) -> tuple[Any, float]:
+    """Bind a link-resolved platform to its real adapter construction path."""
+
+    if platform in GELBOORU_INSTANCES:
+        gelbooru_instance = GELBOORU_INSTANCES[platform]
+
+        def build_gelbooru(client: httpx.Client) -> GelbooruAdapter:
+            return GelbooruAdapter(
+                gelbooru_instance,
+                client=client,
+                credentials=(
+                    GelbooruCredentials.from_environment(gelbooru_instance)
+                    if gelbooru_instance.dapi_credentials_required
+                    else GelbooruCredentials.optional_from_environment(gelbooru_instance)
+                ),
+            )
+
+        return build_gelbooru, gelbooru_instance.minimum_interval_seconds
+    if platform in E621_INSTANCES:
+        e621_instance = E621_INSTANCES[platform]
+
+        def build_e621(client: httpx.Client) -> E621Adapter:
+            return E621Adapter(
+                e621_instance,
+                client=client,
+                credentials=E621Credentials.from_environment(e621_instance),
+            )
+
+        return build_e621, e621_instance.minimum_interval_seconds
+    if platform in PAWCHIVE_INSTANCES:
+        pawchive_instance = PAWCHIVE_INSTANCES[platform]
+
+        def build_pawchive(client: httpx.Client) -> PawchiveAdapter:
+            return PawchiveAdapter(pawchive_instance, client=client)
+
+        return build_pawchive, pawchive_instance.minimum_interval_seconds
+    if platform in {"danbooru", "aibooru"}:
+        danbooru_instance = AIBOORU if platform == "aibooru" else DANBOORU
+
+        def build_danbooru(client: httpx.Client) -> DanbooruAdapter:
+            return DanbooruAdapter(
+                danbooru_instance,
+                client=client,
+                credentials=DanbooruCredentials.from_environment(danbooru_instance),
+            )
+
+        return build_danbooru, danbooru_instance.minimum_interval_seconds
+    if platform == "sankaku":
+
+        def build_sankaku(client: httpx.Client) -> SankakuAdapter:
+            return SankakuAdapter(
+                client=client, credentials=SankakuCredentials.from_environment(SANKAKU)
+            )
+
+        return build_sankaku, SANKAKU.minimum_interval_seconds
+    if platform == "pixiv":
+
+        def build_pixiv(client: httpx.Client) -> PixivAdapter:
+            return PixivAdapter(require_auth=True, client=client)
+
+        return build_pixiv, 1.0
+    raise ValueError(f"unsupported fetch platform: {platform}")
+
+
 def _run(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.command == "init":
         with CatalogDatabase(arguments.catalog) as database:
@@ -736,6 +814,61 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
         else:
             result["status"] = "ok"
         return result
+
+    if arguments.command == "fetch":
+        resolved = resolve_link(arguments.url)
+        catalog_label = public_path(arguments.catalog)
+        if arguments.resolve_only:
+            return {
+                "catalog": catalog_label,
+                "url": arguments.url,
+                "platform": resolved.platform,
+                "operation": resolved.operation.value,
+                "target": resolved.target,
+                "canonical_url": resolved.canonical_url,
+                "status": "resolved",
+            }
+        limits = SyncLimits(
+            arguments.max_requests,
+            arguments.max_pages,
+            arguments.max_records,
+            arguments.max_seconds,
+        )
+        adapter, minimum_interval = _fetch_adapter_for(resolved.platform)
+        with httpx.Client() as client:
+            bound = adapter(client)
+            if isinstance(bound, PixivAdapter):
+                with bound as pixiv_adapter, CatalogDatabase(arguments.catalog) as database:
+                    result = MetadataSyncService(
+                        database,
+                        pixiv_adapter,
+                        minimum_interval_seconds=minimum_interval,
+                    ).synchronize(
+                        resolved.operation,
+                        resolved.target,
+                        limits=limits,
+                        resume_from_run_id=arguments.resume_from,
+                    )
+            else:
+                with CatalogDatabase(arguments.catalog) as database:
+                    result = MetadataSyncService(
+                        database,
+                        bound,
+                        minimum_interval_seconds=minimum_interval,
+                    ).synchronize(
+                        resolved.operation,
+                        resolved.target,
+                        limits=limits,
+                        resume_from_run_id=arguments.resume_from,
+                    )
+        return {
+            "catalog": catalog_label,
+            "url": arguments.url,
+            "platform": resolved.platform,
+            "target": resolved.target,
+            "canonical_url": resolved.canonical_url,
+            **result.as_dict(),
+        }
     if arguments.command in {"schema", "doctor", "stats", "search"}:
         with CatalogDatabase(arguments.catalog) as database:
             if arguments.command == "schema":
