@@ -1,0 +1,193 @@
+{
+  "manifest": {
+    "format_version": 1,
+    "provider": "pawchive",
+    "instance": "pawchive",
+    "captured_at": "2026-11-01T00:00:00Z",
+    "adapter_version": "pawchive-native-v1",
+    "schema_version": "pawchive-json-v1",
+    "redactions": [
+      "anonymous capture: no credentials existed to redact",
+      "no credential-bearing URLs retained; expiring signed temp_url fields on media entries are never retained by the adapter (sankaku signature rule)",
+      "response bodies otherwise exactly as served, without media bytes"
+    ],
+    "source": "live pawchive.pw anonymous /api/v1 captures 2026-11-01 (creator patreon:75232195 \"Jonas\"): profile (flat creator object), posts page o=0 (bare array, 1 post), and post detail 70439020 (flat post + next/prev, file + 5 attachments as {name, path}). Contract facts from larger captures kept out by the 20KB fixture cap: 50-post pages reach 1.5MB; tags arrive as a brace-wrapped comma string (\"{Benefits,Douki-Chan,NSFW}\", observed on creator patreon:30500811) or null; paywalled-preview media entries add preview_only and an expiring signed temp_url."
+  },
+  "cases": [
+    {
+      "name": "profile_patreon_75232195",
+      "operation": "fetch_account",
+      "target": "patreon:75232195",
+      "request_identity": "pawchive:fetch_account:patreon:75232195",
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "75232195",
+          "name": "Jonas",
+          "service": "patreon",
+          "indexed": "2026-06-10T21:00:00",
+          "updated": "2026-06-10T21:00:00",
+          "public_id": "u75232195",
+          "relation_id": null,
+          "ever_imported": false
+        }
+      },
+      "expected": {
+        "outcome": "success",
+        "account_ids": [
+          "75232195"
+        ],
+        "name": "Jonas",
+        "service": "patreon",
+        "public_id": "u75232195"
+      }
+    },
+    {
+      "name": "posts_patreon_75232195_o0",
+      "operation": "list_account_posts",
+      "target": "patreon:75232195",
+      "request_identity": "pawchive:list_account_posts:patreon:75232195",
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "id": "70439020",
+            "user": "75232195",
+            "service": "patreon",
+            "title": "(OFFICIAL RELEASE)BMW M4 Competition Custom Racetec Ringtool",
+            "content": "",
+            "embed": {},
+            "shared_file": false,
+            "added": "2026-06-11T00:00:00",
+            "published": "2022-08-12T19:42:29",
+            "edited": null,
+            "file": {
+              "name": "M42.png",
+              "path": "/d6/ce/d6ce0e9413eb95ebb9359eb3ac8b885d43da8aa7955eae238a5f628904159fea.png"
+            },
+            "attachments": [
+              {
+                "name": "M42.png",
+                "path": "/d6/ce/d6ce0e9413eb95ebb9359eb3ac8b885d43da8aa7955eae238a5f628904159fea.png"
+              },
+              {
+                "name": "M41.png",
+                "path": "/81/8c/818cae4be8a1b8b33b7c9f511e608912c3407de729a5d66d71d9a212da73f4be.jpg"
+              },
+              {
+                "name": "M43.png",
+                "path": "/9b/53/9b5318a447a9c16679f01c977b3550bebe3d762b3f3b61152b70e7f2677723e6.png"
+              },
+              {
+                "name": "Screenshot_jbw_bmw_m4c_ring_tool_showroom_24-1-123-23-5-22.png",
+                "path": "/6b/0e/6b0e8faeb2af4d45f951077e5828dad3697ea3774f7f58e8d2e4ccd31942fa63.png"
+              },
+              {
+                "name": "Screenshot_jbw_bmw_m4c_ring_tool_showroom_24-1-123-23-6-37.png",
+                "path": "/6f/74/6f740f473066886521ca7bc914ed93e5ef76a0367c7df3cb18985e2b663ce9b6.png"
+              }
+            ],
+            "poll": null,
+            "captions": null,
+            "tags": null,
+            "origin": "kemono",
+            "preview_state": "pending",
+            "has_full": false,
+            "detail_fetched": false
+          }
+        ]
+      },
+      "expected": {
+        "outcome": "success",
+        "post_ids": [
+          "70439020"
+        ],
+        "page_entries": 1,
+        "continuation": null
+      }
+    },
+    {
+      "name": "post_patreon_75232195_70439020",
+      "operation": "fetch_post",
+      "target": "patreon:75232195:70439020",
+      "request_identity": "pawchive:fetch_post:patreon:75232195:70439020",
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "70439020",
+          "user": "75232195",
+          "service": "patreon",
+          "title": "(OFFICIAL RELEASE)BMW M4 Competition Custom Racetec Ringtool",
+          "content": "",
+          "embed": {},
+          "shared_file": false,
+          "added": "2026-06-11T00:00:00",
+          "published": "2022-08-12T19:42:29",
+          "edited": null,
+          "file": {
+            "name": "M42.png",
+            "path": "/d6/ce/d6ce0e9413eb95ebb9359eb3ac8b885d43da8aa7955eae238a5f628904159fea.png"
+          },
+          "attachments": [
+            {
+              "name": "M42.png",
+              "path": "/d6/ce/d6ce0e9413eb95ebb9359eb3ac8b885d43da8aa7955eae238a5f628904159fea.png"
+            },
+            {
+              "name": "M41.png",
+              "path": "/81/8c/818cae4be8a1b8b33b7c9f511e608912c3407de729a5d66d71d9a212da73f4be.jpg"
+            },
+            {
+              "name": "M43.png",
+              "path": "/9b/53/9b5318a447a9c16679f01c977b3550bebe3d762b3f3b61152b70e7f2677723e6.png"
+            },
+            {
+              "name": "Screenshot_jbw_bmw_m4c_ring_tool_showroom_24-1-123-23-5-22.png",
+              "path": "/6b/0e/6b0e8faeb2af4d45f951077e5828dad3697ea3774f7f58e8d2e4ccd31942fa63.png"
+            },
+            {
+              "name": "Screenshot_jbw_bmw_m4c_ring_tool_showroom_24-1-123-23-6-37.png",
+              "path": "/6f/74/6f740f473066886521ca7bc914ed93e5ef76a0367c7df3cb18985e2b663ce9b6.png"
+            }
+          ],
+          "poll": null,
+          "captions": null,
+          "tags": null,
+          "origin": "kemono",
+          "preview_state": "pending",
+          "has_full": false,
+          "detail_fetched": false,
+          "next": null,
+          "prev": null
+        }
+      },
+      "expected": {
+        "outcome": "success",
+        "post_ids": [
+          "70439020"
+        ],
+        "creator_account_id": "75232195",
+        "occurrence_roles": [
+          "primary",
+          "attachment",
+          "attachment",
+          "attachment",
+          "attachment",
+          "attachment"
+        ],
+        "primary_path": "/d6/ce/d6ce0e9413eb95ebb9359eb3ac8b885d43da8aa7955eae238a5f628904159fea.png",
+        "thumbnail_base": "https://img.pawchive.pw/thumbnail/data",
+        "tag_count": 0
+      }
+    }
+  ]
+}

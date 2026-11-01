@@ -31,6 +31,7 @@ from media_catalog.adapters.gelbooru import (
     GelbooruCredentials,
     GelbooruHtmlAdapter,
 )
+from media_catalog.adapters.pawchive import PAWCHIVE, PAWCHIVE_INSTANCES, PawchiveAdapter
 from media_catalog.adapters.pixiv import PixivAdapter
 from media_catalog.adapters.sankaku import SANKAKU, SankakuAdapter, SankakuCredentials
 from media_catalog.candidate_lookup import (
@@ -161,6 +162,8 @@ def _offline_replay_adapter(provider: str):
         return GelbooruAdapter(GELBOORU_INSTANCES[provider], client=client)
     if provider in E621_INSTANCES:
         return E621Adapter(E621_INSTANCES[provider], client=client)
+    if provider in PAWCHIVE_INSTANCES:
+        return PawchiveAdapter(PAWCHIVE_INSTANCES[provider], client=client)
     return DanbooruAdapter(AIBOORU if provider == "aibooru" else DANBOORU, client=client)
 
 
@@ -429,6 +432,9 @@ def build_parser() -> argparse.ArgumentParser:
         "gelbooru-html-post": False,
         "sankaku-post": False,
         "sankaku-list": True,
+        "pawchive-profile": False,
+        "pawchive-post": False,
+        "pawchive-list": True,
     }
 
     def _metadata_description(name: str) -> str | None:
@@ -603,7 +609,16 @@ def build_parser() -> argparse.ArgumentParser:
     reprocess_plan.add_argument("catalog", type=Path)
     reprocess_plan.add_argument(
         "--provider",
-        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "rule34", "e621", "e926"),
+        choices=(
+            "danbooru",
+            "aibooru",
+            "gelbooru",
+            "safebooru",
+            "rule34",
+            "e621",
+            "e926",
+            "pawchive",
+        ),
         required=True,
     )
     reprocess_plan.add_argument("--limit", type=int, default=100)
@@ -612,7 +627,16 @@ def build_parser() -> argparse.ArgumentParser:
     reprocess_run.add_argument("catalog", type=Path)
     reprocess_run.add_argument(
         "--provider",
-        choices=("danbooru", "aibooru", "gelbooru", "safebooru", "rule34", "e621", "e926"),
+        choices=(
+            "danbooru",
+            "aibooru",
+            "gelbooru",
+            "safebooru",
+            "rule34",
+            "e621",
+            "e926",
+            "pawchive",
+        ),
         required=True,
     )
     reprocess_run.add_argument("--raw-id", action="append", type=int, required=True)
@@ -1031,6 +1055,25 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     database,
                     adapter,
                     minimum_interval_seconds=SANKAKU.minimum_interval_seconds,
+                ).synchronize(
+                    operation,
+                    arguments.target,
+                    limits=limits,
+                    resume_from_run_id=arguments.resume_from,
+                )
+
+        elif command.startswith("pawchive-"):
+            operation = {
+                "pawchive-profile": AdapterOperation.FETCH_ACCOUNT,
+                "pawchive-post": AdapterOperation.FETCH_POST,
+                "pawchive-list": AdapterOperation.LIST_ACCOUNT_POSTS,
+            }[command]
+            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+                adapter = PawchiveAdapter(PAWCHIVE, client=client)
+                result = MetadataSyncService(
+                    database,
+                    adapter,
+                    minimum_interval_seconds=PAWCHIVE.minimum_interval_seconds,
                 ).synchronize(
                     operation,
                     arguments.target,

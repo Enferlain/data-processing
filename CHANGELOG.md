@@ -56,6 +56,23 @@ Rules:
   coomer.su are dead or stale by months to a year, so a future adapter ships pawchive
   alone); nothing built.
 
+## [2026-11-01]
+
+### Added
+- **Pawchive metadata adapter (Bead `data-processing-629`, change
+  `add-pawchive-metadata-adapter`)** — first-class anonymous metadata support for
+  pawchive.pw, the kemono API family's only maintained instance (per the
+  kemono-family investigation): `pawchive-profile`/`pawchive-post`/`pawchive-list` CLI
+  surfaces, a single-instance family registry, migration `0023`, and
+  `SOURCE_OPERATIONS` at ten keys. Contracts are live-captured (2026-11-01): flat post
+  detail with string ids, bare-array listing pages with offset continuation embedded in
+  the durable request target (replayed pages normalize terminally), name+path media
+  occurrences with stable thumbnail URLs while expiring signed original URLs are never
+  retained (the stable-path originals host 404s anonymously), and brace-string tags.
+  A 4 MiB response ceiling absorbs the server-fixed 50-entry pages (observed at
+  1.5 MiB). Reviewer pass caught and fixed an offline-replay failure mode for full
+  listing pages.
+
 ## [2026-10-30]
 
 ### Added
