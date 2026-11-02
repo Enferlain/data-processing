@@ -154,6 +154,17 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
+## [2026-11-02]
+
+### Added
+- **CI workflow (Bead `data-processing-sd4`, roadmap P0.5 first leg)** —
+  `.github/workflows/ci.yml` runs the repo's own gates on every push and PR to main:
+  `ruff check`, `ruff format --check`, `ty check src`, the full pytest suite (migrations
+  exercised via fresh test catalogs), `catalog adapter-doctor` offline (the 11-surface
+  fixture replay — deliberately network-free), and a package build. Late formatting
+  drift in three files caught by the new gate itself and fixed. Live golden scenarios
+  stay out of CI by design (network flake); they remain a later offline-fixture unit.
+
 ## [2026-10-30]
 
 ### Added
