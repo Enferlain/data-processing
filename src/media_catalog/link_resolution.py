@@ -163,9 +163,7 @@ def _pixiv(url: str, host: str, path: list[str], query: dict[str, list[str]]) ->
 def _sankaku(url: str, host: str, path: list[str], query: dict[str, list[str]]) -> ResolvedLink:
     del query
     del host
-    segments = [
-        segment for segment in path if not re.fullmatch(r"[a-z]{2}(?:-[a-z]{2})?", segment)
-    ]
+    segments = [segment for segment in path if not re.fullmatch(r"[a-z]{2}(?:-[a-z]{2})?", segment)]
     if len(segments) != 2 or segments[0] != "posts":
         _fail(url, "expected /posts/<id> on sankaku")
     post_id = segments[1].removesuffix(".json")

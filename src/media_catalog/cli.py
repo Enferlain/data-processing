@@ -269,6 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover_cmd.add_argument("--live", action="store_true")
     discover_cmd.add_argument("--max-requests", type=int, default=12)
     discover_cmd.add_argument("--max-seconds", type=int, default=120)
+    discover_cmd.add_argument("--search-term", help="artist search term for account-seed discovery")
     _add_json(discover_cmd)
     fetch.add_argument("--resolve-only", action="store_true")
 
@@ -853,6 +854,7 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     live=arguments.live,
                     request_budget=arguments.max_requests,
                     time_budget_seconds=arguments.max_seconds,
+                    search_term=arguments.search_term,
                 )
         return {"catalog": catalog_label, **result}
     if arguments.command in {"schema", "doctor", "stats", "search"}:

@@ -35,9 +35,7 @@ BOORU_INSTANCES = {
     "www.pawchive.pw": "pawchive",
 }
 # Hosts whose post pages share the danbooru/e621 path grammar.
-_POSTS_PATH_PLATFORMS = frozenset(
-    {"danbooru", "aibooru", "e621", "e926", "sankaku"}
-)
+_POSTS_PATH_PLATFORMS = frozenset({"danbooru", "aibooru", "e621", "e926", "sankaku"})
 # The gelbooru 0.2 query-string post/artist grammar, and each family
 # member's canonical host for reference targets.
 _GELBOORU_QUERY_PLATFORMS = frozenset({"gelbooru", "safebooru", "rule34"})
@@ -230,9 +228,7 @@ def recognize_url(
             native_id = query["id"]
             canonical_host = _GELBOORU_CANONICAL_HOSTS[booru_platform]
             target = f"https://{canonical_host}/index.php?page=post&s=view&id={native_id}"
-            reference = _reference(
-                booru_platform, host, "post", native_id, target, "gelbooru-post"
-            )
+            reference = _reference(booru_platform, host, "post", native_id, target, "gelbooru-post")
         elif (
             query.get("page") == "artist"
             and query.get("s") == "show"
@@ -244,14 +240,18 @@ def recognize_url(
             reference = _reference(
                 booru_platform, host, "artist", native_id, target, "gelbooru-artist"
             )
-    elif reference is None and booru_platform == "sankaku" and (
-        match := re.fullmatch(r"/(?:[a-z]{2}(?:-[a-z]{2})?/)?posts/([A-Za-z0-9]{4,32})", path)
+    elif (
+        reference is None
+        and booru_platform == "sankaku"
+        and (match := re.fullmatch(r"/(?:[a-z]{2}(?:-[a-z]{2})?/)?posts/([A-Za-z0-9]{4,32})", path))
     ):
         native_id = match.group(1)
         target = f"https://sankaku.app/posts/{native_id}"
         reference = _reference("sankaku", host, "post", native_id, target, "sankaku-post")
-    elif reference is None and booru_platform == "pawchive" and (
-        match := re.fullmatch(r"/([a-z][a-z0-9_-]*)/user/(\d+)/post/(\d+)", path)
+    elif (
+        reference is None
+        and booru_platform == "pawchive"
+        and (match := re.fullmatch(r"/([a-z][a-z0-9_-]*)/user/(\d+)/post/(\d+)", path))
     ):
         service, user_id, native_id = match.group(1), match.group(2), match.group(3)
         target = f"https://pawchive.pw/{service}/user/{user_id}/post/{native_id}"

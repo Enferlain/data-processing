@@ -9,6 +9,7 @@ budgets.  No synthetic provider fixtures; live paths run against fakes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -73,6 +74,40 @@ def test_offline_sessions_execute_local_steps_only(catalog: Path) -> None:
     # A scoped empty result records its scope, not a global claim.
     md5 = next(step for step in local if step["method"] == "local_md5")
     assert md5["detail"] == "seed carries no verified or declared hash"
+
+
+def test_account_seed_with_search_term_plans_artist_strategies(catalog: Path) -> None:
+    with CatalogDatabase(catalog) as database:
+        connection = database.connection
+        platform = connection.execute(
+            "SELECT platform_id FROM platforms WHERE platform_key = 'danbooru'"
+        ).fetchone()
+        connection.execute(
+            "INSERT INTO accounts (platform_id, native_account_id, canonical_url,"
+            " first_seen_at, last_seen_at)"
+            " VALUES (?, '123', 'https://danbooru.donmai.us/artists/123',"
+            " '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z')",
+            (platform["platform_id"],),
+        )
+        account_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # The account carries an artist name; the search term unlocks the
+        # artist strategies for every provider that declares them.
+        digest = hashlib.sha256(b"some-account-snapshot").hexdigest()
+        connection.execute(
+            "INSERT INTO account_snapshots (account_id, observed_at, display_name,"
+            " snapshot_digest) VALUES (?, '2026-11-01T00:00:00Z', 'some_artist', ?)",
+            (account_id, digest),
+        )
+        database.connection.commit()
+        result = DiscoveryOrchestrator(database).start(
+            account_id=int(account_id), search_term="some_artist"
+        )
+    artist_steps = [
+        step
+        for step in result["steps"]
+        if step["method"].startswith("artist_") and step["status"] == "planned"
+    ]
+    assert artist_steps, result["steps"]
 
 
 def test_account_seed_excludes_post_local_steps(catalog: Path) -> None:
@@ -221,10 +256,9 @@ def test_cli_discovers_offline_and_re_reports(
     # Step outcomes persist across the reopen: the offline local steps must
     # still read as complete with their scoped details (a regression here
     # once silently rolled every outcome back on close).
-    assert [
-        (step["method"], step["status"], step["detail"])
-        for step in again["steps"][:3]
-    ] == [(step["method"], step["status"], step["detail"]) for step in payload["steps"][:3]]
+    assert [(step["method"], step["status"], step["detail"]) for step in again["steps"][:3]] == [
+        (step["method"], step["status"], step["detail"]) for step in payload["steps"][:3]
+    ]
     assert again["steps"][0]["status"] == "complete"
 
 

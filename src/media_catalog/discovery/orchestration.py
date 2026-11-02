@@ -75,6 +75,7 @@ class DiscoveryOrchestrator:
         live: bool = False,
         request_budget: int = 12,
         time_budget_seconds: int = 120,
+        search_term: str | None = None,
     ) -> dict[str, Any]:
         if (url is not None) + (post_id is not None) + (account_id is not None) != 1:
             raise ValueError("exactly one input is required (--url, --post, or --account)")
@@ -122,7 +123,9 @@ class DiscoveryOrchestrator:
             request_budget,
             time_budget_seconds,
         )
-        self.plan(session_id, seed_post=seed_post, seed_account=seed_account)
+        self.plan(
+            session_id, seed_post=seed_post, seed_account=seed_account, search_term=search_term
+        )
         # Local steps are catalog queries: they always run.  Provider steps
         # run only when the session carries live authorization.
         self.execute(session_id)
@@ -131,7 +134,12 @@ class DiscoveryOrchestrator:
     # ── Planning ───────────────────────────────────────────────────────
 
     def plan(
-        self, session_id: int, *, seed_post: int | None, seed_account: int | None
+        self,
+        session_id: int,
+        *,
+        seed_post: int | None,
+        seed_account: int | None,
+        search_term: str | None = None,
     ) -> list[DiscoveryStepPlan]:
         connection = self._database.connection
         steps: list[DiscoveryStepPlan] = []
@@ -143,7 +151,9 @@ class DiscoveryOrchestrator:
                 strategy for strategy in LookupStrategy if strategy.value.startswith("artist_")
             )
             try:
-                _, materials, _ = _account_materials(connection, seed_account, strategies, None)
+                _, materials, _ = _account_materials(
+                    connection, seed_account, strategies, search_term
+                )
             except ValueError:
                 # Artist strategies need an operator-supplied search term;
                 # without one they resolve to "no material" and the planner
@@ -204,7 +214,8 @@ class DiscoveryOrchestrator:
         connection = self._database.connection
         session = connection.execute(
             """SELECT discovery_session_id, seed_post_id, seed_account_id,
-                      live_authorized, request_budget, time_budget_seconds
+                      live_authorized, request_budget, time_budget_seconds,
+                      search_term
                  FROM discovery_sessions WHERE discovery_session_id = ?""",
             (session_id,),
         ).fetchone()
@@ -212,6 +223,7 @@ class DiscoveryOrchestrator:
             raise ValueError(f"discovery session {session_id} not found")
         budget_total = int(session["request_budget"] or 0)
         deadline = _time.monotonic() + int(session["time_budget_seconds"] or 120)
+        search_term = session["search_term"]
         spent = 0
         rows = connection.execute(
             """SELECT discovery_step_id, source_kind, source, method, status
@@ -246,7 +258,9 @@ class DiscoveryOrchestrator:
                         result_count=0,
                     )
                     continue
-                spent += self._execute_provider(session, row, remaining, remaining_seconds)
+                spent += self._execute_provider(
+                    session, row, remaining, remaining_seconds, search_term
+                )
         connection.commit()
 
     def _execute_local(self, session: sqlite3.Row, row: sqlite3.Row) -> None:
@@ -337,6 +351,7 @@ class DiscoveryOrchestrator:
         row: sqlite3.Row,
         remaining_budget: int,
         remaining_seconds: int,
+        search_term: str | None = None,
     ) -> int:
         platform = row["source"]
         strategy = LookupStrategy(row["method"])
@@ -358,6 +373,7 @@ class DiscoveryOrchestrator:
                     seed,
                     (strategy,),
                     limits=LookupLimits(remaining_budget, 2, 50, remaining_seconds),
+                    search_term=search_term,
                 )
                 results = service.execute(plan)
         except Exception as error:
@@ -393,13 +409,14 @@ class DiscoveryOrchestrator:
         live: bool,
         request_budget: int,
         time_budget_seconds: int,
+        search_term: str | None = None,
     ) -> int:
         cursor = self._database.connection.execute(
             """INSERT INTO discovery_sessions
                    (input_kind, seed_post_id, seed_account_id, input_digest,
                     live_authorized, status, request_budget, time_budget_seconds,
-                    started_at)
-               VALUES (?, ?, ?, ?, ?, 'planning', ?, ?, ?)""",
+                    search_term, started_at)
+               VALUES (?, ?, ?, ?, ?, 'planning', ?, ?, ?, ?)""",
             (
                 input_kind,
                 seed_post,
@@ -408,6 +425,7 @@ class DiscoveryOrchestrator:
                 int(live),
                 request_budget,
                 time_budget_seconds,
+                search_term,
                 _now(),
             ),
         )

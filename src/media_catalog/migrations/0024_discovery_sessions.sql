@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS discovery_sessions (
     step_count INTEGER NOT NULL DEFAULT 0,
     request_budget INTEGER,
     time_budget_seconds INTEGER,
+    search_term TEXT,
     started_at TEXT NOT NULL,
     finished_at TEXT,
     FOREIGN KEY (seed_post_id) REFERENCES posts(post_id),
