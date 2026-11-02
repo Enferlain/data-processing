@@ -17,6 +17,7 @@ from media_catalog.acquisition import (
     plan_acquisition,
     plan_expansion_acquisition,
 )
+from media_catalog.adapter_factory import adapter_construction
 from media_catalog.adapters import AdapterOperation, LookupPlanConfiguration
 from media_catalog.adapters.danbooru import (
     AIBOORU,
@@ -42,7 +43,7 @@ from media_catalog.candidate_lookup import (
     plan_candidate_lookup,
 )
 from media_catalog.database import CatalogDatabase
-from media_catalog.discovery import DiscoveryService
+from media_catalog.discovery import DiscoveryOrchestrator, DiscoveryService
 from media_catalog.discovery.support import parse_match_ref
 from media_catalog.doctor import DOCTOR_PLATFORMS, render_report, run_doctor
 from media_catalog.imports.x_likes_db import import_x_likes_database
@@ -249,6 +250,26 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("catalog", type=Path)
     fetch.add_argument("url", help="https post URL from any supported platform")
     _add_sync_limits(fetch, listing=False)
+    discover_cmd = commands.add_parser(
+        "discover",
+        description="One input initiates a bounded discovery session (offline plan by default)",
+    )
+    discover_cmd.add_argument("catalog", type=Path)
+    input_group = discover_cmd.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--url", help="post URL from any supported platform")
+    input_group.add_argument("--post", type=int, help="existing catalog post id")
+    input_group.add_argument("--account", type=int, help="existing catalog account id")
+    input_group.add_argument(
+        "--session", type=int, help="re-report a prior session instead of starting one"
+    )
+    discover_cmd.add_argument("--file", type=Path, help="local file held for the URL seed")
+    discover_cmd.add_argument("--media-root", type=Path)
+    discover_cmd.add_argument("--declared-md5")
+    discover_cmd.add_argument("--note")
+    discover_cmd.add_argument("--live", action="store_true")
+    discover_cmd.add_argument("--max-requests", type=int, default=12)
+    discover_cmd.add_argument("--max-seconds", type=int, default=120)
+    _add_json(discover_cmd)
     fetch.add_argument("--resolve-only", action="store_true")
 
     _add_json(adapter_doctor)
@@ -733,67 +754,7 @@ def _execute_lookup(
 
 
 def _fetch_adapter_for(platform: str) -> tuple[Any, float]:
-    """Bind a link-resolved platform to its real adapter construction path."""
-
-    if platform in GELBOORU_INSTANCES:
-        gelbooru_instance = GELBOORU_INSTANCES[platform]
-
-        def build_gelbooru(client: httpx.Client) -> GelbooruAdapter:
-            return GelbooruAdapter(
-                gelbooru_instance,
-                client=client,
-                credentials=(
-                    GelbooruCredentials.from_environment(gelbooru_instance)
-                    if gelbooru_instance.dapi_credentials_required
-                    else GelbooruCredentials.optional_from_environment(gelbooru_instance)
-                ),
-            )
-
-        return build_gelbooru, gelbooru_instance.minimum_interval_seconds
-    if platform in E621_INSTANCES:
-        e621_instance = E621_INSTANCES[platform]
-
-        def build_e621(client: httpx.Client) -> E621Adapter:
-            return E621Adapter(
-                e621_instance,
-                client=client,
-                credentials=E621Credentials.from_environment(e621_instance),
-            )
-
-        return build_e621, e621_instance.minimum_interval_seconds
-    if platform in PAWCHIVE_INSTANCES:
-        pawchive_instance = PAWCHIVE_INSTANCES[platform]
-
-        def build_pawchive(client: httpx.Client) -> PawchiveAdapter:
-            return PawchiveAdapter(pawchive_instance, client=client)
-
-        return build_pawchive, pawchive_instance.minimum_interval_seconds
-    if platform in {"danbooru", "aibooru"}:
-        danbooru_instance = AIBOORU if platform == "aibooru" else DANBOORU
-
-        def build_danbooru(client: httpx.Client) -> DanbooruAdapter:
-            return DanbooruAdapter(
-                danbooru_instance,
-                client=client,
-                credentials=DanbooruCredentials.from_environment(danbooru_instance),
-            )
-
-        return build_danbooru, danbooru_instance.minimum_interval_seconds
-    if platform == "sankaku":
-
-        def build_sankaku(client: httpx.Client) -> SankakuAdapter:
-            return SankakuAdapter(
-                client=client, credentials=SankakuCredentials.from_environment(SANKAKU)
-            )
-
-        return build_sankaku, SANKAKU.minimum_interval_seconds
-    if platform == "pixiv":
-
-        def build_pixiv(client: httpx.Client) -> PixivAdapter:
-            return PixivAdapter(require_auth=True, client=client)
-
-        return build_pixiv, 1.0
-    raise ValueError(f"unsupported fetch platform: {platform}")
+    return adapter_construction(platform)
 
 
 def _run(arguments: argparse.Namespace) -> dict[str, object]:
@@ -869,6 +830,31 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             "canonical_url": resolved.canonical_url,
             **result.as_dict(),
         }
+
+    if arguments.command == "discover":
+        if not 1 <= arguments.max_requests <= 100:
+            raise ValueError("--max-requests must be between 1 and 100")
+        if not 1 <= arguments.max_seconds <= 3600:
+            raise ValueError("--max-seconds must be between 1 and 3600")
+        catalog_label = public_path(arguments.catalog)
+        with CatalogDatabase(arguments.catalog) as database:
+            service = DiscoveryOrchestrator(database)
+            if arguments.session is not None:
+                result = service.report(arguments.session)
+            else:
+                result = service.start(
+                    url=arguments.url,
+                    file=arguments.file,
+                    media_root=arguments.media_root,
+                    declared_md5=arguments.declared_md5,
+                    note=arguments.note,
+                    post_id=arguments.post,
+                    account_id=arguments.account,
+                    live=arguments.live,
+                    request_budget=arguments.max_requests,
+                    time_budget_seconds=arguments.max_seconds,
+                )
+        return {"catalog": catalog_label, **result}
     if arguments.command in {"schema", "doctor", "stats", "search"}:
         with CatalogDatabase(arguments.catalog) as database:
             if arguments.command == "schema":

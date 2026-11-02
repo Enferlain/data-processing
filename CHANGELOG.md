@@ -124,6 +124,26 @@ Rules:
   (`v28`, P0.1 discovery orchestration). Existing beads reconciled against it:
   `2ai` → P2.3, `cyp` → P1, `qi7` deferral ratified by P0.4.
 
+- **Discovery orchestration, first Milestone A unit (Bead `data-processing-v28`, change
+  `add-discovery-orchestration`)** — `catalog discover` turns one input (a supported-site
+  URL, or an existing post/account record) into a bounded discovery session inside the
+  existing discovery package (`discovery/orchestration.py`): URL inputs materialize
+  through the operator seed path (idempotent, same identity as manual seeding), the
+  planner reports every (source, method) pair as planned / skipped-with-reason /
+  excluded-with-why across the local catalog and the four lookup-capable providers, local
+  steps execute offline always, and provider steps execute only under `--live` through
+  the candidate-lookup machinery under session request + wall-clock budgets with
+  per-step failure containment (missing gelbooru credentials become that step's typed
+  outcome, not a crash). Sessions and steps persist and re-report by id. Supporting
+  moves: the real adapter construction extracted to a shared `adapter_factory` (fetch and
+  discovery delegate; metadata commands migrate incrementally), and the seed/link URL
+  recognizer extended to every registered platform — aibooru, e926, rule34, safebooru
+  (query grammar), sankaku, and pawchive URLs were unrecognized, a registry drift the
+  external-link-discovery spec now forbids. Reviewer pass caught offline outcomes being
+  rolled back on close (now committed and pinned by a reopen test), silent planner drops
+  of undeclared-and-unmaterial pairs, mutating re-reports, missing deadline exactness,
+  and unbounded CLI budget flags.
+
 ## [2026-10-30]
 
 ### Added

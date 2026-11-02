@@ -20,9 +20,31 @@ SHORTENER_HOSTS = frozenset({"t.co", "bit.ly", "tinyurl.com", "ow.ly"})
 LINK_HUB_HOSTS = frozenset({"linktr.ee", "lit.link", "potofu.me", "carrd.co"})
 BOORU_INSTANCES = {
     "danbooru.donmai.us": "danbooru",
+    "aibooru.online": "aibooru",
+    "www.aibooru.online": "aibooru",
     "gelbooru.com": "gelbooru",
     "e621.net": "e621",
+    "e926.net": "e926",
     "safebooru.org": "safebooru",
+    "rule34.xxx": "rule34",
+    "www.rule34.xxx": "rule34",
+    "api.rule34.xxx": "rule34",
+    "sankaku.app": "sankaku",
+    "chan.sankakucomplex.com": "sankaku",
+    "pawchive.pw": "pawchive",
+    "www.pawchive.pw": "pawchive",
+}
+# Hosts whose post pages share the danbooru/e621 path grammar.
+_POSTS_PATH_PLATFORMS = frozenset(
+    {"danbooru", "aibooru", "e621", "e926", "sankaku"}
+)
+# The gelbooru 0.2 query-string post/artist grammar, and each family
+# member's canonical host for reference targets.
+_GELBOORU_QUERY_PLATFORMS = frozenset({"gelbooru", "safebooru", "rule34"})
+_GELBOORU_CANONICAL_HOSTS = {
+    "gelbooru": "gelbooru.com",
+    "safebooru": "safebooru.org",
+    "rule34": "rule34.xxx",
 }
 MASTODON_INSTANCES = frozenset({"baraag.net"})
 
@@ -157,7 +179,7 @@ def recognize_url(
     booru_platform = configured_boorus.get(host)
     if (
         reference is None
-        and booru_platform in {"danbooru", "e621"}
+        and booru_platform in _POSTS_PATH_PLATFORMS
         and (match := re.fullmatch(r"/(?:posts|post/show)/(\d+)", path))
     ):
         native_id = match.group(1)
@@ -171,7 +193,7 @@ def recognize_url(
         )
     elif (
         reference is None
-        and booru_platform in {"danbooru", "e621"}
+        and booru_platform in {"danbooru", "aibooru", "e621", "e926"}
         and (match := re.fullmatch(r"/artists/(\d+)", path))
     ):
         native_id = match.group(1)
@@ -185,7 +207,7 @@ def recognize_url(
         )
     elif (
         reference is None
-        and booru_platform in {"danbooru", "e621"}
+        and booru_platform in {"danbooru", "aibooru", "e621", "e926"}
         and (match := re.fullmatch(r"/data/(?:[^/]+/)*([0-9a-fA-F]{32,64})\.[a-zA-Z0-9]+", path))
     ):
         asset_id = match.group(1).lower()
@@ -198,7 +220,7 @@ def recognize_url(
             f"{booru_platform}-media",
             identifier_kind="hash",
         )
-    elif reference is None and booru_platform == "gelbooru":
+    elif reference is None and booru_platform in _GELBOORU_QUERY_PLATFORMS:
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
         if (
             query.get("page") == "post"
@@ -206,16 +228,34 @@ def recognize_url(
             and query.get("id", "").isdigit()
         ):
             native_id = query["id"]
-            target = f"https://gelbooru.com/index.php?page=post&s=view&id={native_id}"
-            reference = _reference("gelbooru", host, "post", native_id, target, "gelbooru-post")
+            canonical_host = _GELBOORU_CANONICAL_HOSTS[booru_platform]
+            target = f"https://{canonical_host}/index.php?page=post&s=view&id={native_id}"
+            reference = _reference(
+                booru_platform, host, "post", native_id, target, "gelbooru-post"
+            )
         elif (
             query.get("page") == "artist"
             and query.get("s") == "show"
             and query.get("id", "").isdigit()
         ):
             native_id = query["id"]
-            target = f"https://{host}/index.php?page=artist&s=show&id={native_id}"
-            reference = _reference("gelbooru", host, "artist", native_id, target, "gelbooru-artist")
+            canonical_host = _GELBOORU_CANONICAL_HOSTS[booru_platform]
+            target = f"https://{canonical_host}/index.php?page=artist&s=show&id={native_id}"
+            reference = _reference(
+                booru_platform, host, "artist", native_id, target, "gelbooru-artist"
+            )
+    elif reference is None and booru_platform == "sankaku" and (
+        match := re.fullmatch(r"/posts/([A-Za-z0-9]{4,32})", path)
+    ):
+        native_id = match.group(1)
+        target = f"https://sankaku.app/posts/{native_id}"
+        reference = _reference("sankaku", host, "post", native_id, target, "sankaku-post")
+    elif reference is None and booru_platform == "pawchive" and (
+        match := re.fullmatch(r"/([a-z][a-z0-9_-]*)/user/(\d+)/post/(\d+)", path)
+    ):
+        service, user_id, native_id = match.group(1), match.group(2), match.group(3)
+        target = f"https://pawchive.pw/{service}/user/{user_id}/post/{native_id}"
+        reference = _reference("pawchive", host, "post", native_id, target, "pawchive-post")
     configured_mastodon = MASTODON_INSTANCES | (mastodon_instances or frozenset())
     if (
         reference is None
