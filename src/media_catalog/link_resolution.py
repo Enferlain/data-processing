@@ -88,10 +88,11 @@ def _danbooru_family(
 ) -> ResolvedLink:
     del query
     platform = _DANBOORU_HOST_PLATFORMS[host]
-    kind = path[0] if path else ""
-    if kind != "posts" or len(path) != 2:
+    segments = [segment for segment in path if segment not in {"en", "ja"}]
+    kind = segments[0] if segments else ""
+    if kind != "posts" or len(segments) != 2:
         _fail(url, f"expected /posts/<id> on {host}")
-    post_id = _post_id(path[1].removesuffix(".json"))
+    post_id = _post_id(segments[1].removesuffix(".json"))
     return ResolvedLink(
         platform=platform,
         operation=AdapterOperation.FETCH_POST,
@@ -106,9 +107,10 @@ _E621_HOST_PLATFORMS = {"e621.net": "e621", "e926.net": "e926"}
 def _e621_family(url: str, host: str, path: list[str], query: dict[str, list[str]]) -> ResolvedLink:
     del query
     platform = _E621_HOST_PLATFORMS[host]
-    if len(path) != 2 or path[0] != "posts":
+    segments = [segment for segment in path if segment not in {"en"}]
+    if len(segments) != 2 or segments[0] != "posts":
         _fail(url, f"expected /posts/<id> on {host}")
-    post_id = _post_id(path[1].removesuffix(".json"))
+    post_id = _post_id(segments[1].removesuffix(".json"))
     return ResolvedLink(
         platform=platform,
         operation=AdapterOperation.FETCH_POST,
@@ -161,9 +163,12 @@ def _pixiv(url: str, host: str, path: list[str], query: dict[str, list[str]]) ->
 def _sankaku(url: str, host: str, path: list[str], query: dict[str, list[str]]) -> ResolvedLink:
     del query
     del host
-    if len(path) != 2 or path[0] != "posts":
+    segments = [
+        segment for segment in path if not re.fullmatch(r"[a-z]{2}(?:-[a-z]{2})?", segment)
+    ]
+    if len(segments) != 2 or segments[0] != "posts":
         _fail(url, "expected /posts/<id> on sankaku")
-    post_id = path[1].removesuffix(".json")
+    post_id = segments[1].removesuffix(".json")
     if not _SANKAKU_ID.match(post_id):
         raise LinkResolutionError(f"not a sankaku post id: {post_id!r}")
     return ResolvedLink(

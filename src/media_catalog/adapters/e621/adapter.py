@@ -1547,7 +1547,10 @@ def _validate_post_shapes(body: Mapping[str, Any]) -> None:
             value = score.get(name)
             if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
                 raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "post score is malformed")
-            if name in {"up", "down"} and value is not None and value < 0:
+            # Live captures (2026-11-02, e621 post 6577789) show the current
+            # wire reports negative downvote counts; only ``up`` stays
+            # non-negative.
+            if name == "up" and value is not None and value < 0:
                 raise AdapterFailure(AdapterOutcome.MALFORMED_RESPONSE, "post score is malformed")
     flags = body.get("flags")
     if flags is not None and (

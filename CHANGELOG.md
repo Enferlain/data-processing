@@ -144,6 +144,16 @@ Rules:
   of undeclared-and-unmaterial pairs, mutating re-reports, missing deadline exactness,
   and unbounded CLI budget flags.
 
+- **Live link-fetch validation batch (21 URLs across 4 platforms)** — all landed in the
+  real catalog: danbooru 6/6 (images + animated, anonymous), e621 6/6 (after fixes),
+  pawchive 3/3 (first fanbox-service URLs), sankaku 6/6 (images + animated, credentialed).
+  The batch caught three live-wire defects, all fixed and pinned: locale-prefixed post
+  URLs (`/en/posts/…`) now resolve and recognize (sankaku + danbooru family); e621's
+  current wire reports negative downvote counts, rejected by both the adapter validator
+  and the migration-0009 `CHECK (score_down >= 0)` — validator and record layer fixed,
+  migration `0025` rebuilds the table with the check relaxed, and a live-captured
+  fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
+
 ## [2026-10-30]
 
 ### Added

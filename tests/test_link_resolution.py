@@ -82,6 +82,16 @@ def test_resolution_covers_the_registered_platforms() -> None:
             "wvaemE6YDaz",
         ),
         (
+            "https://chan.sankakucomplex.com/en/posts/AZrKYlgK2M5",
+            "sankaku",
+            "AZrKYlgK2M5",
+        ),
+        (
+            "https://danbooru.donmai.us/en/posts/12495119",
+            "danbooru",
+            "12495119",
+        ),
+        (
             "https://www.pawchive.pw/patreon/user/75232195/post/70439020",
             "pawchive",
             "patreon:75232195:70439020",

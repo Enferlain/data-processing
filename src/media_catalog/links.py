@@ -180,7 +180,7 @@ def recognize_url(
     if (
         reference is None
         and booru_platform in _POSTS_PATH_PLATFORMS
-        and (match := re.fullmatch(r"/(?:posts|post/show)/(\d+)", path))
+        and (match := re.fullmatch(r"/(?:[a-z]{2}(?:-[a-z]{2})?/)?(?:posts|post/show)/(\d+)", path))
     ):
         native_id = match.group(1)
         reference = _reference(
@@ -245,7 +245,7 @@ def recognize_url(
                 booru_platform, host, "artist", native_id, target, "gelbooru-artist"
             )
     elif reference is None and booru_platform == "sankaku" and (
-        match := re.fullmatch(r"/posts/([A-Za-z0-9]{4,32})", path)
+        match := re.fullmatch(r"/(?:[a-z]{2}(?:-[a-z]{2})?/)?posts/([A-Za-z0-9]{4,32})", path)
     ):
         native_id = match.group(1)
         target = f"https://sankaku.app/posts/{native_id}"

@@ -119,10 +119,16 @@ class PostMetadataObservationRecord:
     flag_flagged: bool | None = None
 
     def __post_init__(self) -> None:
-        for name in ("score_up", "score_down", "favorite_count", "comment_count"):
+        # score_down may be negative: live e621-family captures (2026-11-02)
+        # report negative downvote counts on the current wire.
+        for name in ("score_up", "favorite_count", "comment_count"):
             value = getattr(self, name)
             if value is not None and (isinstance(value, bool) or value < 0):
                 raise ValueError(f"post {name} must not be negative")
+        if self.score_down is not None and (
+            isinstance(self.score_down, bool) or not isinstance(self.score_down, int)
+        ):
+            raise ValueError("post score_down must be an integer")
         if self.score_total is not None and isinstance(self.score_total, bool):
             raise ValueError("post score total must be an integer")
         for name in ("flag_deleted", "flag_pending", "flag_flagged"):
