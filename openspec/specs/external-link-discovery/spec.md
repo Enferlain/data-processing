@@ -31,9 +31,16 @@ and SHALL identify the canonicalization algorithm and version used.
 - **THEN** discovery leaves that component intact rather than guessing
 
 ### Requirement: Parse typed platform references
-The system SHALL use versioned recognizers to parse supported canonical URLs into a platform,
-object kind, identifier kind, identifier, and canonical target URL without treating a
-booru artist record, uploader account, post, or artwork as interchangeable object kinds.
+The system SHALL use versioned recognizers to parse supported canonical URLs into a
+platform, object kind, identifier kind, identifier, and canonical target URL without
+treating a booru artist record, uploader account, post, or artwork as interchangeable
+object kinds. The recognizer host table SHALL cover every platform the catalog
+registers: the danbooru family (danbooru, aibooru), the e621 family (e621, e926),
+the gelbooru query-grammar family (gelbooru, safebooru, rule34 — each resolving to
+its own canonical host), sankaku (opaque post identifiers, both the canonical and
+chan hosts), and pawchive (service-scoped creator post routes). Recognizer coverage
+SHALL not lag the platform registry: a registered platform's stable post URL SHALL
+recognize.
 
 #### Scenario: Recognize a Pixiv user URL
 - **WHEN** a canonical URL contains a supported Pixiv user path with a stable numeric identifier
@@ -59,6 +66,12 @@ booru artist record, uploader account, post, or artwork as interchangeable objec
 #### Scenario: Recognize a Mastodon-compatible status
 - **WHEN** a URL contains a supported instance-qualified `/@account/<status-id>` route
 - **THEN** discovery records a status/post reference for that instance without assuming the display handle is its stable account ID
+
+#### Scenario: Recognize every registered platform's post URL
+- **WHEN** a URL is the stable post URL of any registered platform (aibooru, e926,
+  rule34, safebooru, sankaku, pawchive included)
+- **THEN** the recognizer resolves the platform, a stable post identifier, and that
+  platform's canonical target URL
 
 ### Requirement: Semantic references are independent of observed URLs
 The system SHALL identify a semantic platform reference by platform, instance, object kind,
