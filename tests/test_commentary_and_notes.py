@@ -542,12 +542,11 @@ def test_enrichment_commands_route_to_their_surfaces(
     monkeypatch.setattr(cli_module, "fetch_commentary", _fake("commentary"))
     monkeypatch.setattr(cli_module, "fetch_notes", _fake("notes"))
     monkeypatch.setattr(cli_module, "fetch_pool", _fake("pool"))
-    monkeypatch.setattr(cli_module, "DanbooruCredentials", _FakeCreds)
-    monkeypatch.setattr(cli_module, "GelbooruCredentials", _FakeCreds)
-    monkeypatch.setattr(cli_module, "E621Credentials", _FakeCreds)
-    monkeypatch.setattr(cli_module, "DanbooruAdapter", _FakeAdapter)
-    monkeypatch.setattr(cli_module, "GelbooruAdapter", _FakeAdapter)
-    monkeypatch.setattr(cli_module, "E621Adapter", _FakeAdapter)
+
+    def fake_factory(platform: str):
+        return (lambda client: _FakeAdapter(platform, client=client)), 1.0
+
+    monkeypatch.setattr(cli_module, "adapter_construction", fake_factory)
 
     main(["metadata", command, str(catalog), native, "--json"])
 

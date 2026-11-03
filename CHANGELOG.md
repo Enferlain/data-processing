@@ -165,6 +165,16 @@ Rules:
   drift in three files caught by the new gate itself and fixed. Live golden scenarios
   stay out of CI by design (network flake); they remain a later offline-fixture unit.
 
+### Changed
+- **CLI adapter construction unified on the shared factory** — every live
+  metadata/enrichment/lookup/library command block now builds its adapter through
+  `media_catalog.adapter_factory.adapter_construction` (the same path link-driven fetch
+  and discovery use), eliminating the last hand-rolled constructions that could drift on
+  credentials, instances, or pacing floors; the unreachable gelbooru lookup branch left
+  behind by the registry branch is removed. Offline replay and the adapter doctor keep
+  their refuse-transport constructions by design, and pixiv keeps its context-manager
+  lifecycle. CLI tests updated to patch the factory instead of constructors.
+
 ## [2026-10-30]
 
 ### Added

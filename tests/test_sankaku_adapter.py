@@ -485,7 +485,20 @@ def test_sankaku_cli_routes_and_persists(tmp_path: Path, monkeypatch: pytest.Mon
                 resumed_from_run_id=None,
             )
 
-    monkeypatch.setattr(cli_module, "SankakuAdapter", FakeAdapter)
+    from media_catalog.adapters.sankaku import SANKAKU_INSTANCES
+
+    def fake_factory(platform: str):
+        assert platform == "sankaku"
+        instance = SANKAKU_INSTANCES[platform]
+
+        def build(client: object) -> FakeAdapter:
+            return FakeAdapter(
+                instance, client=client, credentials=SankakuCredentials.from_environment(instance)
+            )
+
+        return build, instance.minimum_interval_seconds
+
+    monkeypatch.setattr(cli_module, "adapter_construction", fake_factory)
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     main(["metadata", "sankaku-post", str(catalog), "wvaemE6YDaz", "--json"])
     assert len(constructed) == 1

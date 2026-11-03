@@ -23,19 +23,16 @@ from media_catalog.adapters.danbooru import (
     AIBOORU,
     DANBOORU,
     DanbooruAdapter,
-    DanbooruCredentials,
 )
-from media_catalog.adapters.e621 import E621_INSTANCES, E621Adapter, E621Credentials
+from media_catalog.adapters.e621 import E621_INSTANCES, E621Adapter
 from media_catalog.adapters.gelbooru import (
     GELBOORU,
     GELBOORU_INSTANCES,
     GelbooruAdapter,
-    GelbooruCredentials,
     GelbooruHtmlAdapter,
 )
-from media_catalog.adapters.pawchive import PAWCHIVE, PAWCHIVE_INSTANCES, PawchiveAdapter
+from media_catalog.adapters.pawchive import PAWCHIVE_INSTANCES, PawchiveAdapter
 from media_catalog.adapters.pixiv import PixivAdapter
-from media_catalog.adapters.sankaku import SANKAKU, SankakuAdapter, SankakuCredentials
 from media_catalog.candidate_lookup import (
     CandidateLookupQueryService,
     CandidateLookupService,
@@ -1136,24 +1133,8 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             if arguments.resume_from is not None:
                 raise ValueError("--resume-from is not supported for enrichment fetches")
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                if command == "e621-notes":
-                    e621_instance = E621_INSTANCES[arguments.instance]
-                    adapter = E621Adapter(
-                        e621_instance,
-                        client=client,
-                        credentials=E621Credentials.from_environment(e621_instance),
-                    )
-                else:
-                    instance = GELBOORU_INSTANCES[arguments.instance]
-                    adapter = GelbooruAdapter(
-                        instance,
-                        client=client,
-                        credentials=(
-                            GelbooruCredentials.from_environment(instance)
-                            if instance.dapi_credentials_required
-                            else GelbooruCredentials.optional_from_environment(instance)
-                        ),
-                    )
+                notes_factory, _interval = adapter_construction(arguments.instance)
+                adapter = notes_factory(client)
                 return {
                     "catalog": catalog_label,
                     **fetch_notes(
@@ -1182,17 +1163,8 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                         "gelbooru-dapi-tag": AdapterOperation.FETCH_TAG,
                         "gelbooru-dapi-list": AdapterOperation.LIST_ACCOUNT_POSTS,
                     }[command]
-                    instance = GELBOORU_INSTANCES[arguments.instance]
-                    adapter = GelbooruAdapter(
-                        instance,
-                        client=client,
-                        credentials=(
-                            GelbooruCredentials.from_environment(instance)
-                            if instance.dapi_credentials_required
-                            else GelbooruCredentials.optional_from_environment(instance)
-                        ),
-                    )
-                    interval = instance.minimum_interval_seconds
+                    dapi_factory, interval = adapter_construction(arguments.instance)
+                    adapter = dapi_factory(client)
                 result = MetadataSyncService(
                     database,
                     adapter,
@@ -1208,13 +1180,13 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 "sankaku-post": AdapterOperation.FETCH_POST,
                 "sankaku-list": AdapterOperation.LIST_ACCOUNT_POSTS,
             }[command]
-            credentials = SankakuCredentials.from_environment(SANKAKU)
+            sankaku_factory, sankaku_interval = adapter_construction("sankaku")
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = SankakuAdapter(SANKAKU, client=client, credentials=credentials)
+                adapter = sankaku_factory(client)
                 result = MetadataSyncService(
                     database,
                     adapter,
-                    minimum_interval_seconds=SANKAKU.minimum_interval_seconds,
+                    minimum_interval_seconds=sankaku_interval,
                 ).synchronize(
                     operation,
                     arguments.target,
@@ -1228,12 +1200,13 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 "pawchive-post": AdapterOperation.FETCH_POST,
                 "pawchive-list": AdapterOperation.LIST_ACCOUNT_POSTS,
             }[command]
+            pawchive_factory, pawchive_interval = adapter_construction("pawchive")
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = PawchiveAdapter(PAWCHIVE, client=client)
+                adapter = pawchive_factory(client)
                 result = MetadataSyncService(
                     database,
                     adapter,
-                    minimum_interval_seconds=PAWCHIVE.minimum_interval_seconds,
+                    minimum_interval_seconds=pawchive_interval,
                 ).synchronize(
                     operation,
                     arguments.target,
@@ -1248,14 +1221,13 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 "e621-alias": AdapterOperation.FETCH_TAG_ALIAS,
                 "e621-list": AdapterOperation.LIST_ACCOUNT_POSTS,
             }[command]
-            instance = E621_INSTANCES[arguments.instance]
-            credentials = E621Credentials.from_environment(instance)
+            e621_factory, e621_interval = adapter_construction(arguments.instance)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = E621Adapter(instance, client=client, credentials=credentials)
+                adapter = e621_factory(client)
                 result = MetadataSyncService(
                     database,
                     adapter,
-                    minimum_interval_seconds=instance.minimum_interval_seconds,
+                    minimum_interval_seconds=e621_interval,
                 ).synchronize(
                     operation,
                     arguments.target,
@@ -1267,9 +1239,9 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
             if arguments.resume_from is not None:
                 raise ValueError("--resume-from is not supported for enrichment fetches")
-            credentials = DanbooruCredentials.from_environment(instance)
+            danbooru_factory, _ = adapter_construction(instance.platform_key)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                adapter = danbooru_factory(client)
                 return {
                     "catalog": catalog_label,
                     **fetch_commentary(
@@ -1286,9 +1258,9 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             if arguments.resume_from is not None:
                 raise ValueError("--resume-from is not supported for pool fetches")
             instance = AIBOORU if command.startswith("aibooru-") else DANBOORU
-            credentials = DanbooruCredentials.from_environment(instance)
+            danbooru_factory, _ = adapter_construction(instance.platform_key)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                adapter = danbooru_factory(client)
                 return {
                     "catalog": catalog_label,
                     **fetch_pool(
@@ -1310,13 +1282,13 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                     else AdapterOperation.LIST_ACCOUNT_POSTS
                 )
             )
-            credentials = DanbooruCredentials.from_environment(instance)
+            danbooru_factory, danbooru_interval = adapter_construction(instance.platform_key)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                adapter = danbooru_factory(client)
                 result = MetadataSyncService(
                     database,
                     adapter,
-                    minimum_interval_seconds=instance.minimum_interval_seconds,
+                    minimum_interval_seconds=danbooru_interval,
                 ).synchronize(
                     operation,
                     arguments.target,
@@ -1372,34 +1344,22 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             )
             return {"catalog": catalog_label, "status": "planned", **plan.as_dict()}
         if arguments.provider in E621_INSTANCES:
-            e621_instance = E621_INSTANCES[arguments.provider]
-            credentials = E621Credentials.from_environment(e621_instance)
+            lookup_factory, lookup_interval = adapter_construction(arguments.provider)
             with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = E621Adapter(e621_instance, client=client, credentials=credentials)
+                adapter = lookup_factory(client)
                 service = CandidateLookupService(
                     database,
                     adapter,
-                    minimum_interval_seconds=e621_instance.minimum_interval_seconds,
+                    minimum_interval_seconds=lookup_interval,
                 )
                 return _execute_lookup(arguments, catalog_label, service, limits)
-        if arguments.provider == "gelbooru":
-            credentials = GelbooruCredentials.from_environment(GELBOORU)
-            with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-                adapter = GelbooruAdapter(GELBOORU, client=client, credentials=credentials)
-                service = CandidateLookupService(
-                    database,
-                    adapter,
-                    minimum_interval_seconds=GELBOORU.minimum_interval_seconds,
-                )
-                return _execute_lookup(arguments, catalog_label, service, limits)
-        instance = DANBOORU if arguments.provider == "danbooru" else AIBOORU
-        credentials = DanbooruCredentials.from_environment(instance)
+        danbooru_lookup_factory, danbooru_lookup_interval = adapter_construction(arguments.provider)
         with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
-            adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+            adapter = danbooru_lookup_factory(client)
             service = CandidateLookupService(
                 database,
                 adapter,
-                minimum_interval_seconds=instance.minimum_interval_seconds,
+                minimum_interval_seconds=danbooru_lookup_interval,
             )
             return _execute_lookup(arguments, catalog_label, service, limits)
     if arguments.command == "export":
@@ -1570,30 +1530,14 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
                         if arguments.library_command == "resume"
                         else service.run(plan)
                     )
-            elif provider in {"danbooru", "aibooru"}:
-                instance = DANBOORU if provider == "danbooru" else AIBOORU
-                credentials = DanbooruCredentials.from_environment(instance)
+            elif provider in {"danbooru", "aibooru"} or provider in E621_INSTANCES:
+                library_factory, library_interval = adapter_construction(provider)
                 with httpx.Client() as client:
-                    adapter = DanbooruAdapter(instance, client=client, credentials=credentials)
+                    adapter = library_factory(client)
                     service = ArtistLibraryExpansionService(
                         database,
                         adapter,
-                        minimum_interval_seconds=instance.minimum_interval_seconds,
-                    )
-                    result = (
-                        service.resume(plan, arguments.execution_id)
-                        if arguments.library_command == "resume"
-                        else service.run(plan)
-                    )
-            elif provider in E621_INSTANCES:
-                e621_instance = E621_INSTANCES[provider]
-                credentials = E621Credentials.from_environment(e621_instance)
-                with httpx.Client() as client:
-                    adapter = E621Adapter(e621_instance, client=client, credentials=credentials)
-                    service = ArtistLibraryExpansionService(
-                        database,
-                        adapter,
-                        minimum_interval_seconds=e621_instance.minimum_interval_seconds,
+                        minimum_interval_seconds=library_interval,
                     )
                     result = (
                         service.resume(plan, arguments.execution_id)

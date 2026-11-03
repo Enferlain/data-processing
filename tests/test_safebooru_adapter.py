@@ -142,7 +142,22 @@ def test_gelbooru_dapi_cli_selects_the_safebooru_instance(
                 resumed_from_run_id=None,
             )
 
-    monkeypatch.setattr(cli_module, "GelbooruAdapter", FakeDapiAdapter)
+    from media_catalog.adapters.gelbooru import GELBOORU_INSTANCES, GelbooruCredentials
+
+    def safebooru_factory(platform: str):
+        assert platform == "safebooru"
+        instance = GELBOORU_INSTANCES[platform]
+
+        def build(client: object) -> FakeDapiAdapter:
+            return FakeDapiAdapter(
+                instance,
+                client=client,
+                credentials=GelbooruCredentials.optional_from_environment(instance),
+            )
+
+        return build, instance.minimum_interval_seconds
+
+    monkeypatch.setattr(cli_module, "adapter_construction", safebooru_factory)
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     monkeypatch.delenv("SAFEBOORU_USER_ID", raising=False)
     monkeypatch.delenv("SAFEBOORU_API_KEY", raising=False)

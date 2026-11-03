@@ -9,6 +9,8 @@ import pytest
 
 import media_catalog.cli as cli_module
 from media_catalog.adapters import AdapterOperation
+from media_catalog.adapters.danbooru import AIBOORU, DANBOORU
+from media_catalog.adapters.e621 import E621Credentials
 from media_catalog.candidate_lookup import LookupExecutionResult, LookupLimits
 from media_catalog.cli import build_parser, main
 from media_catalog.database import CatalogDatabase
@@ -28,6 +30,22 @@ from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
 
 NOW = "2026-08-12T20:00:00Z"
+
+
+def _factory_patched(monkeypatch, adapter_cls, instances, credentials_resolver):
+    """Patch ``cli.adapter_construction`` to build ``adapter_cls`` like the real factory."""
+
+    import media_catalog.cli as cli_module
+
+    def factory(platform: str):
+        instance = instances[platform]
+
+        def build(client: object):
+            return adapter_cls(instance, client=client, credentials=credentials_resolver(instance))
+
+        return build, instance.minimum_interval_seconds
+
+    monkeypatch.setattr(cli_module, "adapter_construction", factory)
 
 
 def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
@@ -186,7 +204,12 @@ def test_e621_metadata_cli_routes_operations_with_provider_limits_and_resume(
                 resumed_from_run_id=resume_from_run_id,
             )
 
-    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    _factory_patched(
+        monkeypatch,
+        FakeAdapter,
+        cli_module.E621_INSTANCES,
+        lambda instance: None,
+    )
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
@@ -288,7 +311,7 @@ def test_e926_instance_selection_routes_the_sfw_instance(
                 resumed_from_run_id=resume_from_run_id,
             )
 
-    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    _factory_patched(monkeypatch, FakeAdapter, cli_module.E621_INSTANCES, lambda instance: None)
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
@@ -349,7 +372,14 @@ def test_rule34_instance_selection_routes_the_credentialed_instance(
                 resumed_from_run_id=resume_from_run_id,
             )
 
-    monkeypatch.setattr(cli_module, "GelbooruAdapter", FakeAdapter)
+    from media_catalog.adapters.gelbooru import GELBOORU_INSTANCES, GelbooruCredentials
+
+    _factory_patched(
+        monkeypatch,
+        FakeAdapter,
+        GELBOORU_INSTANCES,
+        GelbooruCredentials.from_environment,
+    )
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     monkeypatch.setenv("RULE34_USER_ID", "external-user")
     monkeypatch.setenv("RULE34_API_KEY", "external-key")
@@ -429,7 +459,15 @@ def test_e621_metadata_cli_human_output_and_help_keep_credentials_external(
                 1,
             )
 
-    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    from media_catalog.adapters.e621 import E621_INSTANCES as _E621_INSTANCES
+    from media_catalog.adapters.e621 import E621Credentials as _E621Credentials
+
+    _factory_patched(
+        monkeypatch,
+        FakeAdapter,
+        _E621_INSTANCES,
+        _E621Credentials.from_environment,
+    )
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     monkeypatch.setenv("E621_USERNAME", "external-user")
     monkeypatch.setenv("E621_API_KEY", "sentinel-secret")
@@ -845,7 +883,9 @@ def test_e621_lookup_run_and_resume_route_through_adapter_with_provider_floor(
                 0,
             )
 
-    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    from media_catalog.adapters.e621 import E621_INSTANCES as _E621_INSTANCES
+
+    _factory_patched(monkeypatch, FakeAdapter, _E621_INSTANCES, lambda instance: None)
     monkeypatch.setattr(cli_module, "CandidateLookupService", FakeService)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
@@ -948,7 +988,12 @@ def test_danbooru_family_lookup_routing_is_unchanged(
         def execute(self, _plan):
             return ()
 
-    monkeypatch.setattr(cli_module, "DanbooruAdapter", FakeAdapter)
+    _factory_patched(
+        monkeypatch,
+        FakeAdapter,
+        {DANBOORU.platform_key: DANBOORU, AIBOORU.platform_key: AIBOORU},
+        lambda instance: None,
+    )
     monkeypatch.setattr(cli_module, "CandidateLookupService", FakeService)
     monkeypatch.delenv(instance.login_env, raising=False)
     monkeypatch.delenv(instance.api_key_env, raising=False)
@@ -1450,7 +1495,20 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
             service_calls.append(("resume", plan, execution_id))
             return FakeResult()
 
-    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
+    def fake_factory(platform: str):
+        assert platform == "e621"
+        instance = cli_module.E621_INSTANCES["e621"]
+
+        def build(client: object) -> FakeAdapter:
+            return FakeAdapter(
+                instance,
+                client=client,
+                credentials=E621Credentials.from_environment(instance),
+            )
+
+        return build, 1.0
+
+    monkeypatch.setattr(cli_module, "adapter_construction", fake_factory)
     monkeypatch.setattr(cli_module, "ArtistLibraryExpansionService", FakeService)
     monkeypatch.setenv("E621_USERNAME", "external-user")
     monkeypatch.setenv("E621_API_KEY", "external-secret")
