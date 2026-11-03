@@ -530,11 +530,6 @@ def test_enrichment_commands_route_to_their_surfaces(
 
         return run
 
-    class _FakeCreds:
-        @classmethod
-        def from_environment(cls, instance: object) -> object:
-            return object()
-
     class _FakeAdapter:
         def __init__(self, instance: object, *, client: object, credentials: object = None):
             pass

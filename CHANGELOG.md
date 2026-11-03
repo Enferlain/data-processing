@@ -170,8 +170,8 @@ Rules:
   metadata/enrichment/lookup/library command block now builds its adapter through
   `media_catalog.adapter_factory.adapter_construction` (the same path link-driven fetch
   and discovery use), eliminating the last hand-rolled constructions that could drift on
-  credentials, instances, or pacing floors; the unreachable gelbooru lookup branch left
-  behind by the registry branch is removed. Offline replay and the adapter doctor keep
+  credentials, instances, or pacing floors; the gelbooru lookup path now resolves
+  through the same factory fallthrough instead of its own construction. Offline replay and the adapter doctor keep
   their refuse-transport constructions by design, and pixiv keeps its context-manager
   lifecycle. CLI tests updated to patch the factory instead of constructors.
 

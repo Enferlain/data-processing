@@ -1690,7 +1690,14 @@ def test_gelbooru_metadata_cli_routes_operations_with_provider_limits(
                 resumed_from_run_id=resume_from_run_id,
             )
 
-    monkeypatch.setattr(cli_module, "GelbooruAdapter", FakeDapiAdapter)
+    from media_catalog.adapters.gelbooru import GelbooruCredentials
+
+    _factory_patched(
+        monkeypatch,
+        FakeDapiAdapter,
+        cli_module.GELBOORU_INSTANCES,
+        GelbooruCredentials.from_environment,
+    )
     monkeypatch.setattr(cli_module, "GelbooruHtmlAdapter", FakeHtmlAdapter)
     monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
     # Sentinel credential values prove the HTML path never reads them.
@@ -1742,7 +1749,13 @@ def test_gelbooru_cli_resume_rejected_outside_listing(
         def __init__(self, *args: object, **kwargs: object) -> None:
             raise AssertionError("adapter must not be constructed")
 
-    monkeypatch.setattr(cli_module, "GelbooruAdapter", NeverAdapter)
+    def never_build_factory(platform: str):
+        def build(client: object):
+            raise AssertionError("adapter must not be constructed")
+
+        return build, 1.0
+
+    monkeypatch.setattr(cli_module, "adapter_construction", never_build_factory)
     with pytest.raises(SystemExit):
         main(
             [
@@ -1759,6 +1772,7 @@ def test_gelbooru_cli_resume_rejected_outside_listing(
 def test_gelbooru_cli_dapi_requires_credentials_before_network(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     catalog = tmp_path / "private" / "catalog.sqlite3"
     with CatalogDatabase(catalog):
@@ -1766,13 +1780,22 @@ def test_gelbooru_cli_dapi_requires_credentials_before_network(
     monkeypatch.delenv("GELBOORU_USER_ID", raising=False)
     monkeypatch.delenv("GELBOORU_API_KEY", raising=False)
 
-    class NeverAdapter:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            raise AssertionError("adapter must not be constructed")
+    # Credential resolution happens inside the shared factory's build step:
+    # the run must fail before any request with the env var names, never
+    # silently proceeding anonymous.
+    def failing_build_factory(platform: str):
+        def build(client: object):
+            from media_catalog.adapters.gelbooru import GelbooruCredentials
 
-    monkeypatch.setattr(cli_module, "GelbooruAdapter", NeverAdapter)
-    with pytest.raises(SystemExit):
+            GelbooruCredentials.from_environment(cli_module.GELBOORU_INSTANCES[platform])
+            raise AssertionError("credential resolution must fail before the adapter builds")
+
+        return build, 1.0
+
+    monkeypatch.setattr(cli_module, "adapter_construction", failing_build_factory)
+    with pytest.raises(SystemExit) as raised:
         main(["metadata", "gelbooru-dapi-post", str(catalog), "12370900"])
+    assert "GELBOORU_USER_ID" in str(raised.value.code)
 
 
 def test_library_capabilities_cli_reports_supported_and_unsupported_targets_offline(
