@@ -1,0 +1,222 @@
+{
+ "scenario": "e621-5955492",
+ "url": "https://e621.net/posts/5955492",
+ "platform": "e621",
+ "target": "5955492",
+ "media_type": "application/json",
+ "payload": {
+  "post": {
+   "id": 5955492,
+   "created_at": "2025-11-04T18:12:25.627-05:00",
+   "updated_at": "2026-11-01T20:46:03.111-05:00",
+   "file": {
+    "width": 1920,
+    "height": 1080,
+    "ext": "webm",
+    "size": 12437134,
+    "md5": "7b66d106c7dadf8dc4e38fee6f595d04",
+    "url": "https://static1.e621.net/data/7b/66/7b66d106c7dadf8dc4e38fee6f595d04.webm"
+   },
+   "preview": {
+    "width": 455,
+    "height": 256,
+    "url": "https://static1.e621.net/data/preview/7b/66/7b66d106c7dadf8dc4e38fee6f595d04.jpg",
+    "alt": "https://static1.e621.net/data/preview/7b/66/7b66d106c7dadf8dc4e38fee6f595d04.webp"
+   },
+   "sample": {
+    "has": true,
+    "width": 1511,
+    "height": 850,
+    "url": "https://static1.e621.net/data/sample/7b/66/7b66d106c7dadf8dc4e38fee6f595d04.jpg",
+    "alt": "https://static1.e621.net/data/sample/7b/66/7b66d106c7dadf8dc4e38fee6f595d04.webp",
+    "alternates": {
+     "has": true,
+     "original": {
+      "fps": 48.0,
+      "codec": "vp9",
+      "size": 12437134,
+      "width": 1920,
+      "height": 1080,
+      "url": "https://static1.e621.net/data/7b/66/7b66d106c7dadf8dc4e38fee6f595d04.webm"
+     },
+     "variants": {
+      "mp4": {
+       "codec": "avc1.4D401E",
+       "fps": 48.0,
+       "size": 2424262,
+       "width": 1920,
+       "height": 1080,
+       "url": "https://static1.e621.net/data/sample/7b/66/7b66d106c7dadf8dc4e38fee6f595d04_alt.mp4"
+      }
+     },
+     "samples": {
+      "480p": {
+       "fps": 24.0,
+       "size": 735869,
+       "codec": "avc1.4D401E",
+       "width": 960,
+       "height": 540,
+       "url": "https://static1.e621.net/data/sample/7b/66/7b66d106c7dadf8dc4e38fee6f595d04_480p.mp4"
+      },
+      "720p": {
+       "fps": 24.0,
+       "size": 1316783,
+       "codec": "avc1.4D401E",
+       "width": 1440,
+       "height": 810,
+       "url": "https://static1.e621.net/data/sample/7b/66/7b66d106c7dadf8dc4e38fee6f595d04_720p.mp4"
+      }
+     }
+    }
+   },
+   "score": {
+    "up": 1020,
+    "down": -11,
+    "total": 1009
+   },
+   "tags": {
+    "general": [
+     "ambiguous_penetration",
+     "animal_genitalia",
+     "animal_penis",
+     "anthro",
+     "anthro_penetrating",
+     "anthro_penetrating_female",
+     "anthro_penetrating_human",
+     "balls",
+     "black_body",
+     "black_fur",
+     "black_hair",
+     "bouncing_balls",
+     "bouncing_breasts",
+     "bouncing_butt",
+     "breasts",
+     "butt",
+     "canine_genitalia",
+     "canine_penis",
+     "clothed",
+     "clothing",
+     "duo",
+     "female",
+     "female_human",
+     "female_on_anthro",
+     "female_penetrated",
+     "fur",
+     "genitals",
+     "growling",
+     "hair",
+     "holding_belly",
+     "holding_neck",
+     "human_on_anthro",
+     "human_penetrated",
+     "interspecies",
+     "knot",
+     "knotted_penis",
+     "larger_anthro",
+     "larger_male",
+     "male",
+     "male/female",
+     "male_anthro",
+     "male_penetrating",
+     "male_penetrating_female",
+     "male_penetrating_human",
+     "moan",
+     "nipples",
+     "partially_clothed",
+     "penetration",
+     "penis",
+     "sex",
+     "sheath",
+     "size_difference",
+     "smaller_female",
+     "smaller_human",
+     "smaller_penetrated",
+     "white_body",
+     "white_skin"
+    ],
+    "artist": [
+     "noname55"
+    ],
+    "contributor": [],
+    "copyright": [
+     "bethesda_game_studios",
+     "microsoft",
+     "mythology",
+     "skyrim",
+     "the_elder_scrolls"
+    ],
+    "character": [
+     "serana",
+     "skyrim_werewolf"
+    ],
+    "species": [
+     "canid",
+     "canine",
+     "human",
+     "mammal",
+     "mythological_canine",
+     "mythological_creature",
+     "vampire",
+     "werecanid",
+     "werecanine",
+     "werecreature",
+     "werewolf"
+    ],
+    "invalid": [],
+    "meta": [
+     "16:9",
+     "3d_(artwork)",
+     "3d_animation",
+     "animated",
+     "digital_media_(artwork)",
+     "hi_res",
+     "high_framerate",
+     "short_playtime",
+     "sound",
+     "source_filmmaker_(artwork)",
+     "video",
+     "widescreen"
+    ],
+    "lore": []
+   },
+   "locked_tags": [],
+   "change_seq": 82541501,
+   "flags": {
+    "pending": false,
+    "flagged": false,
+    "note_locked": false,
+    "status_locked": false,
+    "rating_locked": false,
+    "deleted": false
+   },
+   "rating": "e",
+   "fav_count": 1737,
+   "sources": [
+    "https://rule34.xxx/index.php?page=post&s=view&id=15305993&tags=noname55+"
+   ],
+   "pools": [],
+   "relationships": {
+    "parent_id": 5459274,
+    "has_children": false,
+    "has_active_children": false,
+    "children": []
+   },
+   "approver_id": 38571,
+   "uploader_id": 366989,
+   "uploader_name": "WolffyLegend",
+   "description": "",
+   "comment_count": 3,
+   "is_favorited": false,
+   "vote": 0,
+   "has_notes": false,
+   "duration": 12.003
+  }
+ },
+ "expect": {
+  "platform_key": "e621",
+  "native_post_id": "5955492",
+  "media_occurrences": 1,
+  "declared_md5": "7b66d106c7dadf8dc4e38fee6f595d04",
+  "score_down": -11
+ }
+}

@@ -1,0 +1,113 @@
+{
+ "scenario": "danbooru-12483960",
+ "url": "https://danbooru.donmai.us/posts/12483960",
+ "platform": "danbooru",
+ "target": "12483960",
+ "media_type": "application/json",
+ "payload": {
+  "id": 12483960,
+  "created_at": "2026-10-31T02:34:11.682-04:00",
+  "uploader_id": 1485630,
+  "score": 4,
+  "source": "https://www.bilibili.com/opus/1265253251807182867",
+  "md5": "e40f6d84b6e253008f3c864400afff6d",
+  "last_comment_bumped_at": null,
+  "rating": "s",
+  "image_width": 994,
+  "image_height": 1490,
+  "tag_string": "1girl amamiyayk black_dress black_thighhighs black_wings breasts character_request chinese_commentary commentary_request detached_sleeves dress fang flower full_body head_wings highres indie_virtual_youtuber indoors kneeling long_hair long_sleeves looking_at_viewer open_mouth red_flower single_head_wing sleeveless sleeveless_dress small_breasts solo thighhighs white_hair wings",
+  "fav_count": 4,
+  "file_ext": "jpg",
+  "last_noted_at": null,
+  "parent_id": null,
+  "has_children": false,
+  "approver_id": 1054326,
+  "tag_count_general": 26,
+  "tag_count_artist": 1,
+  "tag_count_character": 0,
+  "tag_count_copyright": 1,
+  "file_size": 1600552,
+  "up_score": 4,
+  "down_score": 0,
+  "is_pending": false,
+  "is_flagged": false,
+  "is_deleted": false,
+  "tag_count": 32,
+  "updated_at": "2026-10-31T02:39:13.737-04:00",
+  "is_banned": false,
+  "pixiv_id": null,
+  "last_commented_at": null,
+  "has_active_children": false,
+  "bit_flags": 0,
+  "tag_count_meta": 4,
+  "has_large": true,
+  "has_visible_children": false,
+  "media_asset": {
+   "id": 50700371,
+   "created_at": "2026-10-31T02:32:46.089-04:00",
+   "updated_at": "2026-10-31T02:32:47.948-04:00",
+   "md5": "e40f6d84b6e253008f3c864400afff6d",
+   "file_ext": "jpg",
+   "file_size": 1600552,
+   "image_width": 994,
+   "image_height": 1490,
+   "duration": null,
+   "status": "active",
+   "file_key": "xz4Kfikcq",
+   "is_public": true,
+   "pixel_hash": "95fc2907d6e9232e444764d932b9ec03",
+   "variants": [
+    {
+     "type": "180x180",
+     "url": "https://cdn.donmai.us/180x180/e4/0f/e40f6d84b6e253008f3c864400afff6d.jpg",
+     "width": 120,
+     "height": 180,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "360x360",
+     "url": "https://cdn.donmai.us/360x360/e4/0f/e40f6d84b6e253008f3c864400afff6d.jpg",
+     "width": 240,
+     "height": 360,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "720x720",
+     "url": "https://cdn.donmai.us/720x720/e4/0f/e40f6d84b6e253008f3c864400afff6d.webp",
+     "width": 480,
+     "height": 720,
+     "file_ext": "webp"
+    },
+    {
+     "type": "sample",
+     "url": "https://cdn.donmai.us/sample/e4/0f/sample-e40f6d84b6e253008f3c864400afff6d.jpg",
+     "width": 850,
+     "height": 1274,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "original",
+     "url": "https://cdn.donmai.us/original/e4/0f/e40f6d84b6e253008f3c864400afff6d.jpg",
+     "width": 994,
+     "height": 1490,
+     "file_ext": "jpg"
+    }
+   ]
+  },
+  "tag_string_general": "1girl black_dress black_thighhighs black_wings breasts detached_sleeves dress fang flower full_body head_wings indoors kneeling long_hair long_sleeves looking_at_viewer open_mouth red_flower single_head_wing sleeveless sleeveless_dress small_breasts solo thighhighs white_hair wings",
+  "tag_string_character": "",
+  "tag_string_copyright": "indie_virtual_youtuber",
+  "tag_string_artist": "amamiyayk",
+  "tag_string_meta": "character_request chinese_commentary commentary_request highres",
+  "file_url": "https://cdn.donmai.us/original/e4/0f/e40f6d84b6e253008f3c864400afff6d.jpg",
+  "large_file_url": "https://cdn.donmai.us/sample/e4/0f/sample-e40f6d84b6e253008f3c864400afff6d.jpg",
+  "preview_file_url": "https://cdn.donmai.us/180x180/e4/0f/e40f6d84b6e253008f3c864400afff6d.jpg"
+ },
+ "expect": {
+  "platform_key": "danbooru",
+  "native_post_id": "12483960",
+  "media_occurrences": 1,
+  "declared_md5": "e40f6d84b6e253008f3c864400afff6d",
+  "score_down": 0
+ }
+}

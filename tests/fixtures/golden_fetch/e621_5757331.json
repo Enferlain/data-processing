@@ -1,0 +1,170 @@
+{
+ "scenario": "e621-5757331",
+ "url": "https://e621.net/posts/5757331",
+ "platform": "e621",
+ "target": "5757331",
+ "media_type": "application/json",
+ "payload": {
+  "post": {
+   "id": 5757331,
+   "created_at": "2025-08-04T23:59:34.824-04:00",
+   "updated_at": "2026-10-24T21:14:22.826-04:00",
+   "file": {
+    "width": 1200,
+    "height": 922,
+    "ext": "jpg",
+    "size": 497953,
+    "md5": "93f89e23f37ad5345d9fc3149bfa417f",
+    "url": "https://static1.e621.net/data/93/f8/93f89e23f37ad5345d9fc3149bfa417f.jpg"
+   },
+   "preview": {
+    "width": 333,
+    "height": 256,
+    "url": "https://static1.e621.net/data/preview/93/f8/93f89e23f37ad5345d9fc3149bfa417f.jpg",
+    "alt": "https://static1.e621.net/data/preview/93/f8/93f89e23f37ad5345d9fc3149bfa417f.webp"
+   },
+   "sample": {
+    "has": true,
+    "width": 1106,
+    "height": 850,
+    "url": "https://static1.e621.net/data/sample/93/f8/93f89e23f37ad5345d9fc3149bfa417f.jpg",
+    "alt": "https://static1.e621.net/data/sample/93/f8/93f89e23f37ad5345d9fc3149bfa417f.webp",
+    "alternates": {}
+   },
+   "score": {
+    "up": 375,
+    "down": -1,
+    "total": 374
+   },
+   "tags": {
+    "general": [
+     "animal_genitalia",
+     "animal_penis",
+     "areola",
+     "bestiality",
+     "big_breasts",
+     "blue_eyes",
+     "breasts",
+     "brown_hair",
+     "canine_genitalia",
+     "canine_penis",
+     "dark_body",
+     "dark_hair",
+     "dark_skin",
+     "duo",
+     "erection",
+     "female",
+     "female_humanoid",
+     "female_penetrated",
+     "feral",
+     "feral_on_top",
+     "feral_penetrating",
+     "feral_penetrating_humanoid",
+     "fur",
+     "genitals",
+     "grey_body",
+     "grey_fur",
+     "hair",
+     "humanoid_on_feral",
+     "humanoid_penetrated",
+     "humanoid_pointy_ears",
+     "interspecies",
+     "jewelry",
+     "knot",
+     "knotted_penis",
+     "large_penetration",
+     "larger_feral",
+     "larger_male",
+     "male",
+     "male/female",
+     "male_feral",
+     "male_penetrating",
+     "male_penetrating_female",
+     "necklace",
+     "necklace_only",
+     "nipples",
+     "nude",
+     "penetration",
+     "penile",
+     "penile_penetration",
+     "penis",
+     "penis_in_vagina",
+     "pointy_ears",
+     "sex",
+     "size_difference",
+     "smaller_female",
+     "smaller_humanoid",
+     "smaller_penetrated",
+     "vaginal",
+     "vaginal_penetration",
+     "yellow_eyes"
+    ],
+    "artist": [
+     "d-rex"
+    ],
+    "contributor": [],
+    "copyright": [
+     "mythology"
+    ],
+    "character": [],
+    "species": [
+     "canid",
+     "canine",
+     "canis",
+     "elf",
+     "humanoid",
+     "mammal",
+     "mythological_canine",
+     "mythological_creature",
+     "werecanid",
+     "werecanine",
+     "werecreature",
+     "werewolf",
+     "wolf"
+    ],
+    "invalid": [],
+    "meta": [],
+    "lore": []
+   },
+   "locked_tags": [],
+   "change_seq": 73383753,
+   "flags": {
+    "pending": false,
+    "flagged": false,
+    "note_locked": false,
+    "status_locked": false,
+    "rating_locked": false,
+    "deleted": false
+   },
+   "rating": "e",
+   "fav_count": 675,
+   "sources": [
+    "https://x.com/d_rex_too/status/1798541649188180313",
+    "https://x.com/d_rex_too/"
+   ],
+   "pools": [],
+   "relationships": {
+    "parent_id": null,
+    "has_children": false,
+    "has_active_children": false,
+    "children": []
+   },
+   "approver_id": 589819,
+   "uploader_id": 407834,
+   "uploader_name": "econiko",
+   "description": "",
+   "comment_count": 0,
+   "is_favorited": false,
+   "vote": 0,
+   "has_notes": false,
+   "duration": null
+  }
+ },
+ "expect": {
+  "platform_key": "e621",
+  "native_post_id": "5757331",
+  "media_occurrences": 1,
+  "declared_md5": "93f89e23f37ad5345d9fc3149bfa417f",
+  "score_down": -1
+ }
+}

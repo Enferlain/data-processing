@@ -1,0 +1,113 @@
+{
+ "scenario": "danbooru-12495115",
+ "url": "https://danbooru.donmai.us/posts/12495115",
+ "platform": "danbooru",
+ "target": "12495115",
+ "media_type": "application/json",
+ "payload": {
+  "id": 12495115,
+  "created_at": "2026-11-01T11:44:06.039-05:00",
+  "uploader_id": 1228751,
+  "score": 8,
+  "source": "https://x.com/tofu_0607/status/2116847770518884468",
+  "md5": "313d07db8dd18ec311514b879bddaf9a",
+  "last_comment_bumped_at": null,
+  "rating": "s",
+  "image_width": 2787,
+  "image_height": 4096,
+  "tag_string": "1girl absurdres bare_shoulders black-framed_eyewear black_hairband black_shirt black_shorts can commentary_request cowboy_shot detached_sleeves drink_can from_below glasses green_hair hair_ornament hairband hairclip high-waist_shorts highres holding_coffin looking_at_viewer one_eye_closed pointy_ears red_eyes roxy_ifrita_pryce shirt shorts solo tofu_0607 zenless_zone_zero",
+  "fav_count": 7,
+  "file_ext": "jpg",
+  "last_noted_at": null,
+  "parent_id": null,
+  "has_children": false,
+  "approver_id": null,
+  "tag_count_general": 25,
+  "tag_count_artist": 1,
+  "tag_count_character": 1,
+  "tag_count_copyright": 1,
+  "file_size": 1676549,
+  "up_score": 8,
+  "down_score": 0,
+  "is_pending": false,
+  "is_flagged": false,
+  "is_deleted": false,
+  "tag_count": 31,
+  "updated_at": "2026-11-01T11:49:10.834-05:00",
+  "is_banned": false,
+  "pixiv_id": null,
+  "last_commented_at": null,
+  "has_active_children": false,
+  "bit_flags": 0,
+  "tag_count_meta": 3,
+  "has_large": true,
+  "has_visible_children": false,
+  "media_asset": {
+   "id": 50723385,
+   "created_at": "2026-11-01T07:32:54.707-05:00",
+   "updated_at": "2026-11-01T07:32:56.546-05:00",
+   "md5": "313d07db8dd18ec311514b879bddaf9a",
+   "file_ext": "jpg",
+   "file_size": 1676549,
+   "image_width": 2787,
+   "image_height": 4096,
+   "duration": null,
+   "status": "active",
+   "file_key": "vnnveTLCP",
+   "is_public": true,
+   "pixel_hash": "30a640dc91e76a6d48bf48cd13516202",
+   "variants": [
+    {
+     "type": "180x180",
+     "url": "https://cdn.donmai.us/180x180/31/3d/313d07db8dd18ec311514b879bddaf9a.jpg",
+     "width": 122,
+     "height": 180,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "360x360",
+     "url": "https://cdn.donmai.us/360x360/31/3d/313d07db8dd18ec311514b879bddaf9a.jpg",
+     "width": 245,
+     "height": 360,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "720x720",
+     "url": "https://cdn.donmai.us/720x720/31/3d/313d07db8dd18ec311514b879bddaf9a.webp",
+     "width": 490,
+     "height": 720,
+     "file_ext": "webp"
+    },
+    {
+     "type": "sample",
+     "url": "https://cdn.donmai.us/sample/31/3d/sample-313d07db8dd18ec311514b879bddaf9a.jpg",
+     "width": 850,
+     "height": 1249,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "original",
+     "url": "https://cdn.donmai.us/original/31/3d/313d07db8dd18ec311514b879bddaf9a.jpg",
+     "width": 2787,
+     "height": 4096,
+     "file_ext": "jpg"
+    }
+   ]
+  },
+  "tag_string_general": "1girl bare_shoulders black-framed_eyewear black_hairband black_shirt black_shorts can cowboy_shot detached_sleeves drink_can from_below glasses green_hair hair_ornament hairband hairclip high-waist_shorts holding_coffin looking_at_viewer one_eye_closed pointy_ears red_eyes shirt shorts solo",
+  "tag_string_character": "roxy_ifrita_pryce",
+  "tag_string_copyright": "zenless_zone_zero",
+  "tag_string_artist": "tofu_0607",
+  "tag_string_meta": "absurdres commentary_request highres",
+  "file_url": "https://cdn.donmai.us/original/31/3d/313d07db8dd18ec311514b879bddaf9a.jpg",
+  "large_file_url": "https://cdn.donmai.us/sample/31/3d/sample-313d07db8dd18ec311514b879bddaf9a.jpg",
+  "preview_file_url": "https://cdn.donmai.us/180x180/31/3d/313d07db8dd18ec311514b879bddaf9a.jpg"
+ },
+ "expect": {
+  "platform_key": "danbooru",
+  "native_post_id": "12495115",
+  "media_occurrences": 1,
+  "declared_md5": "313d07db8dd18ec311514b879bddaf9a",
+  "score_down": 0
+ }
+}

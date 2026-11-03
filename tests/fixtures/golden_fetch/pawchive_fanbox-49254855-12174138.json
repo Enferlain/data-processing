@@ -1,0 +1,91 @@
+{
+ "scenario": "pawchive-fanbox:49254855:12174138",
+ "url": "https://pawchive.pw/fanbox/user/49254855/post/12174138",
+ "platform": "pawchive",
+ "target": "fanbox:49254855:12174138",
+ "media_type": "application/json",
+ "payload": {
+  "id": "12174138",
+  "user": "49254855",
+  "service": "fanbox",
+  "title": "202606 WIP",
+  "content": "",
+  "embed": {},
+  "shared_file": false,
+  "added": "2026-06-30T18:00:00",
+  "published": "2026-06-30T14:39:06",
+  "edited": "2026-06-30T14:39:06",
+  "file": {
+   "name": "cover.jpeg",
+   "path": "/dd/1e/dd1e5a142f161978964b75f2efcf89e6d3e5fda07e86f4a18c41a6d13b2bbeba.jpeg"
+  },
+  "attachments": [
+   {
+    "name": "fO7NLO2qUtA76hjyomjh8Q5U.jpeg",
+    "path": "/29/3d/293df6af9d22e1ca137fbd4a06f5a197428e7166c895b66e3bf18ebf4acd2f83.jpeg"
+   },
+   {
+    "name": "Z7GMDNRA2D4MLTvLFmVguycJ.jpeg",
+    "path": "/56/6b/566b2075e1f3bf9b6c16460487313888c344bf1d75b39ad457096ef6f99508c1.jpeg"
+   },
+   {
+    "name": "vB5ORi5NOUt1lH0ECwVaKasX.jpeg",
+    "path": "/08/03/080380f8ffc7570783521f7338cc7c3270b26db9e03130c6c207060e3960bdf7.jpeg"
+   },
+   {
+    "name": "ylsRvKnuIXs6v9iIPDaIPcoK.jpeg",
+    "path": "/3f/90/3f90164d958b69860e5ec9bdb839ea6ffad73d0eb7052cd700edff0c217a37b2.jpeg"
+   },
+   {
+    "name": "ETCqmofe1yu4ZRyonygvNSez.jpeg",
+    "path": "/c9/18/c91844b77d61b2b59b62c2650ea29e620fa44e10977b97e15f3e390ed76b9a9c.jpeg"
+   },
+   {
+    "name": "zY7V5W8qEO2Hx1EQH7ELzj53.jpeg",
+    "path": "/ae/92/ae92de9368dedfb668fa0784c5e1256153d81293f22eedf3acd9e38b545b413c.jpeg"
+   },
+   {
+    "name": "WTFu76omZ5o7prkdMewjjlKd.jpeg",
+    "path": "/38/c4/38c4ee09eeb99c8abd45e69bd273bc170d73c172d77b4e2202dc6fa99475710f.jpeg"
+   },
+   {
+    "name": "075bDhlByVigyhLQ7g2M7Cpm.jpeg",
+    "path": "/28/4d/284d941605bebaf9aaba0fe58ed351110cdb03375014376548fa859843f63219.jpeg"
+   },
+   {
+    "name": "USqBaYK3c3lHUiAW3IYEat0M.jpeg",
+    "path": "/a7/f1/a7f1ec32211d02fc83cf50fe19b582c0f9d8a7b34075642de3f06a251410d2f8.jpeg"
+   },
+   {
+    "name": "wup6xc3o26W7DiP8g4Rj6lmV.jpeg",
+    "path": "/db/8f/db8f4fa670e038dd1a2f3b2527d0e3f1e920cb3edd86ca8b7bffff117b960ae0.jpeg"
+   },
+   {
+    "name": "uQ4hKxoJxqgKugNQyQoE9TeX.jpeg",
+    "path": "/21/61/2161598b499c8275a11e2c2d4e993687c479facfb277eab80536b7b52fd84234.jpeg"
+   },
+   {
+    "name": "pKqLgXJcqfFbS1vDjHellsF7.jpeg",
+    "path": "/66/3f/663fcc679c67a0f901472728fa71da6fb13c4b68ae1eae9633b2a91b3d9405ab.jpeg"
+   },
+   {
+    "name": "z3BXoSfOqoG8zgvDBbqWE0Fl.jpeg",
+    "path": "/93/0c/930ca10553e8f64de5d830715db0f6f1643086012f06d3e59d8c131047b7264b.jpeg"
+   }
+  ],
+  "poll": null,
+  "captions": null,
+  "tags": null,
+  "origin": "import",
+  "preview_state": "scraped",
+  "has_full": true,
+  "detail_fetched": true,
+  "next": "11830711",
+  "prev": "12521972"
+ },
+ "expect": {
+  "platform_key": "pawchive",
+  "native_post_id": "12174138",
+  "media_occurrences": 14
+ }
+}

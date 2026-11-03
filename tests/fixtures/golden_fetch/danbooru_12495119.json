@@ -1,0 +1,113 @@
+{
+ "scenario": "danbooru-12495119",
+ "url": "https://danbooru.donmai.us/posts/12495119",
+ "platform": "danbooru",
+ "target": "12495119",
+ "media_type": "application/json",
+ "payload": {
+  "id": 12495119,
+  "created_at": "2026-11-01T11:45:10.381-05:00",
+  "uploader_id": 1309288,
+  "score": 2,
+  "source": "https://x.com/star4rats/status/1984856515354996831",
+  "md5": "fa9f476a7bfaf870cb5efdc2a70debd7",
+  "last_comment_bumped_at": null,
+  "rating": "s",
+  "image_width": 1199,
+  "image_height": 1811,
+  "tag_string": "1girl alice_gear_aegis bottle commentary_request drinking gradient_background highres ichijou_ayaka purple_eyes purple_hair school_swimsuit seseragi_(star4rats) swimsuit twintails twitter_username water_bottle",
+  "fav_count": 2,
+  "file_ext": "jpg",
+  "last_noted_at": null,
+  "parent_id": null,
+  "has_children": false,
+  "approver_id": 51538,
+  "tag_count_general": 11,
+  "tag_count_artist": 1,
+  "tag_count_character": 1,
+  "tag_count_copyright": 1,
+  "file_size": 164076,
+  "up_score": 2,
+  "down_score": 0,
+  "is_pending": false,
+  "is_flagged": false,
+  "is_deleted": false,
+  "tag_count": 16,
+  "updated_at": "2026-11-01T11:50:15.406-05:00",
+  "is_banned": false,
+  "pixiv_id": null,
+  "last_commented_at": null,
+  "has_active_children": false,
+  "bit_flags": 0,
+  "tag_count_meta": 2,
+  "has_large": true,
+  "has_visible_children": false,
+  "media_asset": {
+   "id": 50727122,
+   "created_at": "2026-11-01T11:43:40.814-05:00",
+   "updated_at": "2026-11-01T11:43:42.281-05:00",
+   "md5": "fa9f476a7bfaf870cb5efdc2a70debd7",
+   "file_ext": "jpg",
+   "file_size": 164076,
+   "image_width": 1199,
+   "image_height": 1811,
+   "duration": null,
+   "status": "active",
+   "file_key": "a20dKN3TY",
+   "is_public": true,
+   "pixel_hash": "1df9f02d6d59b39a70a524f007edd137",
+   "variants": [
+    {
+     "type": "180x180",
+     "url": "https://cdn.donmai.us/180x180/fa/9f/fa9f476a7bfaf870cb5efdc2a70debd7.jpg",
+     "width": 119,
+     "height": 180,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "360x360",
+     "url": "https://cdn.donmai.us/360x360/fa/9f/fa9f476a7bfaf870cb5efdc2a70debd7.jpg",
+     "width": 238,
+     "height": 360,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "720x720",
+     "url": "https://cdn.donmai.us/720x720/fa/9f/fa9f476a7bfaf870cb5efdc2a70debd7.webp",
+     "width": 477,
+     "height": 720,
+     "file_ext": "webp"
+    },
+    {
+     "type": "sample",
+     "url": "https://cdn.donmai.us/sample/fa/9f/sample-fa9f476a7bfaf870cb5efdc2a70debd7.jpg",
+     "width": 850,
+     "height": 1284,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "original",
+     "url": "https://cdn.donmai.us/original/fa/9f/fa9f476a7bfaf870cb5efdc2a70debd7.jpg",
+     "width": 1199,
+     "height": 1811,
+     "file_ext": "jpg"
+    }
+   ]
+  },
+  "tag_string_general": "1girl bottle drinking gradient_background purple_eyes purple_hair school_swimsuit swimsuit twintails twitter_username water_bottle",
+  "tag_string_character": "ichijou_ayaka",
+  "tag_string_copyright": "alice_gear_aegis",
+  "tag_string_artist": "seseragi_(star4rats)",
+  "tag_string_meta": "commentary_request highres",
+  "file_url": "https://cdn.donmai.us/original/fa/9f/fa9f476a7bfaf870cb5efdc2a70debd7.jpg",
+  "large_file_url": "https://cdn.donmai.us/sample/fa/9f/sample-fa9f476a7bfaf870cb5efdc2a70debd7.jpg",
+  "preview_file_url": "https://cdn.donmai.us/180x180/fa/9f/fa9f476a7bfaf870cb5efdc2a70debd7.jpg"
+ },
+ "expect": {
+  "platform_key": "danbooru",
+  "native_post_id": "12495119",
+  "media_occurrences": 1,
+  "declared_md5": "fa9f476a7bfaf870cb5efdc2a70debd7",
+  "score_down": 0
+ }
+}

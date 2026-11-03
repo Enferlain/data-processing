@@ -1,0 +1,79 @@
+{
+ "scenario": "pawchive-fanbox:49254855:11658632",
+ "url": "https://pawchive.pw/fanbox/user/49254855/post/11658632",
+ "platform": "pawchive",
+ "target": "fanbox:49254855:11658632",
+ "media_type": "application/json",
+ "payload": {
+  "id": "11658632",
+  "user": "49254855",
+  "service": "fanbox",
+  "title": "ケイ",
+  "content": "",
+  "embed": {},
+  "shared_file": false,
+  "added": "2026-03-31T18:00:00",
+  "published": "2026-03-31T11:56:21",
+  "edited": "2026-03-31T11:56:21",
+  "file": {
+   "name": "cover.jpeg",
+   "path": "/c5/7e/c57eb573eac50f7574140ee0b3c78062d745fbb713d623fc77c4472c725fa418.jpeg"
+  },
+  "attachments": [
+   {
+    "name": "ZdpjHukiI1zmufWjSErZKr4U.jpeg",
+    "path": "/3e/4e/3e4e1cac0f0fd0bde9fb3382cd6c90e61c670a34873045a4603389727b514636.jpeg"
+   },
+   {
+    "name": "F5eKtFzDM5EoHILPdtmQYEA9.jpeg",
+    "path": "/46/83/4683eb151808700468762dd7855f11d00b621585c97f6c3783550d7a5ca50499.jpeg"
+   },
+   {
+    "name": "iTxyMmygtFFmqAxTAZvaq3HW.jpeg",
+    "path": "/40/e8/40e8f785f1b58c86da7bf120165556b920229804ac26ea8a750524b8f352e2ac.jpeg"
+   },
+   {
+    "name": "2xnD9mgN5oW06zgdv0bds9tQ.jpeg",
+    "path": "/23/5a/235a5058d4c01dc8617590f75d78be213479fec6b561335239335d6a290ab1e6.jpeg"
+   },
+   {
+    "name": "W3GDRENwLlsTpAuvYVTevyJS.jpeg",
+    "path": "/7b/33/7b339b9f7747eaf149f0cbe231a11284140d542f0d4ffbaf9a881f75d410e06c.jpeg"
+   },
+   {
+    "name": "LxWEdfZeABpPwdy8SSRfuxlM.jpeg",
+    "path": "/91/e4/91e4363493a26087f23bef54e4a8025ff01c3fb291732fbf5b58db883685b539.jpeg"
+   },
+   {
+    "name": "GPzQJPREriKBowfEqDVcEG38.jpeg",
+    "path": "/7e/8c/7e8ce412b35b844296170f2a58752a8515c117d95c1d984e89656d3af9f62ead.jpeg"
+   },
+   {
+    "name": "Jn4CIjveewwNQlpgrAIqrm1H.jpeg",
+    "path": "/fe/d9/fed955809f1710014dd7359b76bbd928398b39ef4634e294d822faf9a5b8e551.jpeg"
+   },
+   {
+    "name": "ScZoiHT3ZkQ6HI1G5nNT2thA.jpeg",
+    "path": "/9d/dc/9ddc3a3a990a8815ce56946fff35226b85ccf2615603a7d52dc21a175014bb4e.jpeg"
+   },
+   {
+    "name": "xkhXhl7DvUnESwkGpRkLWl1w.jpeg",
+    "path": "/e3/83/e3832c688eddd07de096020b6d230dbf1366eda2bcc4b46804bca9fc5f4c9c25.jpeg"
+   }
+  ],
+  "poll": null,
+  "captions": null,
+  "tags": null,
+  "origin": "import",
+  "preview_state": "scraped",
+  "has_full": true,
+  "detail_fetched": true,
+  "next": "11332437",
+  "prev": "11706419"
+ },
+ "expect": {
+  "platform_key": "pawchive",
+  "native_post_id": "11658632",
+  "media_occurrences": 11
+ }
+}

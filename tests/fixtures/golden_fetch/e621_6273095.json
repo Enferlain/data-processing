@@ -1,0 +1,242 @@
+{
+ "scenario": "e621-6273095",
+ "url": "https://e621.net/posts/6273095",
+ "platform": "e621",
+ "target": "6273095",
+ "media_type": "application/json",
+ "payload": {
+  "post": {
+   "id": 6273095,
+   "created_at": "2026-03-19T19:07:12.835-04:00",
+   "updated_at": "2026-11-01T18:48:43.147-05:00",
+   "file": {
+    "width": 1920,
+    "height": 1080,
+    "ext": "webm",
+    "size": 12409183,
+    "md5": "5ccdab353817c723242c54747c147e78",
+    "url": "https://static1.e621.net/data/5c/cd/5ccdab353817c723242c54747c147e78.webm"
+   },
+   "preview": {
+    "width": 455,
+    "height": 256,
+    "url": "https://static1.e621.net/data/preview/5c/cd/5ccdab353817c723242c54747c147e78.jpg",
+    "alt": "https://static1.e621.net/data/preview/5c/cd/5ccdab353817c723242c54747c147e78.webp"
+   },
+   "sample": {
+    "has": true,
+    "width": 1511,
+    "height": 850,
+    "url": "https://static1.e621.net/data/sample/5c/cd/5ccdab353817c723242c54747c147e78.jpg",
+    "alt": "https://static1.e621.net/data/sample/5c/cd/5ccdab353817c723242c54747c147e78.webp",
+    "alternates": {
+     "has": true,
+     "original": {
+      "fps": 48.0,
+      "codec": "vp9",
+      "size": 12409183,
+      "width": 1920,
+      "height": 1080,
+      "url": "https://static1.e621.net/data/5c/cd/5ccdab353817c723242c54747c147e78.webm"
+     },
+     "variants": {
+      "mp4": {
+       "codec": "avc1.4D401E",
+       "fps": 48.0,
+       "size": 4037490,
+       "width": 1920,
+       "height": 1080,
+       "url": "https://static1.e621.net/data/sample/5c/cd/5ccdab353817c723242c54747c147e78_alt.mp4"
+      }
+     },
+     "samples": {
+      "480p": {
+       "fps": 24.0,
+       "size": 1174776,
+       "codec": "avc1.4D401E",
+       "width": 960,
+       "height": 540,
+       "url": "https://static1.e621.net/data/sample/5c/cd/5ccdab353817c723242c54747c147e78_480p.mp4"
+      },
+      "720p": {
+       "fps": 24.0,
+       "size": 1800427,
+       "codec": "avc1.4D401E",
+       "width": 1440,
+       "height": 810,
+       "url": "https://static1.e621.net/data/sample/5c/cd/5ccdab353817c723242c54747c147e78_720p.mp4"
+      }
+     }
+    }
+   },
+   "score": {
+    "up": 897,
+    "down": -15,
+    "total": 882
+   },
+   "tags": {
+    "general": [
+     "ahegao",
+     "all_fours",
+     "ambiguous_penetration",
+     "armwear",
+     "bestiality",
+     "big_breasts",
+     "big_butt",
+     "black_body",
+     "black_fur",
+     "bouncing_breasts",
+     "bouncing_butt",
+     "breasts",
+     "butt",
+     "clothing",
+     "doggystyle",
+     "duo",
+     "fangs",
+     "female",
+     "female_human",
+     "female_on_bottom",
+     "female_on_feral",
+     "female_penetrated",
+     "feral",
+     "feral_on_top",
+     "feral_penetrating",
+     "feral_penetrating_female",
+     "feral_penetrating_human",
+     "fishnet_armwear",
+     "fishnet_clothing",
+     "fishnet_legwear",
+     "footwear",
+     "forest",
+     "from_behind_position",
+     "fur",
+     "glowing",
+     "glowing_eyes",
+     "grass",
+     "group",
+     "growling",
+     "hair",
+     "hair_bun",
+     "high_heels",
+     "human_on_bottom",
+     "human_on_feral",
+     "human_penetrated",
+     "interspecies",
+     "inviting_to_sex",
+     "legwear",
+     "looking_at_viewer",
+     "looking_pleasured",
+     "makeup",
+     "male",
+     "male/female",
+     "male_feral",
+     "male_on_top",
+     "male_penetrating",
+     "male_penetrating_female",
+     "male_penetrating_human",
+     "moan",
+     "mostly_nude",
+     "mounting",
+     "neckwear",
+     "night",
+     "nipples",
+     "on_bottom",
+     "on_top",
+     "one_eye_closed",
+     "open_mouth",
+     "outside",
+     "penetration",
+     "plant",
+     "red_hair",
+     "sex",
+     "shaking_butt",
+     "shoes",
+     "shrub",
+     "snarling",
+     "stalking",
+     "teeth",
+     "tongue",
+     "tongue_out",
+     "tree",
+     "trio",
+     "white_body",
+     "white_skin",
+     "yellow_eyes"
+    ],
+    "artist": [
+     "noname55"
+    ],
+    "contributor": [],
+    "copyright": [
+     "blizzard_entertainment",
+     "warcraft"
+    ],
+    "character": [
+     "assumi"
+    ],
+    "species": [
+     "canid",
+     "canine",
+     "canis",
+     "human",
+     "mammal",
+     "wolf"
+    ],
+    "invalid": [],
+    "meta": [
+     "16:9",
+     "3d_(artwork)",
+     "3d_animation",
+     "animated",
+     "digital_media_(artwork)",
+     "hi_res",
+     "high_framerate",
+     "short_playtime",
+     "sound",
+     "source_filmmaker_(artwork)",
+     "video",
+     "widescreen"
+    ],
+    "lore": []
+   },
+   "locked_tags": [],
+   "change_seq": 82553473,
+   "flags": {
+    "pending": false,
+    "flagged": false,
+    "note_locked": false,
+    "status_locked": false,
+    "rating_locked": false,
+    "deleted": false
+   },
+   "rating": "e",
+   "fav_count": 1535,
+   "sources": [
+    "https://rule34.xxx/index.php?page=post&s=view&id=16887713&tags=noname55+"
+   ],
+   "pools": [],
+   "relationships": {
+    "parent_id": 6203346,
+    "has_children": false,
+    "has_active_children": false,
+    "children": []
+   },
+   "approver_id": 38571,
+   "uploader_id": 366989,
+   "uploader_name": "WolffyLegend",
+   "description": "",
+   "comment_count": 7,
+   "is_favorited": false,
+   "vote": 0,
+   "has_notes": false,
+   "duration": 12.003
+  }
+ },
+ "expect": {
+  "platform_key": "e621",
+  "native_post_id": "6273095",
+  "media_occurrences": 1,
+  "declared_md5": "5ccdab353817c723242c54747c147e78",
+  "score_down": -15
+ }
+}

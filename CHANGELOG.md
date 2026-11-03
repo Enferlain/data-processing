@@ -156,6 +156,21 @@ Rules:
 
 ## [2026-11-03]
 
+### Added
+- **Offline golden fetch scenarios from the 21-URL live batch (Bead
+  `data-processing-h74`, roadmap P0.5)** — the recorded raw payloads of the
+  2026-11-02 live validation batch (danbooru 6, e621 6, sankaku 6, pawchive 3)
+  now live as per-scenario fixtures under `tests/fixtures/golden_fetch/`
+  (secret-scanned, each under 20 KB), replayed by a parametrized test that
+  runs the real fetch pipeline offline — resolver, shared factory, adapter,
+  sync, persistence — over a mock transport that serves the recorded payload
+  and refuses any request the live run did not make. Each scenario pins the
+  persisted platform, native id, media-occurrence count, declared MD5 where
+  present, and the e621 negative downvote counts; the sankaku replay sinks
+  the credential exchange with a throwaway token. Wire-shape drift of the
+  kinds the live batch caught (wrapped envelopes, clamped negatives, naive
+  timestamps) now fails CI before it can surprise a live run.
+
 ### Changed
 - **CLI split into command-family modules (Bead `data-processing-c30`)** —
   `cli.py` shrank from 1,607 lines to a ~90-line entry (parsing, rendering,

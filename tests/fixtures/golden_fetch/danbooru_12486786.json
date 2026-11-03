@@ -1,0 +1,113 @@
+{
+ "scenario": "danbooru-12486786",
+ "url": "https://danbooru.donmai.us/posts/12486786",
+ "platform": "danbooru",
+ "target": "12486786",
+ "media_type": "application/json",
+ "payload": {
+  "id": 12486786,
+  "created_at": "2026-10-31T10:40:35.117-04:00",
+  "uploader_id": 430030,
+  "score": 28,
+  "source": "https://i.pximg.net/img-zip-ugoira/img/2026/10/31/22/23/23/151519750_ugoira1920x1080.zip?original",
+  "md5": "53102d2366d37f431aed31e072a11128",
+  "last_comment_bumped_at": null,
+  "rating": "s",
+  "image_width": 3541,
+  "image_height": 4828,
+  "tag_string": "1girl absurdres animated black_background blue_archive breasts closed_mouth commentary_request ghost_costume grey_hair hair_intakes halo headgear highres lisu long_hair long_sleeves medium_breasts noa_(blue_archive) purple_eyes see-through_silhouette sleeves_past_wrists smile solo standing ugoira",
+  "fav_count": 28,
+  "file_ext": "zip",
+  "last_noted_at": null,
+  "parent_id": null,
+  "has_children": true,
+  "approver_id": null,
+  "tag_count_general": 18,
+  "tag_count_artist": 1,
+  "tag_count_character": 1,
+  "tag_count_copyright": 1,
+  "file_size": 6891112,
+  "up_score": 28,
+  "down_score": 0,
+  "is_pending": false,
+  "is_flagged": false,
+  "is_deleted": false,
+  "tag_count": 26,
+  "updated_at": "2026-11-01T05:43:30.422-05:00",
+  "is_banned": false,
+  "pixiv_id": 151519750,
+  "last_commented_at": null,
+  "has_active_children": true,
+  "bit_flags": 0,
+  "tag_count_meta": 5,
+  "has_large": true,
+  "has_visible_children": true,
+  "media_asset": {
+   "id": 50705876,
+   "created_at": "2026-10-31T10:38:58.828-04:00",
+   "updated_at": "2026-10-31T10:39:08.390-04:00",
+   "md5": "53102d2366d37f431aed31e072a11128",
+   "file_ext": "zip",
+   "file_size": 6891112,
+   "image_width": 3541,
+   "image_height": 4828,
+   "duration": 1.6,
+   "status": "active",
+   "file_key": "vzWOoMTRg",
+   "is_public": true,
+   "pixel_hash": "5a6b200c8d67573f0bb10723e35598b1",
+   "variants": [
+    {
+     "type": "180x180",
+     "url": "https://cdn.donmai.us/180x180/53/10/53102d2366d37f431aed31e072a11128.jpg",
+     "width": 132,
+     "height": 180,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "360x360",
+     "url": "https://cdn.donmai.us/360x360/53/10/53102d2366d37f431aed31e072a11128.jpg",
+     "width": 264,
+     "height": 360,
+     "file_ext": "jpg"
+    },
+    {
+     "type": "720x720",
+     "url": "https://cdn.donmai.us/720x720/53/10/53102d2366d37f431aed31e072a11128.webp",
+     "width": 528,
+     "height": 720,
+     "file_ext": "webp"
+    },
+    {
+     "type": "sample",
+     "url": "https://cdn.donmai.us/sample/53/10/sample-53102d2366d37f431aed31e072a11128.webm",
+     "width": 850,
+     "height": 1159,
+     "file_ext": "webm"
+    },
+    {
+     "type": "original",
+     "url": "https://cdn.donmai.us/original/53/10/53102d2366d37f431aed31e072a11128.zip",
+     "width": 3541,
+     "height": 4828,
+     "file_ext": "zip"
+    }
+   ]
+  },
+  "tag_string_general": "1girl black_background breasts closed_mouth ghost_costume grey_hair hair_intakes halo headgear long_hair long_sleeves medium_breasts purple_eyes see-through_silhouette sleeves_past_wrists smile solo standing",
+  "tag_string_character": "noa_(blue_archive)",
+  "tag_string_copyright": "blue_archive",
+  "tag_string_artist": "lisu",
+  "tag_string_meta": "absurdres animated commentary_request highres ugoira",
+  "file_url": "https://cdn.donmai.us/original/53/10/53102d2366d37f431aed31e072a11128.zip",
+  "large_file_url": "https://cdn.donmai.us/sample/53/10/sample-53102d2366d37f431aed31e072a11128.webm",
+  "preview_file_url": "https://cdn.donmai.us/180x180/53/10/53102d2366d37f431aed31e072a11128.jpg"
+ },
+ "expect": {
+  "platform_key": "danbooru",
+  "native_post_id": "12486786",
+  "media_occurrences": 1,
+  "declared_md5": "53102d2366d37f431aed31e072a11128",
+  "score_down": 0
+ }
+}

@@ -1,0 +1,51 @@
+{
+ "scenario": "pawchive-fanbox:49254855:12639205",
+ "url": "https://pawchive.pw/fanbox/user/49254855/post/12639205",
+ "platform": "pawchive",
+ "target": "fanbox:49254855:12639205",
+ "media_type": "application/json",
+ "payload": {
+  "id": "12639205",
+  "user": "49254855",
+  "service": "fanbox",
+  "title": "ケイ",
+  "content": "",
+  "embed": {},
+  "shared_file": false,
+  "added": "2026-09-24T00:00:00",
+  "published": "2026-09-22T10:26:29",
+  "edited": "2026-09-22T10:26:29",
+  "file": {
+   "name": "cover.jpeg",
+   "path": "/a3/a1/a3a1230fa4e07a048089492634e9c8301fa4bbe65de2a985dc147588085e5a0d.jpeg"
+  },
+  "attachments": [
+   {
+    "name": "YjOhBC7G77HD5yiEon14JNMD.jpeg",
+    "path": "/31/a8/31a8bb7dd3d08e639d22527f466134edea669ce703598ca76638e0ffbdaaa16c.jpeg"
+   },
+   {
+    "name": "ifalb3TAYmwaCIxpQUfemDgz.jpeg",
+    "path": "/55/cc/55cc7f87cae1f7691c537283778e4075045ebc1177b30e21ce1888ceb323b551.jpeg"
+   },
+   {
+    "name": "OLReXJu97WkH18OAjqxz79xc.jpeg",
+    "path": "/70/28/70284c0c1554634d55b134c87a203cd01fbe9539be59a6982df7c55ead5db26b.jpeg"
+   }
+  ],
+  "poll": null,
+  "captions": null,
+  "tags": null,
+  "origin": "import",
+  "preview_state": "scraped",
+  "has_full": true,
+  "detail_fetched": true,
+  "next": "12521972",
+  "prev": null
+ },
+ "expect": {
+  "platform_key": "pawchive",
+  "native_post_id": "12639205",
+  "media_occurrences": 4
+ }
+}
