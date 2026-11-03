@@ -514,7 +514,7 @@ def test_enrichment_commands_route_to_their_surfaces(
     """Review regression: the gelbooru-/e621- prefix branches shadowed the
     notes commands before the exact-match branch was hoisted above them."""
 
-    import media_catalog.cli as cli_module
+    import media_catalog.cli_commands.metadata as metadata_module
     from media_catalog.cli import main
 
     catalog = tmp_path / "catalog.sqlite3"
@@ -534,14 +534,14 @@ def test_enrichment_commands_route_to_their_surfaces(
         def __init__(self, instance: object, *, client: object, credentials: object = None):
             pass
 
-    monkeypatch.setattr(cli_module, "fetch_commentary", _fake("commentary"))
-    monkeypatch.setattr(cli_module, "fetch_notes", _fake("notes"))
-    monkeypatch.setattr(cli_module, "fetch_pool", _fake("pool"))
+    monkeypatch.setattr(metadata_module, "fetch_commentary", _fake("commentary"))
+    monkeypatch.setattr(metadata_module, "fetch_notes", _fake("notes"))
+    monkeypatch.setattr(metadata_module, "fetch_pool", _fake("pool"))
 
     def fake_factory(platform: str):
         return (lambda client: _FakeAdapter(platform, client=client)), 1.0
 
-    monkeypatch.setattr(cli_module, "adapter_construction", fake_factory)
+    monkeypatch.setattr(metadata_module, "adapter_construction", fake_factory)
 
     main(["metadata", command, str(catalog), native, "--json"])
 

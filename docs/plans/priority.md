@@ -507,3 +507,18 @@ The system should be able to answer with:
 A successful system does not need to know everything. It must reliably distinguish **what was found, what was searched, what is verified, what is inferred, and what remains unknown**.
 
 **Development principle:** Prioritize concrete discovery and reconciliation capabilities. Expand the underlying infrastructure only where those capabilities expose real requirements, limitations, or measurable bottlenecks.
+
+## Known-big files (accepted)
+
+These predate the 2026-11 growth and stay monolithic until a task touches them
+anyway; splitting without a driving need is churn:
+
+- `src/media_catalog/storage/cas.py` (~1,700 lines)
+- `src/media_catalog/acquisition/service.py` (~1,100 lines)
+- `src/media_catalog/adapters/contracts.py` (~1,000 lines)
+- `src/media_catalog/storage/adoption.py` (~920 lines)
+- `src/media_catalog/library/planning.py` (~880 lines)
+- `src/media_catalog/persistence/metadata.py` (~840 lines)
+
+The CLI, by contrast, was split into `media_catalog/cli_commands/` family
+modules (2026-11-03) because every new command paid the monolith tax.

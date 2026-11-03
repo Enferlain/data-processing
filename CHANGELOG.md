@@ -154,6 +154,22 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
+## [2026-11-03]
+
+### Changed
+- **CLI split into command-family modules (Bead `data-processing-c30`)** —
+  `cli.py` shrank from 1,607 lines to a ~90-line entry (parsing, rendering,
+  exit-code policy, family dispatch); parser fragments and handlers now live
+  together in `media_catalog/cli_commands/` (admin, discovery, ingest, media,
+  metadata, lookup, export, relationships, maintenance, library, plus a shared
+  support module). The five near-identical metadata sync blocks collapsed into
+  one factory helper. Pure structure change: every command, flag, default, and
+  per-command output byte is unchanged (the only visible difference is the
+  top-level help listing regrouping stats/search ahead of fetch/discover with
+  their family), and a new drift-guard test pins that each family's declared
+  command table matches the registered parser. Test monkeypatches repointed
+  from `cli` to the family modules that now resolve those symbols.
+
 ## [2026-11-02]
 
 ### Added

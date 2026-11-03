@@ -291,7 +291,7 @@ def test_catalog_doctor_names_adapter_failures(
     from media_catalog.database import CatalogDatabase
 
     failing = DoctorReport(surfaces=(), errors=("synthetic adapter error",))
-    monkeypatch.setattr("media_catalog.cli.run_doctor", lambda **kwargs: failing)
+    monkeypatch.setattr("media_catalog.cli_commands.admin.run_doctor", lambda **kwargs: failing)
     catalog = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(catalog):
         pass
@@ -316,7 +316,7 @@ def test_catalog_doctor_names_failing_surfaces(
         case_results=(CaseResult("pawchive", "post_case", ok=False, reason="synthetic drift"),),
     )
     report = DoctorReport(surfaces=(failing_surface,))
-    monkeypatch.setattr("media_catalog.cli.run_doctor", lambda **kwargs: report)
+    monkeypatch.setattr("media_catalog.cli_commands.admin.run_doctor", lambda **kwargs: report)
     catalog = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(catalog):
         pass
@@ -334,7 +334,7 @@ def test_cli_failure_exits_nonzero(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     broken = DoctorReport(surfaces=(), errors=("synthetic error for exit-path test",))
-    monkeypatch.setattr("media_catalog.cli.run_doctor", lambda **kwargs: broken)
+    monkeypatch.setattr("media_catalog.cli_commands.admin.run_doctor", lambda **kwargs: broken)
     from media_catalog.cli import main
 
     with pytest.raises(SystemExit) as raised:

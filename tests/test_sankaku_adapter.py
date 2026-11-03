@@ -416,7 +416,7 @@ def test_rate_limit_maps_reset_time() -> None:
 
 
 def test_sankaku_cli_routes_and_persists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import media_catalog.cli as cli_module
+    import media_catalog.cli_commands.metadata as metadata_module
     from media_catalog.cli import main
     from media_catalog.database import CatalogDatabase
     from media_catalog.remote_sync import MetadataSyncService, SyncLimits
@@ -498,8 +498,8 @@ def test_sankaku_cli_routes_and_persists(tmp_path: Path, monkeypatch: pytest.Mon
 
         return build, instance.minimum_interval_seconds
 
-    monkeypatch.setattr(cli_module, "adapter_construction", fake_factory)
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(metadata_module, "adapter_construction", fake_factory)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     main(["metadata", "sankaku-post", str(catalog), "wvaemE6YDaz", "--json"])
     assert len(constructed) == 1
     assert isinstance(constructed[0][1], SankakuCredentials)

@@ -105,7 +105,7 @@ def test_gelbooru_dapi_cli_selects_the_safebooru_instance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import media_catalog.cli as cli_module
+    import media_catalog.cli_commands.metadata as metadata_module
     from media_catalog.cli import main
     from media_catalog.database import CatalogDatabase
     from media_catalog.remote_sync import SyncResult
@@ -157,8 +157,8 @@ def test_gelbooru_dapi_cli_selects_the_safebooru_instance(
 
         return build, instance.minimum_interval_seconds
 
-    monkeypatch.setattr(cli_module, "adapter_construction", safebooru_factory)
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(metadata_module, "adapter_construction", safebooru_factory)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     monkeypatch.delenv("SAFEBOORU_USER_ID", raising=False)
     monkeypatch.delenv("SAFEBOORU_API_KEY", raising=False)
 

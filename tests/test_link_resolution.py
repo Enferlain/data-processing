@@ -134,7 +134,7 @@ def test_fetch_resolve_only_never_touches_the_catalog(
 def test_fetch_routes_the_resolved_platform(
     tmp_path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import media_catalog.cli as cli_module
+    import media_catalog.cli_commands.discovery as discovery_module
     from media_catalog.cli import main
     from media_catalog.database import CatalogDatabase
     from media_catalog.remote_sync import SyncResult
@@ -142,22 +142,11 @@ def test_fetch_routes_the_resolved_platform(
     catalog = tmp_path / "catalog.sqlite3"
     with CatalogDatabase(catalog):
         pass
-    adapter_calls: list[object] = []
     sync_calls: list[tuple[AdapterOperation, str]] = []
 
-    class FakeAdapter:
-        adapter_version = "stub-v1"
-        schema_version = "stub-json-v1"
-        instance_key = "e926"
-
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            adapter_calls.append(kwargs or args)
-
     class FakeService:
-        def __init__(
-            self, _database: CatalogDatabase, adapter: FakeAdapter, **kwargs: object
-        ) -> None:
-            adapter_calls.append(adapter)
+        def __init__(self, _database: CatalogDatabase, _adapter: object, **kwargs: object) -> None:
+            pass
 
         def synchronize(
             self,
@@ -181,23 +170,22 @@ def test_fetch_routes_the_resolved_platform(
                 resumed_from_run_id=resume_from_run_id,
             )
 
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(discovery_module, "MetadataSyncService", FakeService)
 
     class _RouteStub:
         pass
 
     # Route through the real _fetch_adapter_for to prove platform dispatch.
-    original = cli_module._fetch_adapter_for
+    original = discovery_module._fetch_adapter_for
     captured: list[str] = []
 
     def spy(platform: str):
         captured.append(platform)
         return original(platform)
 
-    monkeypatch.setattr(cli_module, "_fetch_adapter_for", spy)
+    monkeypatch.setattr(discovery_module, "_fetch_adapter_for", spy)
     # The real E621 adapter is constructed but FakeService replaces the sync,
     # so the E621 wire is never contacted.
-    monkeypatch.setattr(cli_module, "E621Adapter", FakeAdapter)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
 

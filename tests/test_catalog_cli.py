@@ -7,10 +7,14 @@ from pathlib import Path
 
 import pytest
 
-import media_catalog.cli as cli_module
+import media_catalog.cli_commands.discovery as discovery_module
+import media_catalog.cli_commands.library as library_module
+import media_catalog.cli_commands.lookup as lookup_module
+import media_catalog.cli_commands.metadata as metadata_module
 from media_catalog.adapters import AdapterOperation
 from media_catalog.adapters.danbooru import AIBOORU, DANBOORU
-from media_catalog.adapters.e621 import E621Credentials
+from media_catalog.adapters.e621 import E621_INSTANCES, E621Credentials
+from media_catalog.adapters.gelbooru import GELBOORU, GELBOORU_INSTANCES
 from media_catalog.candidate_lookup import LookupExecutionResult, LookupLimits
 from media_catalog.cli import build_parser, main
 from media_catalog.database import CatalogDatabase
@@ -33,9 +37,8 @@ NOW = "2026-08-12T20:00:00Z"
 
 
 def _factory_patched(monkeypatch, adapter_cls, instances, credentials_resolver):
-    """Patch ``cli.adapter_construction`` to build ``adapter_cls`` like the real factory."""
-
-    import media_catalog.cli as cli_module
+    """Patch every command family's ``adapter_construction`` to build
+    ``adapter_cls`` like the real factory."""
 
     def factory(platform: str):
         instance = instances[platform]
@@ -45,7 +48,23 @@ def _factory_patched(monkeypatch, adapter_cls, instances, credentials_resolver):
 
         return build, instance.minimum_interval_seconds
 
-    monkeypatch.setattr(cli_module, "adapter_construction", factory)
+    for module in (metadata_module, lookup_module, library_module, discovery_module):
+        monkeypatch.setattr(module, "adapter_construction", factory)
+
+
+def test_family_command_tables_match_registered_parser_choices() -> None:
+    """A family's COMMANDS tuple must cover exactly what it registers."""
+    import argparse
+
+    from media_catalog.cli_commands import FAMILIES
+
+    probe = argparse.ArgumentParser()
+    commands = probe.add_subparsers(dest="command", required=True)
+    for family in FAMILIES:
+        family.register(commands)
+    registered = set(commands.choices)
+    declared = {command for family in FAMILIES for command in family.COMMANDS}
+    assert declared == registered, (declared - registered, registered - declared)
 
 
 def test_parser_accepts_all_planned_commands(tmp_path: Path) -> None:
@@ -207,10 +226,10 @@ def test_e621_metadata_cli_routes_operations_with_provider_limits_and_resume(
     _factory_patched(
         monkeypatch,
         FakeAdapter,
-        cli_module.E621_INSTANCES,
+        E621_INSTANCES,
         lambda instance: None,
     )
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
 
@@ -252,9 +271,9 @@ def test_e621_metadata_cli_routes_operations_with_provider_limits_and_resume(
         "diagnostic": None,
     }
     assert len(adapter_calls) == 1
-    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e621"]
+    assert adapter_calls[0][0] is E621_INSTANCES["e621"]
     assert adapter_calls[0][2] is None
-    assert service_intervals == [cli_module.E621_INSTANCES["e621"].minimum_interval_seconds]
+    assert service_intervals == [E621_INSTANCES["e621"].minimum_interval_seconds]
     assert len(service_calls) == 1
     actual_operation, actual_target, limits, resumed_from = service_calls[0]
     assert actual_operation is operation
@@ -311,8 +330,8 @@ def test_e926_instance_selection_routes_the_sfw_instance(
                 resumed_from_run_id=resume_from_run_id,
             )
 
-    _factory_patched(monkeypatch, FakeAdapter, cli_module.E621_INSTANCES, lambda instance: None)
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    _factory_patched(monkeypatch, FakeAdapter, E621_INSTANCES, lambda instance: None)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
 
@@ -322,7 +341,7 @@ def test_e926_instance_selection_routes_the_sfw_instance(
     main(argv)
 
     assert len(adapter_calls) == 1
-    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e926"]
+    assert adapter_calls[0][0] is E621_INSTANCES["e926"]
 
 
 def test_rule34_instance_selection_routes_the_credentialed_instance(
@@ -380,14 +399,14 @@ def test_rule34_instance_selection_routes_the_credentialed_instance(
         GELBOORU_INSTANCES,
         GelbooruCredentials.from_environment,
     )
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     monkeypatch.setenv("RULE34_USER_ID", "external-user")
     monkeypatch.setenv("RULE34_API_KEY", "external-key")
 
     main(["metadata", "gelbooru-dapi-post", str(catalog), "19210742", "--instance", "rule34"])
 
     assert len(adapter_calls) == 1
-    assert adapter_calls[0][0] is cli_module.GELBOORU_INSTANCES["rule34"]
+    assert adapter_calls[0][0] is GELBOORU_INSTANCES["rule34"]
     assert adapter_calls[0][2].user_id == "external-user"
 
 
@@ -468,7 +487,7 @@ def test_e621_metadata_cli_human_output_and_help_keep_credentials_external(
         _E621_INSTANCES,
         _E621Credentials.from_environment,
     )
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     monkeypatch.setenv("E621_USERNAME", "external-user")
     monkeypatch.setenv("E621_API_KEY", "sentinel-secret")
     main(["metadata", "e621-post", str(catalog), "5001"])
@@ -886,7 +905,7 @@ def test_e621_lookup_run_and_resume_route_through_adapter_with_provider_floor(
     from media_catalog.adapters.e621 import E621_INSTANCES as _E621_INSTANCES
 
     _factory_patched(monkeypatch, FakeAdapter, _E621_INSTANCES, lambda instance: None)
-    monkeypatch.setattr(cli_module, "CandidateLookupService", FakeService)
+    monkeypatch.setattr(lookup_module, "CandidateLookupService", FakeService)
     monkeypatch.delenv("E621_USERNAME", raising=False)
     monkeypatch.delenv("E621_API_KEY", raising=False)
 
@@ -899,10 +918,10 @@ def test_e621_lookup_run_and_resume_route_through_adapter_with_provider_floor(
     main(argv)
 
     assert len(adapter_calls) == 1
-    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e621"]
+    assert adapter_calls[0][0] is E621_INSTANCES["e621"]
     assert adapter_calls[0][1] is not None
     assert adapter_calls[0][2] is None
-    assert service_intervals == [cli_module.E621_INSTANCES["e621"].minimum_interval_seconds]
+    assert service_intervals == [E621_INSTANCES["e621"].minimum_interval_seconds]
     forwarded = LookupLimits(3, 3, 5, 60)
     if lookup_command == "run":
         assert plan_limits == [forwarded]
@@ -954,7 +973,7 @@ def test_e621_lookup_partial_credentials_fail_with_safe_guidance(
 
 @pytest.mark.parametrize(
     "provider, instance",
-    [("danbooru", cli_module.DANBOORU), ("aibooru", cli_module.AIBOORU)],
+    [("danbooru", DANBOORU), ("aibooru", AIBOORU)],
 )
 def test_danbooru_family_lookup_routing_is_unchanged(
     tmp_path: Path,
@@ -994,7 +1013,7 @@ def test_danbooru_family_lookup_routing_is_unchanged(
         {DANBOORU.platform_key: DANBOORU, AIBOORU.platform_key: AIBOORU},
         lambda instance: None,
     )
-    monkeypatch.setattr(cli_module, "CandidateLookupService", FakeService)
+    monkeypatch.setattr(lookup_module, "CandidateLookupService", FakeService)
     monkeypatch.delenv(instance.login_env, raising=False)
     monkeypatch.delenv(instance.api_key_env, raising=False)
     main(
@@ -1438,7 +1457,7 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
     catalog = tmp_path / "private" / "catalog.sqlite3"
     seed_id, attribution_id = _seed_e621_library_target(catalog)
     target_reference = f"attribution:{attribution_id}"
-    selected_plan = cli_module.plan_library_expansion(
+    selected_plan = library_module.plan_library_expansion(
         catalog,
         f"account:{seed_id}",
         target=target_reference,
@@ -1446,7 +1465,7 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
     )
     if library_command == "resume":
         monkeypatch.setattr(
-            cli_module,
+            library_module,
             "replan_library_execution",
             lambda _database, _execution_id: selected_plan,
         )
@@ -1497,7 +1516,7 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
 
     def fake_factory(platform: str):
         assert platform == "e621"
-        instance = cli_module.E621_INSTANCES["e621"]
+        instance = E621_INSTANCES["e621"]
 
         def build(client: object) -> FakeAdapter:
             return FakeAdapter(
@@ -1508,8 +1527,8 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
 
         return build, 1.0
 
-    monkeypatch.setattr(cli_module, "adapter_construction", fake_factory)
-    monkeypatch.setattr(cli_module, "ArtistLibraryExpansionService", FakeService)
+    monkeypatch.setattr(library_module, "adapter_construction", fake_factory)
+    monkeypatch.setattr(library_module, "ArtistLibraryExpansionService", FakeService)
     monkeypatch.setenv("E621_USERNAME", "external-user")
     monkeypatch.setenv("E621_API_KEY", "external-secret")
 
@@ -1549,11 +1568,11 @@ def test_e621_library_cli_routes_with_provider_floor_and_private_target(
     assert "canonical_artist_tag" not in rendered
     assert "external-user" not in rendered
     assert "external-secret" not in rendered
-    assert adapter_calls[0][0] is cli_module.E621_INSTANCES["e621"]
+    assert adapter_calls[0][0] is E621_INSTANCES["e621"]
     credentials = adapter_calls[0][1]
     assert credentials.username == "external-user"
     assert credentials.api_key == "external-secret"
-    assert service_intervals == [cli_module.E621_INSTANCES["e621"].minimum_interval_seconds]
+    assert service_intervals == [E621_INSTANCES["e621"].minimum_interval_seconds]
     assert len(service_calls) == 1
     called, plan, execution_id = service_calls[0]
     assert called == library_command
@@ -1695,11 +1714,11 @@ def test_gelbooru_metadata_cli_routes_operations_with_provider_limits(
     _factory_patched(
         monkeypatch,
         FakeDapiAdapter,
-        cli_module.GELBOORU_INSTANCES,
+        GELBOORU_INSTANCES,
         GelbooruCredentials.from_environment,
     )
-    monkeypatch.setattr(cli_module, "GelbooruHtmlAdapter", FakeHtmlAdapter)
-    monkeypatch.setattr(cli_module, "MetadataSyncService", FakeService)
+    monkeypatch.setattr(metadata_module, "GelbooruHtmlAdapter", FakeHtmlAdapter)
+    monkeypatch.setattr(metadata_module, "MetadataSyncService", FakeService)
     # Sentinel credential values prove the HTML path never reads them.
     monkeypatch.setenv("GELBOORU_USER_ID", "sentinel-user")
     monkeypatch.setenv("GELBOORU_API_KEY", "sentinel-key")
@@ -1726,7 +1745,7 @@ def test_gelbooru_metadata_cli_routes_operations_with_provider_limits(
     assert service_calls[0][1] == target
     assert service_calls[0][3] is None
     # The provider pacing floor is passed to the service unconditionally.
-    assert service_intervals == [cli_module.GELBOORU.minimum_interval_seconds]
+    assert service_intervals == [GELBOORU.minimum_interval_seconds]
     if command == "gelbooru-html-post":
         assert "credentials" not in html_constructor_kwargs[0]
     payload = json.loads(capsys.readouterr().out)
@@ -1755,7 +1774,7 @@ def test_gelbooru_cli_resume_rejected_outside_listing(
 
         return build, 1.0
 
-    monkeypatch.setattr(cli_module, "adapter_construction", never_build_factory)
+    monkeypatch.setattr(metadata_module, "adapter_construction", never_build_factory)
     with pytest.raises(SystemExit):
         main(
             [
@@ -1787,12 +1806,12 @@ def test_gelbooru_cli_dapi_requires_credentials_before_network(
         def build(client: object):
             from media_catalog.adapters.gelbooru import GelbooruCredentials
 
-            GelbooruCredentials.from_environment(cli_module.GELBOORU_INSTANCES[platform])
+            GelbooruCredentials.from_environment(GELBOORU_INSTANCES[platform])
             raise AssertionError("credential resolution must fail before the adapter builds")
 
         return build, 1.0
 
-    monkeypatch.setattr(cli_module, "adapter_construction", failing_build_factory)
+    monkeypatch.setattr(metadata_module, "adapter_construction", failing_build_factory)
     with pytest.raises(SystemExit) as raised:
         main(["metadata", "gelbooru-dapi-post", str(catalog), "12370900"])
     assert "GELBOORU_USER_ID" in str(raised.value.code)
