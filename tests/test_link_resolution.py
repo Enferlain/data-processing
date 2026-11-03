@@ -195,3 +195,47 @@ def test_fetch_routes_the_resolved_platform(
     assert sync_calls == [(AdapterOperation.FETCH_POST, "6823045")]
     assert payload["status"] == "complete"
     assert payload["remote_run_id"] == 99
+
+
+def test_fetch_failed_sync_exits_nonzero(
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed fetch must fail the process, like the metadata family."""
+    from media_catalog.cli import main
+    from media_catalog.database import CatalogDatabase
+    from media_catalog.remote_sync import SyncResult
+
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog):
+        pass
+
+    class FailingService:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def synchronize(self, *_args: object, **_kwargs: object) -> SyncResult:
+            return SyncResult(
+                remote_run_id=7,
+                platform="e621",
+                operation="fetch_post",
+                target="1",
+                status="failed",
+                outcome="malformed_response",
+                request_count=1,
+                page_count=0,
+                record_count=0,
+                resumed_from_run_id=None,
+            )
+
+    import media_catalog.cli_commands.discovery as discovery_family
+
+    monkeypatch.setattr(discovery_family, "MetadataSyncService", FailingService)
+    monkeypatch.delenv("E621_USERNAME", raising=False)
+    monkeypatch.delenv("E621_API_KEY", raising=False)
+    with pytest.raises(SystemExit) as raised:
+        main(["fetch", str(catalog), "https://e621.net/posts/1", "--json"])
+    assert raised.value.code == 2
+    # The failure is still rendered before the nonzero exit.
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"

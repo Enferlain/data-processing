@@ -171,6 +171,15 @@ Rules:
   kinds the live batch caught (wrapped envelopes, clamped negatives, naive
   timestamps) now fails CI before it can surprise a live run.
 
+### Fixed
+- **`catalog fetch` now exits nonzero on a failed or paused sync (Bead
+  `data-processing-uls`)** — the fetch command runs the same sync service as
+  the metadata family but was absent from the exit-code policy, so a failed
+  or paused fetch printed `status: failed` and still exited 0; it now exits 2
+  exactly like `metadata`/`library`/`lookup`. `--resolve-only` is unaffected;
+  a budget-paused run (progress persisted, resumable via `--resume-from`)
+  exits 2, matching the metadata family's identical rule.
+
 ### Changed
 - **CLI split into command-family modules (Bead `data-processing-c30`)** —
   `cli.py` shrank from 1,607 lines to a ~90-line entry (parsing, rendering,

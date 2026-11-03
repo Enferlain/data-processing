@@ -62,6 +62,12 @@ def main(argv: list[str] | None = None) -> None:
     ):
         raise SystemExit(2)
     if (
+        arguments.command == "fetch"
+        and not arguments.resolve_only
+        and result.get("status") in {"paused", "failed"}
+    ):
+        raise SystemExit(2)
+    if (
         arguments.command == "metadata"
         and arguments.metadata_command not in {"runs", "run-show"}
         and result.get("status") in {"paused", "failed"}
