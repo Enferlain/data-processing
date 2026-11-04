@@ -96,6 +96,7 @@ class CandidateLookupRunRecord:
     started_at: str
     seed_account_id: int | None = None
     seed_post_id: int | None = None
+    seed_file_id: int | None = None
     predecessor_run_id: int | None = None
 
     def __post_init__(self) -> None:
@@ -105,11 +106,17 @@ class CandidateLookupRunRecord:
         validate_lookup_strategy(self.strategy)
         for value in (self.strategy_version, self.adapter_version, self.schema_version):
             _validate_nonempty(value, "lookup version", max_length=200)
-        if (self.seed_account_id is None) == (self.seed_post_id is None):
+        seed_kinds = (
+            self.seed_account_id is not None,
+            self.seed_post_id is not None,
+            self.seed_file_id is not None,
+        )
+        if sum(seed_kinds) != 1:
             raise ValueError("lookup run requires exactly one seed")
         for value, label in (
             (self.seed_account_id, "seed account id"),
             (self.seed_post_id, "seed post id"),
+            (self.seed_file_id, "seed file id"),
             (self.predecessor_run_id, "predecessor run id"),
         ):
             if value is not None:

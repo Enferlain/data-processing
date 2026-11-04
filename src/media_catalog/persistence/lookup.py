@@ -22,10 +22,11 @@ class LookupWrites:
         cursor = self.connection.execute(
             """INSERT INTO candidate_lookup_runs (
                    platform_id, instance_host, strategy, strategy_version, adapter_version,
-                   schema_version, seed_account_id, seed_post_id, seed_revision, plan_digest,
+                   schema_version, seed_account_id, seed_post_id, seed_file_id,
+                   seed_revision, plan_digest,
                    query_kind, material_digest, private_query_json, predecessor_run_id,
                    request_limit, page_limit, result_limit, time_limit_seconds, started_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 platform_id(self.connection, record.platform),
                 record.instance_host,
@@ -35,6 +36,7 @@ class LookupWrites:
                 record.schema_version,
                 record.seed_account_id,
                 record.seed_post_id,
+                record.seed_file_id,
                 record.seed_revision,
                 record.plan_digest,
                 record.query_kind,

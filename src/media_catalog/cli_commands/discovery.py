@@ -42,14 +42,21 @@ def register(commands: argparse._SubParsersAction) -> None:
         description="One input initiates a bounded discovery session (offline plan by default)",
     )
     discover_cmd.add_argument("catalog", type=Path)
-    input_group = discover_cmd.add_mutually_exclusive_group(required=True)
+    input_group = discover_cmd.add_mutually_exclusive_group(required=False)
     input_group.add_argument("--url", help="post URL from any supported platform")
     input_group.add_argument("--post", type=int, help="existing catalog post id")
     input_group.add_argument("--account", type=int, help="existing catalog account id")
     input_group.add_argument(
         "--session", type=int, help="re-report a prior session instead of starting one"
     )
-    discover_cmd.add_argument("--file", type=Path, help="local file held for the URL seed")
+    # --file stays outside the group: it is a standalone input (bare-file
+    # discovery) and remains attachable to --url exactly as before.
+    discover_cmd.add_argument(
+        "--file",
+        type=Path,
+        help="arbitrary local image: discovery starts from its verified hashes"
+        " (or attaches the file to a --url seed)",
+    )
     discover_cmd.add_argument("--media-root", type=Path)
     discover_cmd.add_argument("--declared-md5")
     discover_cmd.add_argument("--note")
@@ -127,6 +134,21 @@ def _execute_discover(arguments: argparse.Namespace) -> dict[str, object]:
         raise ValueError("--max-requests must be between 1 and 100")
     if not 1 <= arguments.max_seconds <= 3600:
         raise ValueError("--max-seconds must be between 1 and 3600")
+    primary_inputs = [
+        name
+        for name, value in (
+            ("--url", arguments.url),
+            ("--post", arguments.post),
+            ("--account", arguments.account),
+            ("--file", arguments.file if arguments.url is None else None),
+        )
+        if value is not None
+    ]
+    if arguments.session is not None:
+        if primary_inputs:
+            raise ValueError("--session re-reports a prior session; give no other input")
+    elif not primary_inputs:
+        raise ValueError("one input is required (--url, --post, --account, or --file alone)")
     catalog_label = public_path(arguments.catalog)
     with CatalogDatabase(arguments.catalog) as database:
         service = DiscoveryOrchestrator(database)

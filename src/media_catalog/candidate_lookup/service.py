@@ -144,8 +144,12 @@ class CandidateLookupService:
         ):
             raise ValueError("lookup predecessor is incompatible with this adapter")
         material = LookupQueryMaterial.from_json(row["private_query_json"])
-        seed_kind = "account" if row["seed_account_id"] is not None else "post"
-        seed_id = row["seed_account_id"] or row["seed_post_id"]
+        if row["seed_account_id"] is not None:
+            seed_kind, seed_id = "account", row["seed_account_id"]
+        elif row["seed_file_id"] is not None:
+            seed_kind, seed_id = "file", row["seed_file_id"]
+        else:
+            seed_kind, seed_id = "post", row["seed_post_id"]
         seed = f"{seed_kind}:{seed_id}"
         search_term = material.value if material.strategy.value.startswith("artist_") else None
         replanned = self.plan(
@@ -211,6 +215,7 @@ class CandidateLookupService:
             raise ValueError("lookup plan material is stale")
         seed_account_id = item.seed_database_id if contract.seed_kind == "account" else None
         seed_post_id = item.seed_database_id if contract.seed_kind == "post" else None
+        seed_file_id = item.seed_database_id if contract.seed_kind == "file" else None
         started_at = self.clock()
         with self.database.transaction():
             run_id = self.writer.begin_candidate_lookup(
@@ -223,6 +228,7 @@ class CandidateLookupService:
                     schema_version=contract.schema_version,
                     seed_account_id=seed_account_id,
                     seed_post_id=seed_post_id,
+                    seed_file_id=seed_file_id,
                     seed_revision=item.seed_revision,
                     plan_digest=item.plan_digest,
                     query_kind=item.query_kind,

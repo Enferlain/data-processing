@@ -145,12 +145,44 @@ class CandidateLookupPlan:
 
 def _parse_seed(value: str) -> tuple[str, int]:
     kind, separator, raw_id = value.strip().partition(":")
-    if not separator or kind not in {"account", "post"} or not raw_id.isdecimal():
-        raise ValueError("lookup seed must use account:ID or post:ID")
+    if not separator or kind not in {"account", "file", "post"} or not raw_id.isdecimal():
+        raise ValueError("lookup seed must use account:ID, post:ID, or file:ID")
     seed_id = int(raw_id)
     if seed_id <= 0:
         raise ValueError("lookup seed ID must be positive")
     return kind, seed_id
+
+
+def _file_materials(
+    connection: sqlite3.Connection,
+    file_seed_id: int,
+) -> tuple[sqlite3.Row, dict[LookupStrategy, list[LookupQueryMaterial]], str]:
+    """A bare local file carries exactly one lookup material: its verified md5.
+
+    The hash is verified (the service computed it from the bytes), never
+    declared, so it participates as ``verified_md5``.  A revision digest of
+    the seed row keeps plan digests stable per seed.
+    """
+    seed = connection.execute(
+        """SELECT discovery_file_seed_id, verified_md5, verified_sha256, observed_at
+             FROM discovery_file_seeds WHERE discovery_file_seed_id = ?""",
+        (file_seed_id,),
+    ).fetchone()
+    if seed is None:
+        raise ValueError("lookup seed file not found")
+    materials: dict[LookupStrategy, list[LookupQueryMaterial]] = {
+        strategy: [] for strategy in LookupStrategy
+    }
+    materials[LookupStrategy.VERIFIED_MD5].append(
+        LookupQueryMaterial(
+            LookupStrategy.VERIFIED_MD5,
+            seed["verified_md5"],
+            provenance_kind="discovery_file_seed",
+            provenance_id=str(file_seed_id),
+        )
+    )
+    revision = _digest("file_seed", file_seed_id, seed["observed_at"])
+    return seed, materials, revision
 
 
 def _x_aliases(url: str) -> tuple[str, ...]:
@@ -328,6 +360,8 @@ def plan_candidate_lookup(
     try:
         if seed_kind == "post":
             _, materials, revision = _post_materials(connection, seed_id)
+        elif seed_kind == "file":
+            _, materials, revision = _file_materials(connection, seed_id)
         else:
             _, materials, revision = _account_materials(
                 connection, seed_id, normalized, search_term

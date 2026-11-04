@@ -112,6 +112,15 @@ def _gelbooru_timestamp(value: str) -> str:
         raise ValueError(f"unrecognized Gelbooru timestamp format: {value!r}") from None
 
 
+ALLOWED_RESPONSE_HEADERS = {"content-type", "retry-after", "x-rate-limit"}
+
+
+def _public_headers(headers: httpx.Headers) -> dict[str, str]:
+    return {
+        name: value for name, value in headers.items() if name.lower() in ALLOWED_RESPONSE_HEADERS
+    }
+
+
 class GelbooruAdapter:
     """DAPI JSON metadata adapter for Gelbooru-compatible instances."""
 
@@ -200,7 +209,7 @@ class GelbooruAdapter:
             operation=request.operation,
             request_identity=identity,
             status_code=response.status_code,
-            headers=dict(response.headers),
+            headers=_public_headers(response.headers),
             payload=response.content or b"{}",
             observed_at=self._clock(),
             adapter_version=self.adapter_version,
@@ -280,7 +289,7 @@ class GelbooruAdapter:
             operation=request.operation,
             request_identity=identity,
             status_code=response.status_code,
-            headers=dict(response.headers),
+            headers=_public_headers(response.headers),
             payload=response.content or b"{}",
             observed_at=self._clock(),
             adapter_version=self.adapter_version,

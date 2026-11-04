@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -162,6 +163,72 @@ class SeedMaterializationService:
                 raise ValueError("a media root is required when seeding with a local file")
             result["adoption"] = self._ensure_adopted(int(result["post_id"]), seed_file, media_root)
         return result
+
+    def materialize_file(
+        self,
+        path: str | Path,
+        *,
+        session_id: int,
+        note: str | None = None,
+        observed_at: str,
+    ) -> dict[str, Any]:
+        """Record a bare local file as intrinsic discovery seed identity.
+
+        Unlike URL seeds this creates no stub post and no platform identity:
+        the file's verified hashes, dimensions, MIME type, and size are the
+        whole seed.  A remote post appears only when a provider hit is later
+        fetched and persisted.
+        """
+        if note is not None and (not note.strip() or len(note) > _SEED_NOTE_LIMIT):
+            raise ValueError("seed note must be between 1 and 2000 characters")
+        seed_file = self._validate_file(path)
+        assert seed_file is not None
+        width: int | None = None
+        height: int | None = None
+        mime_type: str | None = None
+        try:
+            from PIL import Image
+
+            with Image.open(seed_file.path) as image:
+                width, height = image.size
+                mime_type = Image.MIME.get((image.format or "").upper())
+        except Exception:
+            # Non-raster or undecodable content keeps null dimensions; the
+            # verified hashes carry the seed identity either way.
+            width = height = None
+            mime_type = mimetypes.guess_type(seed_file.path.name)[0]
+        cursor = self._database.connection.execute(
+            """INSERT INTO discovery_file_seeds
+                   (discovery_session_id, verified_md5, verified_sha256,
+                    width, height, mime_type, byte_size, source_path,
+                    note, observed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                session_id,
+                seed_file.md5,
+                seed_file.sha256,
+                width,
+                height,
+                mime_type,
+                seed_file.size,
+                str(seed_file.path),
+                note,
+                observed_at,
+            ),
+        )
+        file_seed_id = cursor.lastrowid
+        assert file_seed_id is not None
+        return {
+            "status": "materialized",
+            "seed_kind": "local_file",
+            "file_seed_id": int(file_seed_id),
+            "verified_md5": seed_file.md5,
+            "verified_sha256": seed_file.sha256,
+            "width": width,
+            "height": height,
+            "mime_type": mime_type,
+            "byte_size": seed_file.size,
+        }
 
     def _recognize(self, urls: list[str] | tuple[str, ...]) -> list[_RecognizedSeedURL]:
         if not urls:

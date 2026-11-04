@@ -154,6 +154,37 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
+## [2026-11-04]
+
+### Added
+- **Bare-file discovery root and generational fan-out (Bead `data-processing-b8n`,
+  change `add-local-file-discovery-root`, roadmap P0.1/Milestone A)** —
+  `catalog discover --file <path>` now starts a session from an arbitrary local
+  image with no known source: the file's verified md5/sha256, dimensions, MIME
+  type, and size are recorded as a `discovery_file_seeds` row with file
+  provenance — no stub post, no synthetic platform (migration `0026` widens the
+  candidate-lookup-run seed rule to a third kind via the established CHECK
+  rebuild). The verified hash drives the existing `verified_md5` strategy on
+  every declaring provider, and a first hit fans out inside the same bounded
+  session: the hit post is fetched and persisted, then its normalized
+  references (source URLs, external ids, declared hashes) become one further
+  generation of deduped reverse lookups and source fetches, hard-capped at a
+  single follow-up wave under the existing request/time budgets. Session
+  reports gain an additive `generations` breakdown and the file seed's
+  intrinsic identity; operator paths stay out of reports.
+
+### Fixed
+- **Lookup-snapshot deadlock** — discovery provider steps left their step-outcome
+  writes uncommitted, and the lookup planner's catalog snapshot (`sqlite3
+  backup`) blocks forever on an open write transaction; step outcomes now
+  commit immediately (found live: sessions hung with zero CPU on the third
+  provider).
+- **Gelbooru response envelopes rejected cookies** — the envelope guard raised
+  on any `set-cookie` response header, but Gelbooru's DAPI sets one on every
+  response, making the whole surface unusable; the adapter now keeps only the
+  public operational headers (content-type, retry-after, x-rate-limit),
+  matching the danbooru/e621 convention.
+
 ## [2026-11-03]
 
 ### Added
