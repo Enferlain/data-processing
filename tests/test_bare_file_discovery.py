@@ -150,10 +150,12 @@ def test_followup_fetches_hits_once_and_caps_depth(catalog: Path, image_file: Pa
                 WHERE discovery_step_id = ?""",
             (run_id, step["discovery_step_id"]),
         )
+        # The local surrogate deliberately differs from the provider-native
+        # id: the fetch target must be the native id, never the surrogate.
         connection.execute(
             """INSERT INTO posts (post_id, platform_id, native_post_id,
                                       first_seen_at, last_seen_at)
-               VALUES (3224, ?, '3224', '2026-11-04T00:00:00Z',
+               VALUES (1, ?, '6531990', '2026-11-04T00:00:00Z',
                        '2026-11-04T00:00:00Z')""",
             (platform["platform_id"],),
         )
@@ -181,7 +183,7 @@ def test_followup_fetches_hits_once_and_caps_depth(catalog: Path, image_file: Pa
                    (candidate_lookup_run_id, result_kind, result_digest,
                     page_number, result_order, normalized_post_id,
                     raw_observation_id, observed_at)
-               VALUES (?, 'post_match', ?, 1, 1, '3224', ?, '2026-11-04T00:00:01Z')""",
+               VALUES (?, 'post_match', ?, 1, 1, 1, ?, '2026-11-04T00:00:01Z')""",
             (run_id, "c" * 64, int(raw_id)),
         )
         connection.commit()
@@ -192,7 +194,7 @@ def test_followup_fetches_hits_once_and_caps_depth(catalog: Path, image_file: Pa
         ).fetchone()
         wave_a = orchestrator._plan_followup(session)
         identities = {(row["source"], row["method"], row["target"]) for row in wave_a}
-        assert identities == {("e621", "fetch_post", "3224")}
+        assert identities == {("e621", "fetch_post", "6531990")}
 
         # Re-planning the same wave collapses: one reference, one step.
         assert orchestrator._plan_followup(session) == []
@@ -202,3 +204,28 @@ def test_followup_fetches_hits_once_and_caps_depth(catalog: Path, image_file: Pa
         # generation-0 steps.
         wave_b = orchestrator._plan_followup_from_posts(session, [999999])
         assert all(row["generation"] == 1 for row in wave_b)
+
+
+def test_file_stays_attachable_to_url_seeds(
+    catalog: Path, image_file: Path, tmp_path: Path
+) -> None:
+    """--file attaches to --url seeds exactly as before the bare-file root."""
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_file = source_dir / "picked.jpg"
+    # URL-seed attachment adopts the file, so it must be a decodable raster.
+    from PIL import Image
+
+    Image.new("RGB", (2, 2), "red").save(source_file, format="JPEG")
+    with CatalogDatabase(catalog) as database:
+        result = DiscoveryOrchestrator(database).start(
+            url="https://e926.net/posts/6823045",
+            file=source_file,
+            media_root=media_root,
+        )
+    assert result["input_kind"] == "url"
+    assert result["seed_post_id"] is not None
+    # The attachment is adoption-backed, not a file seed.
+    assert result.get("seed_file_id") is None

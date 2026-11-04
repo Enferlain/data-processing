@@ -174,6 +174,20 @@ Rules:
   intrinsic identity; operator paths stay out of reports.
 
 ### Fixed
+- **Bare-file fan-out corrections from the deferred reviewer pass** — the
+  first-hop fetch targeted the local surrogate `post_id` instead of the
+  provider-native id (so a live wave-A fetch retrieved the wrong post and
+  starved the follow-up wave; now the hit join reads `posts.native_post_id`,
+  and hits from every generation-0 run of the session's seed fan out, not
+  just the run recorded first on a step); `--url` + `--file` attachment
+  worked again (the new input guard had rejected the pair the spec pins);
+  interrupted sessions resume cleanly (planned fetch steps route through the
+  follow-up executor instead of crashing the lookup-strategy parser); the
+  follow-up post accumulator resets per execution; wave B plans one step per
+  query material (digest-keyed) instead of duplicating a material's runs
+  per value. Re-accepted live: e621 hash hit fetches true native post 5155635
+  and its declared-md5 reference hits a further e621 post in the same
+  session.
 - **Lookup-snapshot deadlock** — discovery provider steps left their step-outcome
   writes uncommitted, and the lookup planner's catalog snapshot (`sqlite3
   backup`) blocks forever on an open write transaction; step outcomes now

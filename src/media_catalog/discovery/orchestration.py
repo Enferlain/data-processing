@@ -91,7 +91,7 @@ class DiscoveryOrchestrator:
         time_budget_seconds: int = 120,
         search_term: str | None = None,
     ) -> dict[str, Any]:
-        inputs = (url, post_id, account_id, file)
+        inputs = (url, post_id, account_id, None if url is not None else file)
         if sum(value is not None for value in inputs) != 1:
             raise ValueError("exactly one input is required (--url, --post, --account, or --file)")
         connection = self._database.connection
@@ -271,6 +271,7 @@ class DiscoveryOrchestrator:
 
     def execute(self, session_id: int) -> None:
         connection = self._database.connection
+        self._followup_posts = []
         session = connection.execute(
             """SELECT discovery_session_id, seed_post_id, seed_account_id,
                       seed_file_id, live_authorized, request_budget,
@@ -285,7 +286,8 @@ class DiscoveryOrchestrator:
         search_term = session["search_term"]
         spent = 0
         rows = connection.execute(
-            """SELECT discovery_step_id, source_kind, source, method, status
+            """SELECT discovery_step_id, source_kind, source, method, status,
+                      target, seed_post_id, generation
                  FROM discovery_steps WHERE discovery_session_id = ?
                 ORDER BY step_order""",
             (session_id,),
@@ -531,23 +533,30 @@ class DiscoveryOrchestrator:
         connection = self._database.connection
         session_id = session["discovery_session_id"]
         hits = connection.execute(
-            """SELECT DISTINCT p.platform_key, r.normalized_post_id
-                 FROM discovery_steps s
+            """SELECT DISTINCT p.platform_key, po.native_post_id
+                 FROM candidate_lookup_runs run
                  JOIN candidate_lookup_results r
-                   ON r.candidate_lookup_run_id = s.candidate_lookup_run_id
-                 JOIN candidate_lookup_runs run USING(candidate_lookup_run_id)
+                   ON r.candidate_lookup_run_id = run.candidate_lookup_run_id
                  JOIN platforms p ON p.platform_id = run.platform_id
-                WHERE s.discovery_session_id = ?
-                  AND s.generation = 0 AND s.source_kind = 'provider'
-                  AND s.status = 'complete'
+                 JOIN posts po ON po.post_id = r.normalized_post_id
+                WHERE (run.seed_file_id = ?
+                       OR run.seed_post_id = ?
+                       OR run.seed_account_id = ?)
                   AND r.result_kind = 'post_match'
                   AND r.normalized_post_id IS NOT NULL""",
-            (session_id,),
+            (
+                session["seed_file_id"],
+                session["seed_post_id"],
+                session["seed_account_id"],
+            ),
         ).fetchall()
         existing = self._existing_step_identities(session_id)
         planned: list[int] = []
         for hit in hits:
-            identity = (hit["platform_key"], "fetch_post", str(hit["normalized_post_id"]))
+            # The provider-native id is the fetch target; the local surrogate
+            # post id is never a provider identity.
+            native_id = str(hit["native_post_id"])
+            identity = (hit["platform_key"], "fetch_post", native_id)
             if identity in existing:
                 continue
             existing.add(identity)
@@ -560,7 +569,7 @@ class DiscoveryOrchestrator:
                     status="planned",
                     detail="fetch the hit post so its references become material",
                     generation=1,
-                    target=str(hit["normalized_post_id"]),
+                    target=native_id,
                 )
             )
         connection.commit()
@@ -598,24 +607,26 @@ class DiscoveryOrchestrator:
                         # follow-up generation never invents them.
                         continue
                     for material in values:
-                        for value in material.values:
-                            identity = (provider.platform_key, strategy.value, value)
-                            if identity in existing:
-                                continue
-                            existing.add(identity)
-                            planned.append(
-                                self._insert_step(
-                                    session_id,
-                                    source_kind=_PROVIDER,
-                                    source=provider.platform_key,
-                                    method=strategy.value,
-                                    status="planned",
-                                    detail=f"reverse lookup from fetched post {post_id}",
-                                    generation=1,
-                                    target=value,
-                                    seed_post_id=post_id,
-                                )
+                        # One step per material: execution replays the whole
+                        # material (all its values) in a single run, so the
+                        # plan must not split one material across steps.
+                        identity = (provider.platform_key, strategy.value, material.digest)
+                        if identity in existing:
+                            continue
+                        existing.add(identity)
+                        planned.append(
+                            self._insert_step(
+                                session_id,
+                                source_kind=_PROVIDER,
+                                source=provider.platform_key,
+                                method=strategy.value,
+                                status="planned",
+                                detail=f"reverse lookup from fetched post {post_id}",
+                                generation=1,
+                                target=material.digest,
+                                seed_post_id=post_id,
                             )
+                        )
             for material in materials.get(LookupStrategy.SOURCE_POST_URL, ()):
                 for url in material.values:
                     try:
