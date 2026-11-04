@@ -156,6 +156,14 @@ Rules:
 
 ## [2026-11-04]
 
+### Fixed
+- **Source-URL lookup material kept its query string** — the alias builder
+  rebuilt every non-x source URL without the query, degrading gelbooru-family
+  post URLs (id in the query) to a bare site root; a wave-B source lookup
+  then matched fifty unrelated posts. Non-x hosts now preserve the query;
+  x.com aliases stay path-canonical as before. Found live on a second
+  Grabber validation batch (2026-11-04).
+
 ### Added
 - **Bare-file discovery root and generational fan-out (Bead `data-processing-b8n`,
   change `add-local-file-discovery-root`, roadmap P0.1/Milestone A)** —

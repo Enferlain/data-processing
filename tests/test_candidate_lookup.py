@@ -535,3 +535,19 @@ def test_complete_lookup_run_cannot_be_resumed(tmp_path: Path) -> None:
         assert complete.status == "complete"
         with pytest.raises(ValueError, match="not resumable"):
             service.resume(complete.candidate_lookup_run_id, limits=LookupLimits(1, 1, 10, 30))
+
+
+def test_source_url_aliases_preserve_query_strings() -> None:
+    """Gelbooru-family post URLs carry the post id in the query; the alias
+    builder must not degrade them to a site root (live 2026-11-04: a wave-B
+    source lookup searched https://gelbooru.com/index.php and matched 50
+    unrelated posts)."""
+    from media_catalog.candidate_lookup.planning import _x_aliases
+
+    aliases = _x_aliases("https://gelbooru.com/index.php?page=post&s=view&id=5684951")
+    assert aliases == ("https://gelbooru.com/index.php?page=post&s=view&id=5684951",)
+    # x.com aliases stay path-canonical with the query dropped, as before.
+    assert _x_aliases("https://x.com/user/status/1?mx=2") == (
+        "https://x.com/user/status/1",
+        "https://twitter.com/user/status/1",
+    )

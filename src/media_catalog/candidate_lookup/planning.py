@@ -192,7 +192,10 @@ def _x_aliases(url: str) -> tuple[str, ...]:
     host = parsed.hostname.lower()
     path = parsed.path.rstrip("/")
     if host not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
-        return (urlunsplit(("https", host, path, "", "")),)
+        # Non-x hosts keep their query string: gelbooru-family post URLs
+        # carry the post id in the query, and dropping it would degrade the
+        # URL to a site root that matches every post from that site.
+        return (urlunsplit(("https", host, path, parsed.query, "")),)
     return tuple(urlunsplit(("https", alias, path, "", "")) for alias in ("x.com", "twitter.com"))
 
 
