@@ -383,7 +383,10 @@ Includes:
 - P0.5 Integration tests and recovery
 - Minimal grouping and acquisition-plan integration from P1
 
-**Required demonstration:**
+**Required demonstration:** ✅ demonstrated live 2026-11-04 (bare-file root,
+change `add-local-file-discovery-root`): an arbitrary Grabber image resolved
+by verified md5 to e621/gelbooru identities with generational fan-out;
+offline golden replay in CI (`tests/test_golden_discover.py`).
 
 Starting with an arbitrary local image, the system finds known local content, searches a maintained metadata index, performs appropriate targeted provider queries, reconciles candidates, and outputs linked occurrences, evidence, and available acquisition choices.
 
@@ -393,7 +396,11 @@ Deliver one working vertical slice first, then broaden coverage and matching met
 
 Includes P1.1–P1.3.
 
-**Required demonstration:**
+**Required demonstration:** ◐ vertical slice live 2026-11-05: candidate
+confirm → reviewed cross-platform work relationship → works → policy-gated
+download-plan → managed-storage download with declared-md5 verification.
+Gaps filed: gelbooru media policy (`data-processing-3xv`), works-ordering
+dependency (`data-processing-e2l`).
 
 A discovered work with multiple representations, sources, and ordered pages can be inspected as a coherent related collection, reviewed, and acquired according to explicit selection policies.
 
