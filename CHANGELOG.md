@@ -170,6 +170,13 @@ Rules:
   open transaction before `backup()` can block on it.
 
 ### Added
+- **`catalog tombstone` operator command** — marks bad catalog data as
+  errored without deleting evidence, productizing the 2026-11-04 lesson:
+  `--post <id>… --reason <text>` marks posts unavailable with an
+  error-tombstone status carrying the reason; `--lookup-run <id> --reason`
+  marks a degenerate lookup run failed with the diagnostic while its inputs
+  stay trigger-immutable. Idempotent, missing ids reported, reasons required.
+
 - **Offline golden replay of bare-file discovery (session 32)** — the
   recorded wire payloads of the first fixed bare-file run (gelbooru md5 hit,
   two honest zero-results, one rate-limited refusal) now replay through the

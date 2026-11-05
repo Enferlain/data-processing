@@ -14,6 +14,7 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.output import public_path
 from media_catalog.remote_sync import execute_reprocess, plan_reprocess
 from media_catalog.seeding import SeedMaterializationService
+from media_catalog.tombstone import tombstone_lookup_run, tombstone_posts
 
 _REPROCESS_PROVIDERS = (
     "danbooru",
@@ -27,7 +28,7 @@ _REPROCESS_PROVIDERS = (
 )
 
 
-COMMANDS = ("reprocess", "seed")
+COMMANDS = ("reprocess", "seed", "tombstone")
 
 
 def register(commands: argparse._SubParsersAction) -> None:
@@ -63,6 +64,17 @@ def register(commands: argparse._SubParsersAction) -> None:
     )
     add_json(seed_create)
 
+    tombstone = commands.add_parser(
+        "tombstone",
+        description="Mark bad data as errored without deleting evidence",
+    )
+    tombstone.add_argument("catalog", type=Path)
+    tombstone_target = tombstone.add_mutually_exclusive_group(required=True)
+    tombstone_target.add_argument("--post", type=int, action="append")
+    tombstone_target.add_argument("--lookup-run", type=int)
+    tombstone.add_argument("--reason", required=True, help="recorded with the tombstone")
+    add_json(tombstone)
+
 
 def execute(arguments: argparse.Namespace) -> dict[str, object]:
     catalog_label = public_path(arguments.catalog)
@@ -85,6 +97,15 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
                     clock=utc_now,
                 ),
             }
+    if arguments.command == "tombstone":
+        with CatalogDatabase(arguments.catalog) as database:
+            if arguments.post is not None:
+                result = tombstone_posts(database, list(arguments.post), reason=arguments.reason)
+            else:
+                result = tombstone_lookup_run(
+                    database, arguments.lookup_run, reason=arguments.reason
+                )
+        return {"catalog": public_path(arguments.catalog), **result}
     with CatalogDatabase(arguments.catalog) as database:
         result = SeedMaterializationService(database).materialize(
             arguments.url,
