@@ -170,6 +170,14 @@ Rules:
   open transaction before `backup()` can block on it.
 
 ### Added
+- **Offline golden replay of bare-file discovery (session 32)** — the
+  recorded wire payloads of the first fixed bare-file run (gelbooru md5 hit,
+  two honest zero-results, one rate-limited refusal) now replay through the
+  real discovery pipeline in CI: `tests/fixtures/golden_discover/` plus a
+  test that pins the computed-hash query construction, generation-zero
+  outcomes per provider, the single wave-A fetch of the provider-native
+  post, and the persisted hit — drift in the bare-file path fails before a
+  live run can be surprised.
 - **Milestone B vertical slice proven live** — candidate confirm →
   `work:gelbooru:11165341 ⟷ work:e621:5486288` reviewed relationship →
   works materialized → policy-gated `download-plan` (e621-media) → the

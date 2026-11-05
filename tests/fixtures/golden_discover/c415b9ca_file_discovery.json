@@ -1,0 +1,59 @@
+{
+ "scenario": "bare-file-discover-c415b9ca",
+ "file": {
+  "md5": "c415b9ca0549c9366460c507f4c41fe4",
+  "sha256": "7a04e4b7c07466a4dea5980c53549abfba0322e5b69f0f5367860d4fdfc5e92d",
+  "width": 1200,
+  "height": 1600,
+  "mime_type": "image/jpeg",
+  "byte_size": 225010
+ },
+ "provider_responses": {
+  "danbooru": {
+   "status": 429,
+   "retry_after": "3600"
+  },
+  "aibooru": {
+   "payload": "[]",
+   "media_type": "application/json"
+  },
+  "e621": {
+   "payload": "{\"posts\":[]}",
+   "media_type": "application/json"
+  },
+  "gelbooru_md5_query": {
+   "payload": "{\"@attributes\":{\"limit\":50,\"offset\":0,\"count\":1},\"post\":[{\"id\":14083173,\"created_at\":\"Fri May 15 08:31:03 -0500 2026\",\"score\":194,\"width\":1200,\"height\":1600,\"md5\":\"c415b9ca0549c9366460c507f4c41fe4\",\"directory\":\"c4\\/15\",\"image\":\"c415b9ca0549c9366460c507f4c41fe4.jpg\",\"rating\":\"explicit\",\"source\":\"https:\\/\\/x.com\\/polkii_\\/status\\/2055266719254610145\",\"change\":1788363441,\"owner\":\"danbooru\",\"creator_id\":6498,\"parent_id\":0,\"sample\":1,\"preview_height\":350,\"preview_width\":262,\"tags\":\"1boy 1girl armpits arms_behind_head bikini black_hairband blue_archive clitoral_piercing clitoris_ring collar elbow_gloves female_ejaculation female_focus gloves gold_bikini gold_gloves gold_thighhighs hair_between_eyes hairband halo hetero highres holding holding_leash kei_(blue_archive) kei_(student)_(blue_archive) leash long_hair long_hair_between_eyes looking_at_viewer navel open_mouth penis pet_play petite piercing pink_eyes pink_halo polki presenting_own_armpit pussy pussy_juice pussy_juice_puddle pussy_piercing rectangular_halo ring_piercing side-tie_bikini_bottom simple_background smile spread_legs squatting swimsuit thighhighs uncensored very_long_hair white_hair\",\"title\":\"\",\"has_notes\":\"false\",\"has_comments\":\"false\",\"file_url\":\"https:\\/\\/img4.gelbooru.com\\/images\\/c4\\/15\\/c415b9ca0549c9366460c507f4c41fe4.jpg\",\"preview_url\":\"https:\\/\\/img4.gelbooru.com\\/thumbnails\\/c4\\/15\\/thumbnail_c415b9ca0549c9366460c507f4c41fe4.jpg\",\"sample_url\":\"https:\\/\\/img4.gelbooru.com\\/samples\\/c4\\/15\\/sample_c415b9ca0549c9366460c507f4c41fe4.jpg\",\"sample_height\":1133,\"sample_width\":850,\"status\":\"active\",\"post_locked\":0,\"has_children\":\"false\"}]}",
+   "media_type": "application/json"
+  },
+  "gelbooru_post_fetch": {
+   "payload": "{\"@attributes\":{\"limit\":1,\"offset\":0,\"count\":1},\"post\":[{\"id\":14083173,\"created_at\":\"Fri May 15 08:31:03 -0500 2026\",\"score\":194,\"width\":1200,\"height\":1600,\"md5\":\"c415b9ca0549c9366460c507f4c41fe4\",\"directory\":\"c4\\/15\",\"image\":\"c415b9ca0549c9366460c507f4c41fe4.jpg\",\"rating\":\"explicit\",\"source\":\"https:\\/\\/x.com\\/polkii_\\/status\\/2055266719254610145\",\"change\":1788363441,\"owner\":\"danbooru\",\"creator_id\":6498,\"parent_id\":0,\"sample\":1,\"preview_height\":350,\"preview_width\":262,\"tags\":\"1boy 1girl armpits arms_behind_head bikini black_hairband blue_archive clitoral_piercing clitoris_ring collar elbow_gloves female_ejaculation female_focus gloves gold_bikini gold_gloves gold_thighhighs hair_between_eyes hairband halo hetero highres holding holding_leash kei_(blue_archive) kei_(student)_(blue_archive) leash long_hair long_hair_between_eyes looking_at_viewer navel open_mouth penis pet_play petite piercing pink_eyes pink_halo polki presenting_own_armpit pussy pussy_juice pussy_juice_puddle pussy_piercing rectangular_halo ring_piercing side-tie_bikini_bottom simple_background smile spread_legs squatting swimsuit thighhighs uncensored very_long_hair white_hair\",\"title\":\"\",\"has_notes\":\"false\",\"has_comments\":\"false\",\"file_url\":\"https:\\/\\/img4.gelbooru.com\\/images\\/c4\\/15\\/c415b9ca0549c9366460c507f4c41fe4.jpg\",\"preview_url\":\"https:\\/\\/img4.gelbooru.com\\/thumbnails\\/c4\\/15\\/thumbnail_c415b9ca0549c9366460c507f4c41fe4.jpg\",\"sample_url\":\"https:\\/\\/img4.gelbooru.com\\/samples\\/c4\\/15\\/sample_c415b9ca0549c9366460c507f4c41fe4.jpg\",\"sample_height\":1133,\"sample_width\":850,\"status\":\"active\",\"post_locked\":0,\"has_children\":\"false\"}]}",
+   "media_type": "application/json"
+  }
+ },
+ "expect": {
+  "input_kind": "local_file",
+  "generation_zero": {
+   "danbooru": {
+    "status": "failed"
+   },
+   "aibooru": {
+    "status": "complete",
+    "result_count": 0
+   },
+   "e621": {
+    "status": "complete",
+    "result_count": 0
+   },
+   "gelbooru": {
+    "status": "complete",
+    "result_count": 1
+   }
+  },
+  "wave_a": {
+   "source": "gelbooru",
+   "method": "fetch_post",
+   "target": "14083173",
+   "status": "complete"
+  }
+ }
+}
