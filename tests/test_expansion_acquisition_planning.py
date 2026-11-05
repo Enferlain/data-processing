@@ -235,11 +235,32 @@ def test_expansion_scoped_selection_passes_variant_through(tmp_path: Path) -> No
         plan_expansion_acquisition(path, plan_id, variant="  ", max_items=10)
 
 
-def test_download_plan_cli_rejects_scope_flags_with_explicit_selection(
+def test_download_plan_cli_scope_flags_with_explicit_selection(
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """--variant works with --select (e621 exposes explicit original/sample/
+    preview roles its policy requires naming; found live 2026-11-05);
+    --availability stays a library-plan scope flag."""
     path, plan_id, occurrence_ids = _committed_expansion(tmp_path, with_media=True)
     _ = plan_id
+
+    # An explicit OCCURRENCE:VARIANT selection is unaffected by --variant.
+    main(
+        [
+            "assets",
+            "download-plan",
+            str(path),
+            "--select",
+            f"{occurrence_ids[0]}:primary",
+            "--variant",
+            "original",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    (item,) = payload["items"]
+    assert item["variant_key"] == "primary"
 
     with pytest.raises(SystemExit) as exit_info:
         main(
@@ -248,11 +269,11 @@ def test_download_plan_cli_rejects_scope_flags_with_explicit_selection(
                 "download-plan",
                 str(path),
                 "--select",
-                f"{occurrence_ids[0]}:primary",
-                "--variant",
-                "original",
+                str(occurrence_ids[0]),
+                "--availability",
+                "available",
                 "--json",
             ]
         )
     error = json.loads(str(exit_info.value.code))
-    assert "require --library-plan" in error["error"]
+    assert "--availability requires --library-plan" in error["error"]

@@ -12,7 +12,7 @@ from media_catalog.acquisition.planning import (
     evaluate_occurrence_variant,
     resolve_occurrence_variants,
 )
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 
 DatabaseSource = CatalogDatabase | Path | str
 
@@ -22,15 +22,7 @@ MAX_RELATED_ITEMS = 100
 
 def _connection(database: DatabaseSource) -> sqlite3.Connection:
     if isinstance(database, CatalogDatabase):
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        try:
-            database.connection.backup(snapshot)
-            snapshot.execute("PRAGMA query_only = ON")
-        except BaseException:
-            snapshot.close()
-            raise
-        return snapshot
+        return snapshot_connection(database)
     return CatalogDatabase.open_read_only(Path(database)).connection
 
 

@@ -18,7 +18,7 @@ from media_catalog.adapters.e621.config import (
     SCHEMA_VERSION as E621_SCHEMA_VERSION,
 )
 from media_catalog.adapters.pixiv.transport import PIXIV_ADAPTER_VERSION, PIXIV_SCHEMA_VERSION
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 from media_catalog.library.contracts import (
     ExpansionAuthority,
     ExpansionAuthorityMode,
@@ -138,15 +138,7 @@ def target_capabilities(database: DatabaseSource, target: str) -> dict[str, obje
 
 def _connection(database: DatabaseSource) -> tuple[sqlite3.Connection, bool]:
     if isinstance(database, CatalogDatabase):
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        try:
-            database.connection.backup(snapshot)
-            snapshot.execute("PRAGMA query_only = ON")
-        except BaseException:
-            snapshot.close()
-            raise
-        return snapshot, True
+        return snapshot_connection(database), True
     opened = CatalogDatabase.open_read_only(Path(database))
     return opened.connection, True
 

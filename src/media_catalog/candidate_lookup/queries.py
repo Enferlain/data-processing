@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 
 DatabaseSource = CatalogDatabase | Path | str
 
@@ -15,10 +15,7 @@ DatabaseSource = CatalogDatabase | Path | str
 @contextmanager
 def _connection(database: DatabaseSource) -> Iterator[sqlite3.Connection]:
     if isinstance(database, CatalogDatabase):
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        database.connection.backup(snapshot)
-        snapshot.execute("PRAGMA query_only = ON")
+        snapshot = snapshot_connection(database)
         try:
             yield snapshot
         finally:

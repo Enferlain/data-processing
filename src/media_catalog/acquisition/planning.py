@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from media_catalog.acquisition.policies import PolicyIdentity, policy_identity_for_platform
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 from media_catalog.records import (
     AcquisitionPlanItemRecord,
     AcquisitionPlanRecord,
@@ -201,7 +201,14 @@ def resolve_occurrence_variants(row: Mapping[str, Any]) -> tuple[dict[str, str],
                 return variants, "invalid_variants"
             role = entry.get("role")
             url = entry.get("url")
-            if not isinstance(role, str) or not role or not isinstance(url, str) or not url:
+            if not isinstance(role, str) or not role:
+                return variants, "invalid_variants"
+            if url is None:
+                # A well-formed entry with no URL is a role the provider does
+                # not offer for this occurrence (e621 samples on originals);
+                # it must not poison the variants that do exist.
+                continue
+            if not isinstance(url, str) or not url:
                 return variants, "invalid_variants"
             existing = variants.get(role)
             if existing is not None and existing != url:
@@ -410,10 +417,7 @@ def plan_acquisition(
     if not unique:
         raise ValueError("at least one acquisition selection is required")
     if isinstance(database, CatalogDatabase):
-        connection = sqlite3.connect(":memory:")
-        connection.row_factory = sqlite3.Row
-        database.connection.backup(connection)
-        connection.execute("PRAGMA query_only = ON")
+        connection = snapshot_connection(database)
         close = connection.close
     else:
         catalog = CatalogDatabase.open_read_only(Path(database))
@@ -508,10 +512,7 @@ def plan_expansion_acquisition(
     if variant is not None and not variant.strip():
         raise ValueError("variant must not be empty")
     if isinstance(database, CatalogDatabase):
-        connection = sqlite3.connect(":memory:")
-        connection.row_factory = sqlite3.Row
-        database.connection.backup(connection)
-        connection.execute("PRAGMA query_only = ON")
+        connection = snapshot_connection(database)
         close = connection.close
     else:
         catalog = CatalogDatabase.open_read_only(Path(database))

@@ -4,16 +4,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 
 
 def _connection(database: CatalogDatabase | Path | str) -> sqlite3.Connection:
     if isinstance(database, CatalogDatabase):
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        database.connection.backup(snapshot)
-        snapshot.execute("PRAGMA query_only = ON")
-        return snapshot
+        return snapshot_connection(database)
     return CatalogDatabase.open_read_only(Path(database)).connection
 
 

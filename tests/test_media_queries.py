@@ -448,3 +448,66 @@ def test_path_queries_are_read_only_and_do_not_create_sidecars(tmp_path: Path) -
     assert result["count"] == 3
     assert catalog.read_bytes() == before_bytes
     assert sorted(path.name for path in tmp_path.iterdir()) == before_names
+
+
+def _insert_variant_occurrence(database, *, variants_json):
+    connection = database.connection
+    connection.execute("INSERT OR IGNORE INTO platforms (platform_key) VALUES ('e621')")
+    platform = connection.execute(
+        "SELECT platform_id FROM platforms WHERE platform_key = 'e621'"
+    ).fetchone()[0]
+    connection.execute(
+        "INSERT INTO posts (platform_id, native_post_id, availability,"
+        " first_seen_at, last_seen_at) VALUES (?, '5486288', 'available', ?, ?)",
+        (platform, NOW, NOW),
+    )
+    post_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+    connection.execute(
+        """INSERT INTO media_occurrences
+               (post_id, source_key, media_index, media_type, role,
+                remote_url, preview_url, variants_json, availability, observed_at)
+           VALUES (?, 'e621', 0, 'original', 'original',
+                   'https://static1.e621.net/a.jpg',
+                   'https://static1.e621.net/preview/a.jpg', ?, 'available', ?)""",
+        (post_id, variants_json, NOW),
+    )
+    return int(
+        connection.execute(
+            "SELECT media_occurrence_id FROM media_occurrences"
+            " WHERE post_id = ? ORDER BY media_occurrence_id DESC LIMIT 1",
+            (post_id,),
+        ).fetchone()[0]
+    )
+
+
+def test_unoffered_variant_roles_do_not_poison_available_ones(tmp_path: Path) -> None:
+    """A well-formed variants entry with url:null (e621 sample on originals)
+    must be skipped, not fail the whole occurrence: the live Milestone B run
+    (2026-11-05, e621 post 5486288) could not plan its original because the
+    unavailable sample poisoned the variant map."""
+    catalog = tmp_path / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database:
+        _seed(database)
+        occurrence_id = _insert_variant_occurrence(
+            database,
+            variants_json=json.dumps(
+                {
+                    "variants": [
+                        {"role": "original", "url": "https://static1.e621.net/a.jpg"},
+                        {"role": "sample", "url": None},
+                        {
+                            "role": "preview",
+                            "url": "https://static1.e621.net/preview/a.jpg",
+                        },
+                    ]
+                }
+            ),
+        )
+        planned = plan_acquisition(
+            database,
+            [AcquisitionSelection(occurrence_id, "original")],
+            max_items=1,
+            clock=lambda: NOW,
+        )
+        (item,) = planned.items
+        assert item.eligibility == "eligible", item.exclusion_reason

@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 from media_catalog.records import (
     AdoptionAttemptRecord,
     AdoptionItemRecord,
@@ -85,15 +85,7 @@ def _connection(database: CatalogDatabase | Path | str) -> tuple[sqlite3.Connect
         # sidecar-free URI would ignore.  Snapshot it into memory instead: the
         # query connection is genuinely read-only and sees the writer's current
         # state without opening or mutating SQLite sidecars.
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        try:
-            database.connection.backup(snapshot)
-            snapshot.execute("PRAGMA query_only = ON")
-        except BaseException:
-            snapshot.close()
-            raise
-        return snapshot, True
+        return snapshot_connection(database), True
     opened = CatalogDatabase.open_read_only(Path(database))
     return opened.connection, True
 

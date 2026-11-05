@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 
 
 def _redact_row_paths(row: dict[str, Any]) -> dict[str, Any]:
@@ -19,15 +19,7 @@ def _redact_row_paths(row: dict[str, Any]) -> dict[str, Any]:
 
 def _connection(database: CatalogDatabase | Path | str) -> tuple[sqlite3.Connection, bool]:
     if isinstance(database, CatalogDatabase):
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        try:
-            database.connection.backup(snapshot)
-            snapshot.execute("PRAGMA query_only = ON")
-        except BaseException:
-            snapshot.close()
-            raise
-        return snapshot, True
+        return snapshot_connection(database), True
     opened = CatalogDatabase.open_read_only(Path(database))
     return opened.connection, True
 

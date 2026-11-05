@@ -506,3 +506,37 @@ def test_works_projection_prefers_original_and_excludes_thumbnails(
     second = run_export(catalog, kind="works", out_dir=tmp_path / "two", clock=lambda: NOW)
     assert first["spec_digest"] == second["spec_digest"]
     assert first["selection_digest"] == second["selection_digest"]
+
+
+def test_list_and_show_queries_return_relationships(tmp_path: Path) -> None:
+    """list_relationships/get_relationship crashed on every call: the query
+    carried an unbound LIMIT placeholder (found live 2026-11-05 running the
+    Milestone B flow)."""
+    from media_catalog.records import RelationshipRecord
+    from media_catalog.relationships import get_relationship, list_relationships
+    from media_catalog.writer import CatalogWriter
+
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog)
+    with CatalogDatabase(catalog) as database:
+        CatalogWriter(database).insert_relationship(
+            RelationshipRecord(
+                subject_kind="work",
+                subject_id=1,
+                relation_kind="same_work",
+                target_kind="work",
+                target_id=2,
+                epistemic_status="reviewed",
+                created_at=NOW,
+            )
+        )
+        rows = list_relationships(database)
+        assert rows, "seeded relationships must list"
+        first = rows[0]
+        shown = get_relationship(database, first["relationship_id"])
+        assert shown is not None
+        assert shown["relationship_id"] == first["relationship_id"]
+        assert "subject" in shown and "target" in shown
+        # Filters keep the LIMIT bound as well.
+        filtered = list_relationships(database, relation_kind=first["relation_kind"], limit=1)
+        assert len(filtered) == 1

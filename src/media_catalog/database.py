@@ -34,6 +34,28 @@ def available_migrations() -> tuple[tuple[int, str, str], ...]:
     return tuple(migrations)
 
 
+def snapshot_connection(database: CatalogDatabase) -> sqlite3.Connection:
+    """A read-only in-memory snapshot of the catalog for offline planning.
+
+    sqlite3 backup blocks indefinitely when the source connection holds an
+    open write transaction (found live twice: discovery provider steps
+    2026-11-04, acquisition planning fixtures 2026-11-05).  Any pending
+    writes are committed first so the snapshot is consistent and the backup
+    cannot deadlock; readers on clean connections are unaffected.
+    """
+    if database.connection.in_transaction:
+        database.connection.commit()
+    snapshot = sqlite3.connect(":memory:")
+    snapshot.row_factory = sqlite3.Row
+    try:
+        database.connection.backup(snapshot)
+        snapshot.execute("PRAGMA query_only = ON")
+    except BaseException:
+        snapshot.close()
+        raise
+    return snapshot
+
+
 def current_schema_version() -> int:
     migrations = available_migrations()
     return migrations[-1][0] if migrations else 0

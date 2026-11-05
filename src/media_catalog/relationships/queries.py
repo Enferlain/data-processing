@@ -36,7 +36,7 @@ def list_relationships(
               FROM relationships r {where}
              ORDER BY r.relationship_id
              LIMIT ?""",
-        values,
+        [*values, limit],
     ).fetchall()
     labeled: list[dict[str, Any]] = []
     for row in rows:

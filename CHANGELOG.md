@@ -154,6 +154,28 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
+## [2026-11-05]
+
+### Fixed
+- **Milestone B live run found four defects, all fixed** — `relationships
+  list`/`show` crashed on every call (an unbound LIMIT placeholder in the
+  query); planning an e621 original was impossible because one unoffered
+  variant role (`sample` with `url: null`) poisoned the whole variant map
+  (null-URL roles are now skipped, malformed JSON and ambiguous roles still
+  fail); `assets download-plan --variant` now works with `--select`
+  selections so e621's explicit original/sample/preview roles are reachable
+  without a library plan; and the sqlite snapshot pattern that deadlocked
+  discovery (2026-11-04) existed as nine copy-pasted backup sites — all now
+  route through one guarded `snapshot_connection` helper that commits any
+  open transaction before `backup()` can block on it.
+
+### Added
+- **Milestone B vertical slice proven live** — candidate confirm →
+  `work:gelbooru:11165341 ⟷ work:e621:5486288` reviewed relationship →
+  works materialized → policy-gated `download-plan` (e621-media) → the
+  original downloaded into managed storage with its declared md5
+  (`761b6db8…`) verified against the stored bytes.
+
 ## [2026-11-04]
 
 ### Fixed

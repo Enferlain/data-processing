@@ -16,7 +16,7 @@ from media_catalog.adapters import (
     LookupQueryMaterial,
     LookupStrategy,
 )
-from media_catalog.database import CatalogDatabase
+from media_catalog.database import CatalogDatabase, snapshot_connection
 
 DatabaseSource = CatalogDatabase | Path | str
 
@@ -33,15 +33,7 @@ def _digest(*parts: object) -> str:
 
 def _connection(database: DatabaseSource) -> tuple[sqlite3.Connection, bool]:
     if isinstance(database, CatalogDatabase):
-        snapshot = sqlite3.connect(":memory:")
-        snapshot.row_factory = sqlite3.Row
-        try:
-            database.connection.backup(snapshot)
-            snapshot.execute("PRAGMA query_only = ON")
-        except BaseException:
-            snapshot.close()
-            raise
-        return snapshot, True
+        return snapshot_connection(database), True
     opened = CatalogDatabase.open_read_only(Path(database))
     return opened.connection, True
 

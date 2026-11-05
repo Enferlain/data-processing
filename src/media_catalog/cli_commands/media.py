@@ -14,6 +14,7 @@ from media_catalog.acquisition import (
     plan_acquisition,
     plan_expansion_acquisition,
 )
+from media_catalog.acquisition.planning import AcquisitionSelection
 from media_catalog.cli_commands.support import (
     acquisition_limits,
     add_acquisition_limits,
@@ -190,11 +191,21 @@ def _execute_assets(arguments: argparse.Namespace) -> dict[str, object]:
                 max_items=arguments.max_items,
             )
         else:
-            if arguments.variant is not None or arguments.availability is not None:
-                raise ValueError("--variant/--availability require --library-plan")
+            if arguments.availability is not None:
+                raise ValueError("--availability requires --library-plan")
+            # --variant with --select names the variant of every selected
+            # occurrence: e621 occurrences expose explicit original/sample/
+            # preview roles, and its policy refuses the generic default.
+            # An explicit OCCURRENCE:VARIANT selection wins over the flag.
+            selections = [
+                selection
+                if ":" in arguments.select[index] or arguments.variant is None
+                else AcquisitionSelection(selection.media_occurrence_id, arguments.variant)
+                for index, selection in enumerate(parse_acquisition_selections(arguments.select))
+            ]
             preview = plan_acquisition(
                 arguments.catalog,
-                parse_acquisition_selections(arguments.select),
+                selections,
                 max_items=arguments.max_items,
             )
         return {"catalog": catalog_label, "status": "planned", **preview.as_dict()}
