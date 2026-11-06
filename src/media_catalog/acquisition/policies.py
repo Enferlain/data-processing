@@ -367,11 +367,37 @@ AIBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
 )
 E621_MEDIA_POLICY = E621MediaPolicy()
 
+# Gelbooru-family media policies (live-captured 2026-11-05, bead
+# data-processing-3xv): gelbooru's CDN answers only with a
+# https://gelbooru.com/ Referer (a plain fetch gets a 302 to an HTML page);
+# rule34 serves images from api-cdn.rule34.xxx with no referer requirement
+# (its DAPI needs credentials, its CDN does not); safebooru serves media
+# from the base host itself.  Only hosts actually observed on the wire are
+# allowed; extend media_hosts only after a live capture shows more.
+GELBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
+    provider="gelbooru",
+    base_host="gelbooru.com",
+    media_hosts=("img4.gelbooru.com",),
+)
+RULE34_MEDIA_POLICY = DanbooruMediaPolicy(
+    provider="rule34",
+    base_host="rule34.xxx",
+    media_hosts=("api-cdn.rule34.xxx",),
+)
+SAFEBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
+    provider="safebooru",
+    base_host="safebooru.org",
+    media_hosts=("safebooru.org",),
+)
+
 _BUILTIN_POLICIES: dict[str, MediaRequestPolicy] = {
     "pixiv": PIXIV_MEDIA_POLICY,
     "danbooru": DANBOORU_MEDIA_POLICY,
     "aibooru": AIBOORU_MEDIA_POLICY,
     "e621": E621_MEDIA_POLICY,
+    "gelbooru": GELBOORU_MEDIA_POLICY,
+    "rule34": RULE34_MEDIA_POLICY,
+    "safebooru": SAFEBOORU_MEDIA_POLICY,
 }
 
 

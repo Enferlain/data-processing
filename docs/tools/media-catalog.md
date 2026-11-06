@@ -789,6 +789,12 @@ Provider request policies are versioned and fail closed:
 - e621 media accepts only returned HTTPS URLs on the bounded `static1.e621.net` through
   `static9.e621.net` host set, sends the descriptive e621 User-Agent and referer, and validates
   every redirect against that same set. URLs are never reconstructed from an MD5.
+- Gelbooru media is restricted to `img4.gelbooru.com` (the only host observed on the
+  wire; `img1..img3` are rejected until a live capture shows them) and sends the required
+  `Referer: https://gelbooru.com/` — without it the CDN answers with a redirect to an
+  HTML page.
+- Rule34 media is restricted to `api-cdn.rule34.xxx`; its DAPI needs credentials but the
+  image CDN does not. Safebooru media is served from the `safebooru.org` base host itself.
 
 Every redirect hop is manually checked. HTTP, downgrade, user-info, IP-literal, unexpected-port,
 and off-policy destinations are rejected before requesting them. Credential values, cookies,

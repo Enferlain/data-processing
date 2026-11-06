@@ -156,6 +156,20 @@ Rules:
 
 ## [2026-11-05]
 
+### Added
+- **Gelbooru-family media acquisition policies (Bead `data-processing-3xv`)** —
+  gelbooru, rule34, and safebooru representations are acquirable, closing the
+  Milestone B gap the live run exposed. Live-captured wire behavior
+  (2026-11-05): gelbooru's CDN answers only with a `https://gelbooru.com/`
+  Referer (a plain fetch gets a 302 to an HTML page — the existing
+  danbooru-style Referer header covers it); rule34 serves images from
+  `api-cdn.rule34.xxx` with no referer requirement though its DAPI needs
+  credentials; safebooru serves media from its base host. Only observed
+  hosts are allowed — `img1..3.gelbooru.com` remain rejected until a
+  capture shows them. Proof: the gelbooru original of the Milestone B pair
+  downloaded through the catalog and deduplicated onto the e621 original's
+  CAS address (same sha256, one asset from two providers).
+
 ### Fixed
 - **Milestone B live run found four defects, all fixed** — `relationships
   list`/`show` crashed on every call (an unbound LIMIT placeholder in the

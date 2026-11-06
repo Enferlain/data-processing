@@ -1244,10 +1244,11 @@ def test_offline_inspection_shows_gelbooru_identity_provenance_and_variants(
     variants = occurrence["variants"]
     variant_keys = {variant["key"] for variant in variants}
     assert {"original", "preview"} <= variant_keys
-    # Stable selectors exist for every variant, and Gelbooru stays excluded
-    # from acquisition pending an explicit provider policy.
+    # Stable selectors exist for every variant, and the gelbooru media
+    # policy (live-captured 2026-11-05, bead data-processing-3xv) makes the
+    # pinned img4 host's variants eligible for acquisition.
     assert all(variant["selection"] for variant in variants)
-    assert all(variant["eligibility"] == "excluded" for variant in variants)
+    assert all(variant["eligibility"] == "eligible" for variant in variants)
     assert occurrence["asset_count"] == 0
     # Declared MD5 stays visible as a provider declaration.
     assert "fef8d5889c2fe425dd50cfade909cec9" in json.dumps(occurrence["declared"])

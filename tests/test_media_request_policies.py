@@ -10,7 +10,10 @@ from media_catalog.acquisition.policies import (
     AIBOORU_MEDIA_POLICY,
     DANBOORU_MEDIA_POLICY,
     E621_MEDIA_POLICY,
+    GELBOORU_MEDIA_POLICY,
     PIXIV_MEDIA_POLICY,
+    RULE34_MEDIA_POLICY,
+    SAFEBOORU_MEDIA_POLICY,
     CredentialReference,
     MediaRequestPolicy,
     PolicyIdentity,
@@ -444,3 +447,45 @@ def test_persisted_attempt_contains_only_redacted_request_evidence(tmp_path: Pat
         assert signed_url not in durable
         assert "persisted-secret" not in durable
         assert bearer not in durable
+
+
+@pytest.mark.parametrize(
+    ("policy", "url", "referer"),
+    [
+        # Live-captured 2026-11-05 (bead data-processing-3xv): gelbooru's CDN
+        # 302s to an HTML page without the https://gelbooru.com/ Referer.
+        (
+            GELBOORU_MEDIA_POLICY,
+            "https://img4.gelbooru.com/images/76/1b/a.jpg",
+            "https://gelbooru.com/",
+        ),
+        (
+            RULE34_MEDIA_POLICY,
+            "https://api-cdn.rule34.xxx/images/2495/b.png",
+            "https://rule34.xxx/",
+        ),
+        (
+            SAFEBOORU_MEDIA_POLICY,
+            "https://safebooru.org/images/4439/c.png",
+            "https://safebooru.org/",
+        ),
+    ],
+)
+def test_gelbooru_family_policies_cover_captured_hosts(
+    policy: MediaRequestPolicy, url: str, referer: str
+) -> None:
+    recipe = policy.recipe(media_occurrence_id=9, variant_key="original", selected_url=url)
+    assert recipe.operation == "download-original"
+    assert recipe.headers["Referer"] == referer
+    assert recipe.credential_reference is None
+
+
+def test_gelbooru_policy_rejects_uncaptured_hosts() -> None:
+    # img1..img3 are plausible gelbooru CDN hosts but were never observed on
+    # the wire; the policy pins only what a live capture showed.
+    with pytest.raises(RequestPolicyError, match="host is not trusted"):
+        GELBOORU_MEDIA_POLICY.recipe(
+            media_occurrence_id=1,
+            variant_key="original",
+            selected_url="https://img3.gelbooru.com/images/76/1b/a.jpg",
+        )
