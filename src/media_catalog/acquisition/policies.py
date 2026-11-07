@@ -293,6 +293,24 @@ class PixivMediaPolicy(MediaRequestPolicy):
         return "download-ugoira-archive" if variant_key == "archive" else "download-image"
 
 
+class SankakuMediaPolicy(MediaRequestPolicy):
+    """Observed signed CDN, with the media User-Agent used by native clients."""
+
+    identity = PolicyIdentity("sankaku-media", "sankaku-media-v1")
+    provider = "sankaku"
+    allowed_hosts = frozenset({"v.sankakucomplex.com"})
+    redirect_hosts = allowed_hosts
+    headers = MappingProxyType(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+            )
+        }
+    )
+    response_expectations = ResponseExpectations(("image/", "video/", "application/octet-stream"))
+
+
 class DanbooruMediaPolicy(MediaRequestPolicy):
     def __init__(
         self,
@@ -363,7 +381,12 @@ DANBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
 AIBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
     provider="aibooru",
     base_host="aibooru.online",
-    media_hosts=("safe.aibooru.online", "general.aibooru.online", "aibooru.download"),
+    media_hosts=(
+        "safe.aibooru.online",
+        "general.aibooru.online",
+        "aibooru.download",
+        "cdn.aibooru.download",
+    ),
 )
 E621_MEDIA_POLICY = E621MediaPolicy()
 
@@ -391,6 +414,7 @@ SAFEBOORU_MEDIA_POLICY = DanbooruMediaPolicy(
 )
 
 _BUILTIN_POLICIES: dict[str, MediaRequestPolicy] = {
+    "sankaku": SankakuMediaPolicy(),
     "pixiv": PIXIV_MEDIA_POLICY,
     "danbooru": DANBOORU_MEDIA_POLICY,
     "aibooru": AIBOORU_MEDIA_POLICY,

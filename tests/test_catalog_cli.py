@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import errno
 import json
 import socket
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,7 @@ import media_catalog.cli_commands.discovery as discovery_module
 import media_catalog.cli_commands.library as library_module
 import media_catalog.cli_commands.lookup as lookup_module
 import media_catalog.cli_commands.metadata as metadata_module
+import media_catalog.labeling.server as labeling_module
 from media_catalog.adapters import AdapterOperation
 from media_catalog.adapters.danbooru import AIBOORU, DANBOORU
 from media_catalog.adapters.e621 import E621_INSTANCES, E621Credentials
@@ -34,6 +37,40 @@ from media_catalog.writer import CatalogWriter
 from x_likes.database import SCHEMA
 
 NOW = "2026-08-12T20:00:00Z"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Requires POSIX exclusive listening bind")
+def test_label_reports_busy_port_and_closes_database(tmp_path: Path, monkeypatch) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    database = CatalogDatabase(catalog)
+    monkeypatch.setattr(labeling_module, "CatalogDatabase", lambda path: database)
+    with socket.socket() as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        with pytest.raises(SystemExit) as result:
+            main(
+                [
+                    "label",
+                    str(catalog),
+                    "--media-root",
+                    str(tmp_path),
+                    "--port",
+                    str(occupied.getsockname()[1]),
+                ]
+            )
+    assert str(result.value.code).startswith("error: ")
+    assert isinstance(result.value.__cause__, OSError)
+    assert result.value.__cause__.errno == errno.EADDRINUSE
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        database.connection.execute("SELECT 1")
+
+
+def test_label_reports_clean_shutdown_without_json_flag(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(labeling_module, "serve", lambda *args, **kwargs: None)
+    main(["label", str(tmp_path / "catalog.sqlite3"), "--media-root", str(tmp_path)])
+    assert "stopped" in capsys.readouterr().out
 
 
 def _factory_patched(monkeypatch, adapter_cls, instances, credentials_resolver):

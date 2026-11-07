@@ -9,8 +9,11 @@ with tag-Jaccard, shared external ids), and within-artist contrast pairs.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +22,22 @@ class PairCandidate:
     post_b_id: int
     queue_signal: str
     detail: str
+    prior_note: str | None = None
+
+
+class CandidateQueue(list[PairCandidate]):
+    """Queue list carrying candidate pairs and skipped unavailable count."""
+
+    skipped_count: int = 0
+
+    def __init__(
+        self,
+        iterable: Iterable[PairCandidate] = (),
+        *,
+        skipped_count: int = 0,
+    ) -> None:
+        super().__init__(iterable)
+        self.skipped_count = skipped_count
 
 
 def _pairs(connection: sqlite3.Connection, sql: str) -> list[tuple[int, int]]:
@@ -27,20 +46,111 @@ def _pairs(connection: sqlite3.Connection, sql: str) -> list[tuple[int, int]]:
     ]
 
 
-def build_queue(connection: sqlite3.Connection, *, limit: int = 50) -> list[PairCandidate]:
-    """Every signal family contributes; already-labeled pairs are excluded."""
+def _has_usable_media(
+    connection: sqlite3.Connection,
+    post_id: int,
+    media_root: Path | None,
+    matched_root_ids: set[int] | None,
+) -> bool:
+    """Return True if the post has available remote media or verified local storage."""
+    rows = connection.execute(
+        """SELECT m.media_occurrence_id, m.remote_url, m.preview_url,
+                  al.managed_root_id, al.relative_path
+             FROM media_occurrences m
+             LEFT JOIN occurrence_assets oa ON oa.media_occurrence_id = m.media_occurrence_id
+             LEFT JOIN assets a ON a.asset_id = oa.asset_id
+             LEFT JOIN asset_locations al
+               ON al.asset_id = a.asset_id AND al.location_kind <> 'legacy'
+            WHERE m.post_id = ?
+              AND m.availability = 'available'""",
+        (post_id,),
+    ).fetchall()
+    if not rows:
+        return False
+    for row in rows:
+        if row["remote_url"] or row["preview_url"]:
+            return True
+        rel_path = row["relative_path"]
+        m_root_id = row["managed_root_id"]
+        if rel_path:
+            if media_root is None:
+                return True
+            if matched_root_ids is not None and m_root_id not in matched_root_ids:
+                continue
+            with contextlib.suppress(OSError):
+                target = (media_root / rel_path).resolve()
+                if target.is_relative_to(media_root.resolve()) and target.is_file():
+                    return True
+    return False
+
+
+def build_queue(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 50,
+    revisit_unsure: bool = False,
+    media_root: Path | None = None,
+    matched_root_ids: set[int] | None = None,
+) -> CandidateQueue:
+    """Every signal family contributes; already-labeled pairs are excluded in normal mode."""
+    media_ready: dict[int, bool] = {}
+
+    def post_ready(post_id: int) -> bool:
+        if post_id not in media_ready:
+            media_ready[post_id] = _has_usable_media(
+                connection, post_id, media_root, matched_root_ids
+            )
+        return media_ready[post_id]
+
+    if revisit_unsure:
+        rows = connection.execute(
+            """SELECT pl.post_a_id, pl.post_b_id, pl.queue_signal, pl.relation_note,
+                      p1.availability AS availability_a, p2.availability AS availability_b
+                 FROM pair_labels pl
+                 JOIN posts p1 ON p1.post_id = pl.post_a_id
+                 JOIN posts p2 ON p2.post_id = pl.post_b_id
+                WHERE pl.verdict = 'unsure'
+                ORDER BY pl.pair_label_id""",
+        ).fetchall()
+        candidates: list[PairCandidate] = []
+        skipped_count = 0
+        for row in rows:
+            a, b = int(row[0]), int(row[1])
+            if (
+                row["availability_a"] != "available"
+                or row["availability_b"] != "available"
+                or not post_ready(a)
+                or not post_ready(b)
+            ):
+                skipped_count += 1
+                continue
+            sig = str(row[2])
+            note = str(row[3]) if row[3] is not None else None
+            detail = (
+                f"revisit unsure ({sig}): prior note '{note}'"
+                if note
+                else f"revisit unsure ({sig})"
+            )
+            candidates.append(PairCandidate(a, b, sig, detail, prior_note=note))
+        return CandidateQueue(candidates[:limit], skipped_count=skipped_count)
+
     labeled = {
         (int(row[0]), int(row[1]))
         for row in connection.execute("SELECT post_a_id, post_b_id FROM pair_labels")
     }
-    candidates: list[PairCandidate] = []
+    candidates_list: list[PairCandidate] = []
     seen: set[tuple[int, int]] = set()
+    skipped_unusable_count = 0
 
     def add(pairs: list[tuple[int, int]], signal: str, detail: str) -> None:
+        nonlocal skipped_unusable_count
         for a, b in pairs:
             if (a, b) not in labeled and (a, b) not in seen:
                 seen.add((a, b))
-                candidates.append(PairCandidate(a, b, signal, detail))
+                if not (post_ready(a) and post_ready(b)):
+                    skipped_unusable_count += 1
+                    continue
+                candidates_list.append(PairCandidate(a, b, signal, detail))
 
     # A1: identical declared md5 across platforms.
     add(
@@ -56,7 +166,9 @@ def build_queue(connection: sqlite3.Connection, *, limit: int = 50) -> list[Pair
                  JOIN platforms x1 ON x1.platform_id = p1.platform_id
                  JOIN platforms x2 ON x2.platform_id = p2.platform_id
                 WHERE m1.declared_md5 IS NOT NULL
-                  AND x1.platform_key != x2.platform_key""",
+                  AND x1.platform_key != x2.platform_key
+                  AND p1.availability = 'available'
+                  AND p2.availability = 'available'""",
         ),
         "identical_md5",
         "identical declared md5 across platforms",
@@ -70,27 +182,40 @@ def build_queue(connection: sqlite3.Connection, *, limit: int = 50) -> list[Pair
                  JOIN post_external_references r2
                    ON r1.external_link_id = r2.external_link_id
                   AND r1.post_id < r2.post_id
-                WHERE r1.reference_kind = 'source_url'""",
+                 JOIN posts p1 ON p1.post_id = r1.post_id
+                 JOIN posts p2 ON p2.post_id = r2.post_id
+                WHERE r1.reference_kind = 'source_url'
+                  AND p1.availability = 'available'
+                  AND p2.availability = 'available'""",
         ),
         "shared_source_url",
         "posts cite the same source URL",
     )
     # A3: provider-labeled parent/child variants (post_relations, recorded
-    # by the e621 adapter from parent_id on the wire).
+    # by the e621 adapter from parent_id on the wire). Provider parent relation
+    # does not prove variant identity; explicit operator verdict is required.
     add(
         [
             (a, b) if a < b else (b, a)
             for a, b in (
                 (int(row[0]), int(row[1]))
                 for row in connection.execute(
-                    """SELECT DISTINCT source_post_id, target_post_id
-                         FROM post_relations WHERE relation_type = 'parent_of'"""
+                    """SELECT DISTINCT pr.source_post_id, pr.target_post_id
+                         FROM post_relations pr
+                         JOIN posts p1 ON p1.post_id = pr.source_post_id
+                         JOIN posts p2 ON p2.post_id = pr.target_post_id
+                        WHERE pr.relation_type = 'parent_of'
+                          AND p1.availability = 'available'
+                          AND p2.availability = 'available'"""
                 )
             )
             if a != b
         ],
         "provider_parent",
-        "provider records a parent/child variant relation",
+        (
+            "provider records parent/child relation "
+            "(operator verdict required; parent does not prove variant)"
+        ),
     )
 
     # B1: shared external id across platforms (e.g. both cite one pixiv id).
@@ -102,13 +227,18 @@ def build_queue(connection: sqlite3.Connection, *, limit: int = 50) -> list[Pair
                  JOIN post_external_references r2
                    ON r1.platform_reference_id = r2.platform_reference_id
                   AND r1.post_id < r2.post_id
-                WHERE r1.reference_kind != 'source_url'""",
+                 JOIN posts p1 ON p1.post_id = r1.post_id
+                 JOIN posts p2 ON p2.post_id = r2.post_id
+                WHERE r1.reference_kind != 'source_url'
+                  AND p1.availability = 'available'
+                  AND p2.availability = 'available'""",
         ),
         "shared_external_id",
         "posts share a stable external reference",
     )
     # B2/C: within-artist pairs, closest-tag-overlap first (B) plus random
-    # different works (C) for calibration negatives.
+    # different works (C) for calibration negatives. Same-artist contrast pairs
+    # expect different works by the same artist for calibration negatives.
     artist_pairs = connection.execute(
         """SELECT t.name, p1.post_id, p2.post_id,
                   (SELECT count(*) FROM post_tags a1
@@ -120,6 +250,8 @@ def build_queue(connection: sqlite3.Connection, *, limit: int = 50) -> list[Pair
              JOIN post_tags pt2 ON pt2.tag_id = t.tag_id AND pt2.post_id != p1.post_id
              JOIN posts p2 ON p2.post_id = pt2.post_id
             WHERE p1.post_id < p2.post_id
+              AND p1.availability = 'available'
+              AND p2.availability = 'available'
             GROUP BY t.name, p1.post_id, p2.post_id
             ORDER BY shared_tags DESC""",
     ).fetchall()
@@ -130,14 +262,21 @@ def build_queue(connection: sqlite3.Connection, *, limit: int = 50) -> list[Pair
         if (a, b) in labeled or (a, b) in seen:
             continue
         seen.add((a, b))
+        if not (post_ready(a) and post_ready(b)):
+            skipped_unusable_count += 1
+            continue
         signal = "same_artist_tags" if int(row[3]) >= 15 else "same_artist_contrast"
-        detail = (
-            f"same artist ({row[0]}), {row[3]} shared tags"
-            if signal == "same_artist_tags"
-            else f"same artist ({row[0]}), {row[3]} shared tags (contrast candidate)"
+        contrast_detail = (
+            f"same artist ({row[0]}), {row[3]} shared tags "
+            "(contrast candidate: different works expected for calibration negatives)"
         )
-        candidates.append(PairCandidate(a, b, signal, detail))
+        detail = (
+            f"same artist ({row[0]}), {row[3]} shared tags (high tag overlap)"
+            if signal == "same_artist_tags"
+            else contrast_detail
+        )
+        candidates_list.append(PairCandidate(a, b, signal, detail))
 
     # Stable order, capped.
-    candidates.sort(key=lambda c: (c.queue_signal, c.post_a_id, c.post_b_id))
-    return candidates[:limit]
+    candidates_list.sort(key=lambda c: (c.queue_signal, c.post_a_id, c.post_b_id))
+    return CandidateQueue(candidates_list[:limit], skipped_count=skipped_unusable_count)

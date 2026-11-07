@@ -172,6 +172,45 @@ Rules:
   so the calibration corpus accumulates as the catalog grows.
 
 ### Fixed
+- **Sankaku images in the label UI (Bead `data-processing-hjr`)** — route signed CDN media
+  through native-client headers, renew expired links in memory, and retry a denied link once.
+  Validate refreshed post/hash identity and use stable post links without changing catalog facts.
+- **Expired Sankaku label link refreshed (Bead `data-processing-cud`)** — refreshed cached
+  signed media for the reported post and verified the original with browser-compatible headers;
+  automatic URL renewal is tracked in `data-processing-hjr`.
+- **Provider-aware remote label media (Bead `data-processing-wae`)** — serve remote media
+  through existing provider request policies, including required Referer headers and bounded
+  video ranges, without requiring asset downloads. Admit the observed Aibooru CDN host
+  (`data-processing-mqn`) while retaining exact-host validation.
+- **Local originals for remote-blocked label images (Bead `data-processing-ax0`)** — acquired
+  five remaining Gelbooru cross-check originals; verified local serving bypasses CDN requests
+  that return HTML without a provider Referer. Aibooru CDN policy follow-up is tracked separately.
+- **Automatic catalog credentials (Bead `data-processing-2f3`)** — load the private central
+  credentials file and current directory `.env` without extra flags; explicit environment
+  variables take precedence and local values override central defaults.
+- **Reusable local provider credentials (Bead `data-processing-1fs`)** — documented the private
+  central environment-file location and explicit loading through the ignored project `.env` link.
+- **Label server startup and shutdown errors (Bead `data-processing-a59`)** —
+  commands without `--json` report errors and shutdown normally; a failed server bind closes
+  its catalog connection instead of leaking it or masking the port error with `AttributeError`.
+- **Fresh descriptions for label revisits (Bead `data-processing-482`)** —
+  previous notes remain visible as context; the editable description starts blank and clears
+  after a successful save, so old notes are not silently resubmitted with a new verdict.
+- **Incomplete pairs deferred during label revisits (Bead `data-processing-efw`)** —
+  `--revisit-unsure` applies the same media and post availability checks as the normal queue,
+  preserves deferred labels and notes, and reports them without claiming they were relabeled.
+  Byte-verified originals use declared format hints when inspection only reports generic binary,
+  allowing downloaded WebM files to render without overriding specific detected formats.
+- **`catalog label` media resolution, format rendering, streaming, and save guarantees (Bead `data-processing-efw`)** —
+  resolves post media respecting `st_dev:st_ino` managed root identity and local file
+  existence; prioritizes local primary/original media over previews, handles multiple
+  acquisition history records without arbitrary ordering, and applies neutral badges to
+  unverified local copies; renders multi-format media (`<video>` with controls for WebM/MP4,
+  native animated GIF, audio, preview badges, and missing/unavailable explanation boxes with
+  source links); supports video Range streaming (HTTP 206 Partial Content including suffix
+  ranges); improves save feedback with HTTP error statuses, transaction rollback on failure,
+  flash banner across reloads, note preservation, Enter key prevention, and adds
+  `--revisit-unsure` queue mode.
 - **Legacy `/post/show/<id>` links resolve (danbooru-family + e621-family)** —
   the operator's test list uses danbooru's old route; the link recognizer
   already accepted both path shapes but the fetch resolver did not, so
@@ -179,6 +218,11 @@ Rules:
   to the same identity as `/posts/N`, pinned by test.
 
 ### Changed
+- **Cross-check originals acquired (Bead `data-processing-ee7`)** — downloaded and verified
+  original images for the two newly cataloged focused matches into managed media storage.
+- **Focused calibration cross-check (Bead `data-processing-jh3`)** — stopped the broad X
+  bookmark sweep and verified coverage for reviewed/downloaded examples; retained results,
+  unavailable-provider status, and exclusions in the operator run report.
 - **qi7 study 2: tier calibration grounded in labeled truth** — the
   operator's three-group test list (including a with/without-text variation
   set) populates the middle band the two-threshold design needed:

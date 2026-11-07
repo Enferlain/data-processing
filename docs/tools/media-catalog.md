@@ -170,6 +170,15 @@ uv run catalog metadata e621-list catalog-output/catalog.sqlite3 artist_tag \
   --resume-from 12 --max-requests 3 --max-pages 2 --max-records 500
 ```
 
+Catalog commands automatically load `~/.config/media-catalog/credentials.env` (or
+`$XDG_CONFIG_HOME/media-catalog/credentials.env`) and `.env` in the current directory.
+Existing environment variables take precedence, followed by the local `.env`, then the central
+file. Missing files are fine; no `--env-file` or shell exports are needed. Keep the central
+directory mode `0700` and file mode `0600`; the ignored project `.env` can also link to it.
+An existing file that cannot be read stops the command with an error; `--help` still works.
+Use dotenv `NAME=value` entries with optional quotes or `export`; values are literal, with no
+shell execution or `${VARIABLE}` expansion. Add only the providers you use.
+
 Pixiv refresh authentication reads `PIXIV_REFRESH_TOKEN`, `PIXIV_CLIENT_ID`, and
 `PIXIV_CLIENT_SECRET`; client values are deliberately not embedded here. Booru credentials are
 optional for public records and use `DANBOORU_LOGIN` plus `DANBOORU_API_KEY`, or the corresponding
@@ -302,6 +311,23 @@ replace personal names and URLs, remove credentials/cookies, retain no media byt
 manifest capture date plus adapter/schema version. Expected mappings were reviewed against
 gallery-dl 1.32.2 commit `2e88d6ae29780dbed02e4a5172a1aa0a1b1c91b5` as a comparison oracle;
 gallery-dl is not imported or executed by normal tests.
+
+## Label candidate pairs
+
+```bash
+uv run catalog label catalog-output/catalog.sqlite3 --media-root catalog-output/media
+```
+
+The label page prefers verified local originals. For providers with a media request policy,
+remote images and videos are fetched through the local server with the provider's required
+headers, including Gelbooru's Referer. The server admits only catalog-selected media URLs and
+allowed redirects, limits display requests to 128 MiB and 30 seconds, and supports single video
+byte ranges. Displaying remote media does not acquire an asset or change catalog records.
+Sankaku display requests use native-client media headers and renew expired signed URLs through
+the authenticated adapter in memory. A CDN 403 triggers at most one renewal; the returned post,
+occurrence key, and declared MD5 must still match. Renewed delivery URLs are cached briefly in
+memory; API bearer tokens never go to the CDN. The source link opens the stable provider post.
+Providers without a media policy retain direct browser loading and the original-source link.
 
 ## Look up cross-platform candidates
 
@@ -786,8 +812,11 @@ Provider request policies are versioned and fail closed:
   `Referer: https://app-api.pixiv.net/` behavior. API refresh credentials are not forwarded to the
   media CDN.
 - Danbooru media is restricted to the configured instance plus `cdn.donmai.us`.
+- Sankaku media is restricted to the observed `v.sankakucomplex.com` CDN with native-client
+  media headers. Signed-link renewal is a display-only operation; acquisition still uses its
+  explicitly selected URL and does not silently renew a stale acquisition plan.
 - AIBooru media is restricted to its configured instance and explicit `safe.aibooru.online`,
-  `general.aibooru.online`, and `aibooru.download` hosts.
+  `general.aibooru.online`, `aibooru.download`, and `cdn.aibooru.download` hosts.
 - e621 media accepts only returned HTTPS URLs on the bounded `static1.e621.net` through
   `static9.e621.net` host set, sends the descriptive e621 User-Agent and referer, and validates
   every redirect against that same set. URLs are never reconstructed from an MD5.

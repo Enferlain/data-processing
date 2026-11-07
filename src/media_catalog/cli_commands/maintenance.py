@@ -82,6 +82,11 @@ def register(commands: argparse._SubParsersAction) -> None:
     label.add_argument("catalog", type=Path)
     label.add_argument("--media-root", type=Path, required=True)
     label.add_argument("--port", type=int, default=8765)
+    label.add_argument(
+        "--revisit-unsure",
+        action="store_true",
+        help="Revisit ready unsure pairs; preserve and defer labels with missing media",
+    )
 
 
 def execute(arguments: argparse.Namespace) -> dict[str, object]:
@@ -108,7 +113,12 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.command == "label":
         from media_catalog.labeling.server import serve
 
-        serve(arguments.catalog, arguments.media_root, port=arguments.port)
+        serve(
+            arguments.catalog,
+            arguments.media_root,
+            port=arguments.port,
+            revisit_unsure=arguments.revisit_unsure,
+        )
         return {"status": "stopped"}
     if arguments.command == "tombstone":
         with CatalogDatabase(arguments.catalog) as database:

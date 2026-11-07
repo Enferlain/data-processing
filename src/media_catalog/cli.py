@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 
 from media_catalog.cli_commands import FAMILIES
+from media_catalog.credentials import load_credentials
 from media_catalog.output import bounded_error, render_result
 from media_catalog.storage.cas import AssetStorageError
 
@@ -39,7 +40,9 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> None:
     arguments = build_parser().parse_args(argv)
+    as_json = getattr(arguments, "json", False)
     try:
+        load_credentials()
         result = _run(arguments)
     except (AssetStorageError, OSError, RuntimeError, ValueError, sqlite3.Error) as error:
         private_paths = tuple(
@@ -48,13 +51,13 @@ def main(argv: list[str] | None = None) -> None:
             if isinstance((value := getattr(arguments, name, None)), Path)
         )
         message = bounded_error(error, private_paths=private_paths)
-        if arguments.json:
+        if as_json:
             raise SystemExit(json.dumps({"error": message}, ensure_ascii=False)) from error
         raise SystemExit(f"error: {message}") from error
-    if arguments.command == "adapter-doctor" and not arguments.json:
+    if arguments.command == "adapter-doctor" and not as_json:
         pass  # the doctor rendered its own human report inside its family
     else:
-        print(render_result(result, as_json=arguments.json))
+        print(render_result(result, as_json=as_json))
     if (
         arguments.command == "assets"
         and arguments.asset_command not in {"download-plan", "download-runs", "download-run-show"}
