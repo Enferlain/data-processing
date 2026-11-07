@@ -32,7 +32,9 @@ _PAGE = """<!doctype html>
  .pair {{ box-sizing: border-box; }}
  .side {{ flex: 1; display: flex; flex-direction: column; min-width: 0; }}
  .side img {{ flex: 1; object-fit: contain; min-height: 0; max-width: 100%; background: #000; }}
- .meta {{ font-size: 12px; color: #999; padding: 6px 4px; overflow-wrap: anywhere; }}
+ .meta {{ font-size: 14px; color: #ccc; padding: 8px 6px;
+          overflow-wrap: anywhere; border-top: 1px solid #333; }}
+ .meta b {{ color: #8ab4f8; }}
  .signal {{ padding: 6px 16px; color: #fdd663; font-size: 13px; }}
  .bar {{ position: fixed; bottom: 0; left: 0; right: 0; background: #1d1d1d;
          padding: 10px 16px; display: flex; gap: 8px; align-items: center; }}
@@ -47,8 +49,10 @@ _PAGE = """<!doctype html>
 <header><b>label pairs</b><span class="pos">{pos} / {total} &nbsp; signal: {signal}</span></header>
 <div class="signal">{detail}</div>
 <div class="pair">
-  <div class="side"><img src="{img_a}" loading="eager"><div class="meta">{meta_a}</div></div>
-  <div class="side"><img src="{img_b}" loading="eager"><div class="meta">{meta_b}</div></div>
+  <div class="side"><img src="{img_a}" loading="eager">
+    <div class="meta"><b>{name_a}</b> · {meta_a}</div></div>
+  <div class="side"><img src="{img_b}" loading="eager">
+    <div class="meta"><b>{name_b}</b> · {meta_b}</div></div>
 </div>
 <div class="bar">
   <button class="hot" onclick="submit('same')">same<span class="key">1</span></button>
@@ -101,8 +105,12 @@ class LabelingState:
     def _post_view(self, post_id: int) -> dict[str, str]:
         row = self.connection.execute(
             """SELECT p.platform_key, po.native_post_id, po.canonical_url,
-                      m.remote_url, al.relative_path, m.width, m.height,
-                      m.declared_md5
+                      po.title, m.remote_url, al.relative_path, m.width, m.height,
+                      m.declared_md5, m.mime_type,
+                      (SELECT group_concat(t.name, ', ')
+                         FROM post_tags pt JOIN tags t ON t.tag_id = pt.tag_id
+                        WHERE pt.post_id = po.post_id AND t.category = 'artist'
+                        LIMIT 1) AS artists
                  FROM posts po JOIN platforms p ON p.platform_id = po.platform_id
                  LEFT JOIN media_occurrences m ON m.post_id = po.post_id
                  LEFT JOIN occurrence_assets oa
@@ -114,15 +122,34 @@ class LabelingState:
             (post_id,),
         ).fetchone()
         if row is None:
-            return {"img": "", "meta": f"post {post_id} (no media)"}
+            return {"img": "", "name": "", "meta": f"post {post_id} (no media)"}
         img = (
             f"/media/{row['relative_path']}" if row["relative_path"] else (row["remote_url"] or "")
         )
-        meta = (
-            f"{row['platform_key']}:{row['native_post_id']} · "
-            f"{row['width'] or '?'}x{row['height'] or '?'} · md5 {row['declared_md5'] or '?'}"
+        # The operator knows files by name: the md5-style filename (Grabber
+        # naming) first, then title and artist identity, then coordinates.
+        extension = ""
+        if row["remote_url"]:
+            suffix = row["remote_url"].rsplit(".", 1)
+            extension = f".{suffix[1][:4]}" if len(suffix) == 2 and suffix[1][:4].isalnum() else ""
+        name = (
+            f"{row['declared_md5']}{extension}"
+            if row["declared_md5"]
+            else ((row["relative_path"] or "").rsplit("/", 1)[-1] or "unnamed")
         )
-        return {"img": html.escape(img, quote=True), "meta": html.escape(meta)}
+        parts = []
+        if row["title"]:
+            parts.append(str(row["title"]))
+        if row["artists"]:
+            parts.append(f"artist: {row['artists']}")
+        parts.append(f"{row['platform_key']}:{row['native_post_id']}")
+        parts.append(f"{row['width'] or '?'}x{row['height'] or '?'}")
+        meta = " · ".join(parts)
+        return {
+            "img": html.escape(img, quote=True),
+            "name": html.escape(name),
+            "meta": html.escape(meta),
+        }
 
     def page(self) -> str | None:
         pair = self.current()
@@ -141,6 +168,8 @@ class LabelingState:
             detail=html.escape(pair.detail),
             img_a=a["img"],
             img_b=b["img"],
+            name_a=a["name"],
+            name_b=b["name"],
             meta_a=a["meta"],
             meta_b=b["meta"],
             pair_index=self.cursor,
