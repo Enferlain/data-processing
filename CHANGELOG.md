@@ -156,6 +156,21 @@ Rules:
 
 ## [2026-11-07]
 
+### Added
+- **`catalog label` — interactive local labeling UI (Bead `data-processing-w7j`)** —
+  a stdlib-only localhost server for calibrating match heuristics the way the
+  operator described: brings up image pairs side by side (served from managed
+  storage, remote URL fallback), shows the queueing signal and per-image
+  metadata, and takes a verdict (same / variant / different / unsure,
+  keyboard 1-4) plus a free-text relation description. Pairs are queued from
+  NON-perceptual signals so the tool never needs the similarity judge it
+  calibrates: identical md5 across platforms, shared source URLs,
+  provider-recorded parent/child variant relations, shared external ids,
+  same-artist tag overlap, and same-artist contrast pairs for the
+  false-positive side. Labels persist to `pair_labels` (migration `0030`)
+  with append-only decision history; labeled pairs drop from future queues,
+  so the calibration corpus accumulates as the catalog grows.
+
 ### Fixed
 - **Legacy `/post/show/<id>` links resolve (danbooru-family + e621-family)** —
   the operator's test list uses danbooru's old route; the link recognizer

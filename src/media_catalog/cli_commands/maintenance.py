@@ -28,7 +28,7 @@ _REPROCESS_PROVIDERS = (
 )
 
 
-COMMANDS = ("reprocess", "seed", "tombstone")
+COMMANDS = ("reprocess", "seed", "tombstone", "label")
 
 
 def register(commands: argparse._SubParsersAction) -> None:
@@ -75,6 +75,14 @@ def register(commands: argparse._SubParsersAction) -> None:
     tombstone.add_argument("--reason", required=True, help="recorded with the tombstone")
     add_json(tombstone)
 
+    label = commands.add_parser(
+        "label",
+        description="Interactive local labeling UI for pair calibration",
+    )
+    label.add_argument("catalog", type=Path)
+    label.add_argument("--media-root", type=Path, required=True)
+    label.add_argument("--port", type=int, default=8765)
+
 
 def execute(arguments: argparse.Namespace) -> dict[str, object]:
     catalog_label = public_path(arguments.catalog)
@@ -97,6 +105,11 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
                     clock=utc_now,
                 ),
             }
+    if arguments.command == "label":
+        from media_catalog.labeling.server import serve
+
+        serve(arguments.catalog, arguments.media_root, port=arguments.port)
+        return {"status": "stopped"}
     if arguments.command == "tombstone":
         with CatalogDatabase(arguments.catalog) as database:
             if arguments.post is not None:
