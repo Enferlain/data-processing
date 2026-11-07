@@ -13,51 +13,281 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
-## [2026-10-31]
+## [2026-11-07]
+### Added
+- **`catalog label` — interactive local labeling UI (Bead `data-processing-w7j`)** —
+  a stdlib-only localhost server for calibrating match heuristics the way the
+  operator described: brings up image pairs side by side (served from managed
+  storage, remote URL fallback), shows the queueing signal and per-image
+  metadata, and takes a verdict (same / variant / different / unsure,
+  keyboard 1-4) plus a free-text relation description. Pairs are queued from
+  NON-perceptual signals so the tool never needs the similarity judge it
+  calibrates: identical md5 across platforms, shared source URLs,
+  provider-recorded parent/child variant relations, shared external ids,
+  same-artist tag overlap, and same-artist contrast pairs for the
+  false-positive side. Labels persist to `pair_labels` (migration `0030`)
+  with append-only decision history; labeled pairs drop from future queues,
+  so the calibration corpus accumulates as the catalog grows.
+
+### Fixed
+- **Sankaku images in the label UI (Bead `data-processing-hjr`)** — route signed CDN media
+  through native-client headers, renew expired links in memory, and retry a denied link once.
+  Validate refreshed post/hash identity and use stable post links without changing catalog facts.
+- **Expired Sankaku label link refreshed (Bead `data-processing-cud`)** — refreshed cached
+  signed media for the reported post and verified the original with browser-compatible headers;
+  automatic URL renewal is tracked in `data-processing-hjr`.
+- **Provider-aware remote label media (Bead `data-processing-wae`)** — serve remote media
+  through existing provider request policies, including required Referer headers and bounded
+  video ranges, without requiring asset downloads. Admit the observed Aibooru CDN host
+  (`data-processing-mqn`) while retaining exact-host validation.
+- **Local originals for remote-blocked label images (Bead `data-processing-ax0`)** — acquired
+  five remaining Gelbooru cross-check originals; verified local serving bypasses CDN requests
+  that return HTML without a provider Referer. Aibooru CDN policy follow-up is tracked separately.
+- **Automatic catalog credentials (Bead `data-processing-2f3`)** — load the private central
+  credentials file and current directory `.env` without extra flags; explicit environment
+  variables take precedence and local values override central defaults.
+- **Reusable local provider credentials (Bead `data-processing-1fs`)** — documented the private
+  central environment-file location and explicit loading through the ignored project `.env` link.
+- **Label server startup and shutdown errors (Bead `data-processing-a59`)** —
+  commands without `--json` report errors and shutdown normally; a failed server bind closes
+  its catalog connection instead of leaking it or masking the port error with `AttributeError`.
+- **Fresh descriptions for label revisits (Bead `data-processing-482`)** —
+  previous notes remain visible as context; the editable description starts blank and clears
+  after a successful save, so old notes are not silently resubmitted with a new verdict.
+- **Incomplete pairs deferred during label revisits (Bead `data-processing-efw`)** —
+  `--revisit-unsure` applies the same media and post availability checks as the normal queue,
+  preserves deferred labels and notes, and reports them without claiming they were relabeled.
+  Byte-verified originals use declared format hints when inspection only reports generic binary,
+  allowing downloaded WebM files to render without overriding specific detected formats.
+- **`catalog label` media resolution, format rendering, streaming, and save guarantees (Bead `data-processing-efw`)** —
+  resolves post media respecting `st_dev:st_ino` managed root identity and local file
+  existence; prioritizes local primary/original media over previews, handles multiple
+  acquisition history records without arbitrary ordering, and applies neutral badges to
+  unverified local copies; renders multi-format media (`<video>` with controls for WebM/MP4,
+  native animated GIF, audio, preview badges, and missing/unavailable explanation boxes with
+  source links); supports video Range streaming (HTTP 206 Partial Content including suffix
+  ranges); improves save feedback with HTTP error statuses, transaction rollback on failure,
+  flash banner across reloads, note preservation, Enter key prevention, and adds
+  `--revisit-unsure` queue mode.
+- **Legacy `/post/show/<id>` links resolve (danbooru-family + e621-family)** —
+  the operator's test list uses danbooru's old route; the link recognizer
+  already accepted both path shapes but the fetch resolver did not, so
+  `catalog fetch` rejected them. Both families now normalize `/post/show/N`
+  to the same identity as `/posts/N`, pinned by test.
+
+### Changed
+- **Cross-check originals acquired (Bead `data-processing-ee7`)** — downloaded and verified
+  original images for the two newly cataloged focused matches into managed media storage.
+- **Focused calibration cross-check (Bead `data-processing-jh3`)** — stopped the broad X
+  bookmark sweep and verified coverage for reviewed/downloaded examples; retained results,
+  unavailable-provider status, and exclusions in the operator run report.
+- **qi7 study 2: tier calibration grounded in labeled truth** — the
+  operator's three-group test list (including a with/without-text variation
+  set) populates the middle band the two-threshold design needed:
+  cross-platform identical files hash at 0%, text/variation pairs at
+  1.6–12.5% (matching the operator's own structure note), different
+  artworks never below 37.5%, same-artist negatives never below 29.7%.
+  Certain ≲2% / uncertain 2–15% / no-match ≳25% now has labeled evidence
+  behind it. Details in `docs/plans/qi7-image-hash-study.md`.
+
+
+## [2026-11-05]
+### Added
+- **Attribution candidates complete the artist identity bridge (Bead
+  `data-processing-s1j`)** — a recognized artist-record URL now becomes a
+  reviewable `attribution_match_candidates` row (migration `0029`, mirroring
+  the account candidate tables): subject is the attribution entity, target
+  the recognized account reference, relation `same_identity`, evidence the
+  provider's own listing. Live on d-rex: two pending candidates (`x:
+  d_rex_art`, `x: d_rex_too`) reviewable through the generic
+  `matches`/`match-show`/`match-review` surfaces via `attribution:ID` refs.
+
+- **Attribution URLs feed the recognized link graph (Bead
+  `data-processing-9er`)** — artist-record URLs persisted by attribution
+  fetches were opaque strings in `attribution_urls`, never canonicalized or
+  recognized, so a fetched artist's stable account links (the tag-to-handle
+  identity bridge) stopped one table short. The link pass now observes them
+  as `attribution`-subject link occurrences (migration `0027` widens
+  `link_observations` with a third subject kind via the established rebuild
+  pattern): the d-rex artist record's nine URLs now carry two recognized
+  x-account references (`D_rex_art` and `d_rex_too`) with the rest honestly
+  unresolved, queryable through `catalog links --subject-kind attribution`.
+  Domain-shaped rows are skipped; candidate generation from
+  attribution-subject links is the recorded follow-up.
+
+- **Gelbooru-family media acquisition policies (Bead `data-processing-3xv`)** —
+  gelbooru, rule34, and safebooru representations are acquirable, closing the
+  Milestone B gap the live run exposed. Live-captured wire behavior
+  (2026-11-05): gelbooru's CDN answers only with a `https://gelbooru.com/`
+  Referer (a plain fetch gets a 302 to an HTML page — the existing
+  danbooru-style Referer header covers it); rule34 serves images from
+  `api-cdn.rule34.xxx` with no referer requirement though its DAPI needs
+  credentials; safebooru serves media from its base host. Only observed
+  hosts are allowed — `img1..3.gelbooru.com` remain rejected until a
+  capture shows them. Proof: the gelbooru original of the Milestone B pair
+  downloaded through the catalog and deduplicated onto the e621 original's
+  CAS address (same sha256, one asset from two providers).
+
+### Fixed
+- **Corrective migration `0028` from the deferred 9er review** — 0027's
+  rebuild had accidentally tightened `link_observations.occurrence_digest`
+  to a global inline UNIQUE (0002 keys uniqueness on digest plus extractor
+  version, so a future extractor bump could no longer record re-observations
+  and would crash the store path) and silently relaxed `discovery_run_id` to
+  nullable with an AUTOINCREMENT key; 0028 restores 0002's exact constraints
+  while keeping the attribution subject widening. The external-link-discovery
+  spec now covers attribution-subject extraction.
+
+- **Milestone B live run found four defects, all fixed** — `relationships
+  list`/`show` crashed on every call (an unbound LIMIT placeholder in the
+  query); planning an e621 original was impossible because one unoffered
+  variant role (`sample` with `url: null`) poisoned the whole variant map
+  (null-URL roles are now skipped, malformed JSON and ambiguous roles still
+  fail); `assets download-plan --variant` now works with `--select`
+  selections so e621's explicit original/sample/preview roles are reachable
+  without a library plan; and the sqlite snapshot pattern that deadlocked
+  discovery (2026-11-04) existed as nine copy-pasted backup sites — all now
+  route through one guarded `snapshot_connection` helper that commits any
+  open transaction before `backup()` can block on it.
 
 ### Added
-- **KohakuGBC evaluated on the local stack (Bead `data-processing-dhb`)** —
-  `docs/plans/kohakugbc-evaluation.md`: 12 maintainer-selected images through the GBC program
-  with the VLM on llama-swap (`llama.cpp` flavour) and detectors on the RTX 3090 — OWLv2 pass
-  25.5 s/image (median 16/24/36 vertices/captions/edges), SAM 3.1 pass 41.5 s/image (median
-  28/51/49; the scene layer and object sub-structure OWLv2 misses), both 12/12 graphs with
-  zero retries once inflight was throttled (the unthrottled first attempt wedged the server
-  with fault-swallowed empty graphs). Gated models (EmbeddingGemma-300m, sam3.1) load from
-  local snapshots under `eval-input/models/`; maintainer quality review of the graphs
-  pending. Evaluation only — no product surface changes.
-- **KohakuGBC maintainer review recorded, bead closed (Bead `data-processing-dhb`)** —
-  graphs judged mostly okay with two findings: the served VLM mostly ignores NSFW content
-  (coverage limitation for this corpus), and `ComfyUI_03874_.png` is confirmed
-  full-scene confabulation — a single-character image consistently described as a
-  two-character interaction across the run and two independent probes, so the same model
-  cannot self-verify. Verdict: usable on this stack with throttled inflight and
-  cross-model/human verification; SAM 3.1's structural advantage confirmed by review.
+- **`catalog tombstone` operator command** — marks bad catalog data as
+  errored without deleting evidence, productizing the 2026-11-04 lesson:
+  `--post <id>… --reason <text>` marks posts unavailable with an
+  error-tombstone status carrying the reason; `--lookup-run <id> --reason`
+  marks a degenerate lookup run failed with the diagnostic while its inputs
+  stay trigger-immutable. Idempotent, missing ids reported, reasons required.
 
-- **Batch A instance adapters: e926 and rule34 (Bead `data-processing-2e5`, change
-  `add-e926-rule34-instances`)** — the e621 engine gains its SFW sibling through a new
-  `E621_INSTANCES` registry (e926.net, `e926-json-v1`, anonymous, lookup deliberately
-  undeclared until captured fixtures exist), and the gelbooru 0.2 family gains rule34.xxx
-  as a credentials-required instance on `api.rule34.xxx` (`rule34-json-v1`; the www host
-  serves a CAPTCHA wall). Both land with live-captured fixtures (post 6823045; post
-  19210742 + notes XML 11899541 — rule34's dapi notes serve XML too, matching the r4y
-  finding). Platform rows are migration-seeded (`0022`), `SOURCE_OPERATIONS` grows to nine
-  keys, and CLI surfaces select instances explicitly. **Fixed:** live verification against
-  both e621.net and e926.net proved the singular post endpoint now wraps payloads in
-  `{"post": ...}` — the e621 adapter normalizes both the wrapped wire and the archived
-  bare-post fixture shape.
-- **Kemono-family investigation recorded (pointer: Anzhc/kemono-browser)** —
-  `docs/plans/kemono-family-investigation.md`: the Electron app itself is not adopted
-  (interactive media downloader, single hardcoded pawchive instance), but it is recorded
-  as a third reference implementation of the Kemono `/api/v1` contract alongside gallery-dl
-  and Grabber — including the post-detail `server`-backfill quirk, the file/img CDN split,
-  and the `Accept: text/css` spoof. Live probe: `pawchive.pw` serves `/api/v1/creators`
-  anonymously (200, 15.8 MB) and `.st` 301s to `.pw`. Assessed as a viable future adapter
-  family (maintainer note: only pawchive itself is currently maintained — kemono.su and
-  coomer.su are dead or stale by months to a year, so a future adapter ships pawchive
-  alone); nothing built.
+- **Offline golden replay of bare-file discovery (session 32)** — the
+  recorded wire payloads of the first fixed bare-file run (gelbooru md5 hit,
+  two honest zero-results, one rate-limited refusal) now replay through the
+  real discovery pipeline in CI: `tests/fixtures/golden_discover/` plus a
+  test that pins the computed-hash query construction, generation-zero
+  outcomes per provider, the single wave-A fetch of the provider-native
+  post, and the persisted hit — drift in the bare-file path fails before a
+  live run can be surprised.
+- **Milestone B vertical slice proven live** — candidate confirm →
+  `work:gelbooru:11165341 ⟷ work:e621:5486288` reviewed relationship →
+  works materialized → policy-gated `download-plan` (e621-media) → the
+  original downloaded into managed storage with its declared md5
+  (`761b6db8…`) verified against the stored bytes.
+
+
+## [2026-11-04]
+### Fixed
+- **Source-URL lookup material kept its query string** — the alias builder
+  rebuilt every non-x source URL without the query, degrading gelbooru-family
+  post URLs (id in the query) to a bare site root; a wave-B source lookup
+  then matched fifty unrelated posts. Non-x hosts now preserve the query;
+  x.com aliases stay path-canonical as before. Found live on a second
+  Grabber validation batch (2026-11-04).
+
+### Added
+- **Bare-file discovery root and generational fan-out (Bead `data-processing-b8n`,
+  change `add-local-file-discovery-root`, roadmap P0.1/Milestone A)** —
+  `catalog discover --file <path>` now starts a session from an arbitrary local
+  image with no known source: the file's verified md5/sha256, dimensions, MIME
+  type, and size are recorded as a `discovery_file_seeds` row with file
+  provenance — no stub post, no synthetic platform (migration `0026` widens the
+  candidate-lookup-run seed rule to a third kind via the established CHECK
+  rebuild). The verified hash drives the existing `verified_md5` strategy on
+  every declaring provider, and a first hit fans out inside the same bounded
+  session: the hit post is fetched and persisted, then its normalized
+  references (source URLs, external ids, declared hashes) become one further
+  generation of deduped reverse lookups and source fetches, hard-capped at a
+  single follow-up wave under the existing request/time budgets. Session
+  reports gain an additive `generations` breakdown and the file seed's
+  intrinsic identity; operator paths stay out of reports.
+
+### Fixed
+- **Bare-file fan-out corrections from the deferred reviewer pass** — the
+  first-hop fetch targeted the local surrogate `post_id` instead of the
+  provider-native id (so a live wave-A fetch retrieved the wrong post and
+  starved the follow-up wave; now the hit join reads `posts.native_post_id`,
+  and hits from every generation-0 run of the session's seed fan out, not
+  just the run recorded first on a step); `--url` + `--file` attachment
+  worked again (the new input guard had rejected the pair the spec pins);
+  interrupted sessions resume cleanly (planned fetch steps route through the
+  follow-up executor instead of crashing the lookup-strategy parser); the
+  follow-up post accumulator resets per execution; wave B plans one step per
+  query material (digest-keyed) instead of duplicating a material's runs
+  per value. Re-accepted live: e621 hash hit fetches true native post 5155635
+  and its declared-md5 reference hits a further e621 post in the same
+  session.
+- **Lookup-snapshot deadlock** — discovery provider steps left their step-outcome
+  writes uncommitted, and the lookup planner's catalog snapshot (`sqlite3
+  backup`) blocks forever on an open write transaction; step outcomes now
+  commit immediately (found live: sessions hung with zero CPU on the third
+  provider).
+- **Gelbooru response envelopes rejected cookies** — the envelope guard raised
+  on any `set-cookie` response header, but Gelbooru's DAPI sets one on every
+  response, making the whole surface unusable; the adapter now keeps only the
+  public operational headers (content-type, retry-after, x-rate-limit),
+  matching the danbooru/e621 convention.
+
+
+## [2026-11-03]
+### Added
+- **Offline golden fetch scenarios from the 21-URL live batch (Bead
+  `data-processing-h74`, roadmap P0.5)** — the recorded raw payloads of the
+  2026-11-02 live validation batch (danbooru 6, e621 6, sankaku 6, pawchive 3)
+  now live as per-scenario fixtures under `tests/fixtures/golden_fetch/`
+  (secret-scanned, each under 20 KB), replayed by a parametrized test that
+  runs the real fetch pipeline offline — resolver, shared factory, adapter,
+  sync, persistence — over a mock transport that serves the recorded payload
+  and refuses any request the live run did not make. Each scenario pins the
+  persisted platform, native id, media-occurrence count, declared MD5 where
+  present, and the e621 negative downvote counts; the sankaku replay sinks
+  the credential exchange with a throwaway token. Wire-shape drift of the
+  kinds the live batch caught (wrapped envelopes, clamped negatives, naive
+  timestamps) now fails CI before it can surprise a live run.
+
+### Fixed
+- **`catalog fetch` now exits nonzero on a failed or paused sync (Bead
+  `data-processing-uls`)** — the fetch command runs the same sync service as
+  the metadata family but was absent from the exit-code policy, so a failed
+  or paused fetch printed `status: failed` and still exited 0; it now exits 2
+  exactly like `metadata`/`library`/`lookup`. `--resolve-only` is unaffected;
+  a budget-paused run (progress persisted, resumable via `--resume-from`)
+  exits 2, matching the metadata family's identical rule.
+
+### Changed
+- **CLI split into command-family modules (Bead `data-processing-c30`)** —
+  `cli.py` shrank from 1,607 lines to a ~90-line entry (parsing, rendering,
+  exit-code policy, family dispatch); parser fragments and handlers now live
+  together in `media_catalog/cli_commands/` (admin, discovery, ingest, media,
+  metadata, lookup, export, relationships, maintenance, library, plus a shared
+  support module). The five near-identical metadata sync blocks collapsed into
+  one factory helper. Pure structure change: every command, flag, default, and
+  per-command output byte is unchanged (the only visible difference is the
+  top-level help listing regrouping stats/search ahead of fetch/discover with
+  their family), and a new drift-guard test pins that each family's declared
+  command table matches the registered parser. Test monkeypatches repointed
+  from `cli` to the family modules that now resolve those symbols.
+
+
+## [2026-11-02]
+### Added
+- **CI workflow (Bead `data-processing-sd4`, roadmap P0.5 first leg)** —
+  `.github/workflows/ci.yml` runs the repo's own gates on every push and PR to main:
+  `ruff check`, `ruff format --check`, `ty check src`, the full pytest suite (migrations
+  exercised via fresh test catalogs), `catalog adapter-doctor` offline (the 11-surface
+  fixture replay — deliberately network-free), and a package build. Late formatting
+  drift in three files caught by the new gate itself and fixed. Live golden scenarios
+  stay out of CI by design (network flake); they remain a later offline-fixture unit.
+
+### Changed
+- **CLI adapter construction unified on the shared factory** — every live
+  metadata/enrichment/lookup/library command block now builds its adapter through
+  `media_catalog.adapter_factory.adapter_construction` (the same path link-driven fetch
+  and discovery use), eliminating the last hand-rolled constructions that could drift on
+  credentials, instances, or pacing floors; the gelbooru lookup path now resolves
+  through the same factory fallthrough instead of its own construction. Offline replay and the adapter doctor keep
+  their refuse-transport constructions by design, and pixiv keeps its context-manager
+  lifecycle. CLI tests updated to patch the factory instead of constructors.
+
 
 ## [2026-11-01]
-
 ### Added
 - **Pawchive metadata adapter (Bead `data-processing-629`, change
   `add-pawchive-metadata-adapter`)** — first-class anonymous metadata support for
@@ -154,282 +384,51 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
-## [2026-11-07]
 
+## [2026-10-31]
 ### Added
-- **`catalog label` — interactive local labeling UI (Bead `data-processing-w7j`)** —
-  a stdlib-only localhost server for calibrating match heuristics the way the
-  operator described: brings up image pairs side by side (served from managed
-  storage, remote URL fallback), shows the queueing signal and per-image
-  metadata, and takes a verdict (same / variant / different / unsure,
-  keyboard 1-4) plus a free-text relation description. Pairs are queued from
-  NON-perceptual signals so the tool never needs the similarity judge it
-  calibrates: identical md5 across platforms, shared source URLs,
-  provider-recorded parent/child variant relations, shared external ids,
-  same-artist tag overlap, and same-artist contrast pairs for the
-  false-positive side. Labels persist to `pair_labels` (migration `0030`)
-  with append-only decision history; labeled pairs drop from future queues,
-  so the calibration corpus accumulates as the catalog grows.
+- **KohakuGBC evaluated on the local stack (Bead `data-processing-dhb`)** —
+  `docs/plans/kohakugbc-evaluation.md`: 12 maintainer-selected images through the GBC program
+  with the VLM on llama-swap (`llama.cpp` flavour) and detectors on the RTX 3090 — OWLv2 pass
+  25.5 s/image (median 16/24/36 vertices/captions/edges), SAM 3.1 pass 41.5 s/image (median
+  28/51/49; the scene layer and object sub-structure OWLv2 misses), both 12/12 graphs with
+  zero retries once inflight was throttled (the unthrottled first attempt wedged the server
+  with fault-swallowed empty graphs). Gated models (EmbeddingGemma-300m, sam3.1) load from
+  local snapshots under `eval-input/models/`; maintainer quality review of the graphs
+  pending. Evaluation only — no product surface changes.
+- **KohakuGBC maintainer review recorded, bead closed (Bead `data-processing-dhb`)** —
+  graphs judged mostly okay with two findings: the served VLM mostly ignores NSFW content
+  (coverage limitation for this corpus), and `ComfyUI_03874_.png` is confirmed
+  full-scene confabulation — a single-character image consistently described as a
+  two-character interaction across the run and two independent probes, so the same model
+  cannot self-verify. Verdict: usable on this stack with throttled inflight and
+  cross-model/human verification; SAM 3.1's structural advantage confirmed by review.
 
-### Fixed
-- **Sankaku images in the label UI (Bead `data-processing-hjr`)** — route signed CDN media
-  through native-client headers, renew expired links in memory, and retry a denied link once.
-  Validate refreshed post/hash identity and use stable post links without changing catalog facts.
-- **Expired Sankaku label link refreshed (Bead `data-processing-cud`)** — refreshed cached
-  signed media for the reported post and verified the original with browser-compatible headers;
-  automatic URL renewal is tracked in `data-processing-hjr`.
-- **Provider-aware remote label media (Bead `data-processing-wae`)** — serve remote media
-  through existing provider request policies, including required Referer headers and bounded
-  video ranges, without requiring asset downloads. Admit the observed Aibooru CDN host
-  (`data-processing-mqn`) while retaining exact-host validation.
-- **Local originals for remote-blocked label images (Bead `data-processing-ax0`)** — acquired
-  five remaining Gelbooru cross-check originals; verified local serving bypasses CDN requests
-  that return HTML without a provider Referer. Aibooru CDN policy follow-up is tracked separately.
-- **Automatic catalog credentials (Bead `data-processing-2f3`)** — load the private central
-  credentials file and current directory `.env` without extra flags; explicit environment
-  variables take precedence and local values override central defaults.
-- **Reusable local provider credentials (Bead `data-processing-1fs`)** — documented the private
-  central environment-file location and explicit loading through the ignored project `.env` link.
-- **Label server startup and shutdown errors (Bead `data-processing-a59`)** —
-  commands without `--json` report errors and shutdown normally; a failed server bind closes
-  its catalog connection instead of leaking it or masking the port error with `AttributeError`.
-- **Fresh descriptions for label revisits (Bead `data-processing-482`)** —
-  previous notes remain visible as context; the editable description starts blank and clears
-  after a successful save, so old notes are not silently resubmitted with a new verdict.
-- **Incomplete pairs deferred during label revisits (Bead `data-processing-efw`)** —
-  `--revisit-unsure` applies the same media and post availability checks as the normal queue,
-  preserves deferred labels and notes, and reports them without claiming they were relabeled.
-  Byte-verified originals use declared format hints when inspection only reports generic binary,
-  allowing downloaded WebM files to render without overriding specific detected formats.
-- **`catalog label` media resolution, format rendering, streaming, and save guarantees (Bead `data-processing-efw`)** —
-  resolves post media respecting `st_dev:st_ino` managed root identity and local file
-  existence; prioritizes local primary/original media over previews, handles multiple
-  acquisition history records without arbitrary ordering, and applies neutral badges to
-  unverified local copies; renders multi-format media (`<video>` with controls for WebM/MP4,
-  native animated GIF, audio, preview badges, and missing/unavailable explanation boxes with
-  source links); supports video Range streaming (HTTP 206 Partial Content including suffix
-  ranges); improves save feedback with HTTP error statuses, transaction rollback on failure,
-  flash banner across reloads, note preservation, Enter key prevention, and adds
-  `--revisit-unsure` queue mode.
-- **Legacy `/post/show/<id>` links resolve (danbooru-family + e621-family)** —
-  the operator's test list uses danbooru's old route; the link recognizer
-  already accepted both path shapes but the fetch resolver did not, so
-  `catalog fetch` rejected them. Both families now normalize `/post/show/N`
-  to the same identity as `/posts/N`, pinned by test.
+- **Batch A instance adapters: e926 and rule34 (Bead `data-processing-2e5`, change
+  `add-e926-rule34-instances`)** — the e621 engine gains its SFW sibling through a new
+  `E621_INSTANCES` registry (e926.net, `e926-json-v1`, anonymous, lookup deliberately
+  undeclared until captured fixtures exist), and the gelbooru 0.2 family gains rule34.xxx
+  as a credentials-required instance on `api.rule34.xxx` (`rule34-json-v1`; the www host
+  serves a CAPTCHA wall). Both land with live-captured fixtures (post 6823045; post
+  19210742 + notes XML 11899541 — rule34's dapi notes serve XML too, matching the r4y
+  finding). Platform rows are migration-seeded (`0022`), `SOURCE_OPERATIONS` grows to nine
+  keys, and CLI surfaces select instances explicitly. **Fixed:** live verification against
+  both e621.net and e926.net proved the singular post endpoint now wraps payloads in
+  `{"post": ...}` — the e621 adapter normalizes both the wrapped wire and the archived
+  bare-post fixture shape.
+- **Kemono-family investigation recorded (pointer: Anzhc/kemono-browser)** —
+  `docs/plans/kemono-family-investigation.md`: the Electron app itself is not adopted
+  (interactive media downloader, single hardcoded pawchive instance), but it is recorded
+  as a third reference implementation of the Kemono `/api/v1` contract alongside gallery-dl
+  and Grabber — including the post-detail `server`-backfill quirk, the file/img CDN split,
+  and the `Accept: text/css` spoof. Live probe: `pawchive.pw` serves `/api/v1/creators`
+  anonymously (200, 15.8 MB) and `.st` 301s to `.pw`. Assessed as a viable future adapter
+  family (maintainer note: only pawchive itself is currently maintained — kemono.su and
+  coomer.su are dead or stale by months to a year, so a future adapter ships pawchive
+  alone); nothing built.
 
-### Changed
-- **Cross-check originals acquired (Bead `data-processing-ee7`)** — downloaded and verified
-  original images for the two newly cataloged focused matches into managed media storage.
-- **Focused calibration cross-check (Bead `data-processing-jh3`)** — stopped the broad X
-  bookmark sweep and verified coverage for reviewed/downloaded examples; retained results,
-  unavailable-provider status, and exclusions in the operator run report.
-- **qi7 study 2: tier calibration grounded in labeled truth** — the
-  operator's three-group test list (including a with/without-text variation
-  set) populates the middle band the two-threshold design needed:
-  cross-platform identical files hash at 0%, text/variation pairs at
-  1.6–12.5% (matching the operator's own structure note), different
-  artworks never below 37.5%, same-artist negatives never below 29.7%.
-  Certain ≲2% / uncertain 2–15% / no-match ≳25% now has labeled evidence
-  behind it. Details in `docs/plans/qi7-image-hash-study.md`.
-
-## [2026-11-05]
-
-### Added
-- **Attribution candidates complete the artist identity bridge (Bead
-  `data-processing-s1j`)** — a recognized artist-record URL now becomes a
-  reviewable `attribution_match_candidates` row (migration `0029`, mirroring
-  the account candidate tables): subject is the attribution entity, target
-  the recognized account reference, relation `same_identity`, evidence the
-  provider's own listing. Live on d-rex: two pending candidates (`x:
-  d_rex_art`, `x: d_rex_too`) reviewable through the generic
-  `matches`/`match-show`/`match-review` surfaces via `attribution:ID` refs.
-
-- **Attribution URLs feed the recognized link graph (Bead
-  `data-processing-9er`)** — artist-record URLs persisted by attribution
-  fetches were opaque strings in `attribution_urls`, never canonicalized or
-  recognized, so a fetched artist's stable account links (the tag-to-handle
-  identity bridge) stopped one table short. The link pass now observes them
-  as `attribution`-subject link occurrences (migration `0027` widens
-  `link_observations` with a third subject kind via the established rebuild
-  pattern): the d-rex artist record's nine URLs now carry two recognized
-  x-account references (`D_rex_art` and `d_rex_too`) with the rest honestly
-  unresolved, queryable through `catalog links --subject-kind attribution`.
-  Domain-shaped rows are skipped; candidate generation from
-  attribution-subject links is the recorded follow-up.
-
-- **Gelbooru-family media acquisition policies (Bead `data-processing-3xv`)** —
-  gelbooru, rule34, and safebooru representations are acquirable, closing the
-  Milestone B gap the live run exposed. Live-captured wire behavior
-  (2026-11-05): gelbooru's CDN answers only with a `https://gelbooru.com/`
-  Referer (a plain fetch gets a 302 to an HTML page — the existing
-  danbooru-style Referer header covers it); rule34 serves images from
-  `api-cdn.rule34.xxx` with no referer requirement though its DAPI needs
-  credentials; safebooru serves media from its base host. Only observed
-  hosts are allowed — `img1..3.gelbooru.com` remain rejected until a
-  capture shows them. Proof: the gelbooru original of the Milestone B pair
-  downloaded through the catalog and deduplicated onto the e621 original's
-  CAS address (same sha256, one asset from two providers).
-
-### Fixed
-- **Corrective migration `0028` from the deferred 9er review** — 0027's
-  rebuild had accidentally tightened `link_observations.occurrence_digest`
-  to a global inline UNIQUE (0002 keys uniqueness on digest plus extractor
-  version, so a future extractor bump could no longer record re-observations
-  and would crash the store path) and silently relaxed `discovery_run_id` to
-  nullable with an AUTOINCREMENT key; 0028 restores 0002's exact constraints
-  while keeping the attribution subject widening. The external-link-discovery
-  spec now covers attribution-subject extraction.
-
-- **Milestone B live run found four defects, all fixed** — `relationships
-  list`/`show` crashed on every call (an unbound LIMIT placeholder in the
-  query); planning an e621 original was impossible because one unoffered
-  variant role (`sample` with `url: null`) poisoned the whole variant map
-  (null-URL roles are now skipped, malformed JSON and ambiguous roles still
-  fail); `assets download-plan --variant` now works with `--select`
-  selections so e621's explicit original/sample/preview roles are reachable
-  without a library plan; and the sqlite snapshot pattern that deadlocked
-  discovery (2026-11-04) existed as nine copy-pasted backup sites — all now
-  route through one guarded `snapshot_connection` helper that commits any
-  open transaction before `backup()` can block on it.
-
-### Added
-- **`catalog tombstone` operator command** — marks bad catalog data as
-  errored without deleting evidence, productizing the 2026-11-04 lesson:
-  `--post <id>… --reason <text>` marks posts unavailable with an
-  error-tombstone status carrying the reason; `--lookup-run <id> --reason`
-  marks a degenerate lookup run failed with the diagnostic while its inputs
-  stay trigger-immutable. Idempotent, missing ids reported, reasons required.
-
-- **Offline golden replay of bare-file discovery (session 32)** — the
-  recorded wire payloads of the first fixed bare-file run (gelbooru md5 hit,
-  two honest zero-results, one rate-limited refusal) now replay through the
-  real discovery pipeline in CI: `tests/fixtures/golden_discover/` plus a
-  test that pins the computed-hash query construction, generation-zero
-  outcomes per provider, the single wave-A fetch of the provider-native
-  post, and the persisted hit — drift in the bare-file path fails before a
-  live run can be surprised.
-- **Milestone B vertical slice proven live** — candidate confirm →
-  `work:gelbooru:11165341 ⟷ work:e621:5486288` reviewed relationship →
-  works materialized → policy-gated `download-plan` (e621-media) → the
-  original downloaded into managed storage with its declared md5
-  (`761b6db8…`) verified against the stored bytes.
-
-## [2026-11-04]
-
-### Fixed
-- **Source-URL lookup material kept its query string** — the alias builder
-  rebuilt every non-x source URL without the query, degrading gelbooru-family
-  post URLs (id in the query) to a bare site root; a wave-B source lookup
-  then matched fifty unrelated posts. Non-x hosts now preserve the query;
-  x.com aliases stay path-canonical as before. Found live on a second
-  Grabber validation batch (2026-11-04).
-
-### Added
-- **Bare-file discovery root and generational fan-out (Bead `data-processing-b8n`,
-  change `add-local-file-discovery-root`, roadmap P0.1/Milestone A)** —
-  `catalog discover --file <path>` now starts a session from an arbitrary local
-  image with no known source: the file's verified md5/sha256, dimensions, MIME
-  type, and size are recorded as a `discovery_file_seeds` row with file
-  provenance — no stub post, no synthetic platform (migration `0026` widens the
-  candidate-lookup-run seed rule to a third kind via the established CHECK
-  rebuild). The verified hash drives the existing `verified_md5` strategy on
-  every declaring provider, and a first hit fans out inside the same bounded
-  session: the hit post is fetched and persisted, then its normalized
-  references (source URLs, external ids, declared hashes) become one further
-  generation of deduped reverse lookups and source fetches, hard-capped at a
-  single follow-up wave under the existing request/time budgets. Session
-  reports gain an additive `generations` breakdown and the file seed's
-  intrinsic identity; operator paths stay out of reports.
-
-### Fixed
-- **Bare-file fan-out corrections from the deferred reviewer pass** — the
-  first-hop fetch targeted the local surrogate `post_id` instead of the
-  provider-native id (so a live wave-A fetch retrieved the wrong post and
-  starved the follow-up wave; now the hit join reads `posts.native_post_id`,
-  and hits from every generation-0 run of the session's seed fan out, not
-  just the run recorded first on a step); `--url` + `--file` attachment
-  worked again (the new input guard had rejected the pair the spec pins);
-  interrupted sessions resume cleanly (planned fetch steps route through the
-  follow-up executor instead of crashing the lookup-strategy parser); the
-  follow-up post accumulator resets per execution; wave B plans one step per
-  query material (digest-keyed) instead of duplicating a material's runs
-  per value. Re-accepted live: e621 hash hit fetches true native post 5155635
-  and its declared-md5 reference hits a further e621 post in the same
-  session.
-- **Lookup-snapshot deadlock** — discovery provider steps left their step-outcome
-  writes uncommitted, and the lookup planner's catalog snapshot (`sqlite3
-  backup`) blocks forever on an open write transaction; step outcomes now
-  commit immediately (found live: sessions hung with zero CPU on the third
-  provider).
-- **Gelbooru response envelopes rejected cookies** — the envelope guard raised
-  on any `set-cookie` response header, but Gelbooru's DAPI sets one on every
-  response, making the whole surface unusable; the adapter now keeps only the
-  public operational headers (content-type, retry-after, x-rate-limit),
-  matching the danbooru/e621 convention.
-
-## [2026-11-03]
-
-### Added
-- **Offline golden fetch scenarios from the 21-URL live batch (Bead
-  `data-processing-h74`, roadmap P0.5)** — the recorded raw payloads of the
-  2026-11-02 live validation batch (danbooru 6, e621 6, sankaku 6, pawchive 3)
-  now live as per-scenario fixtures under `tests/fixtures/golden_fetch/`
-  (secret-scanned, each under 20 KB), replayed by a parametrized test that
-  runs the real fetch pipeline offline — resolver, shared factory, adapter,
-  sync, persistence — over a mock transport that serves the recorded payload
-  and refuses any request the live run did not make. Each scenario pins the
-  persisted platform, native id, media-occurrence count, declared MD5 where
-  present, and the e621 negative downvote counts; the sankaku replay sinks
-  the credential exchange with a throwaway token. Wire-shape drift of the
-  kinds the live batch caught (wrapped envelopes, clamped negatives, naive
-  timestamps) now fails CI before it can surprise a live run.
-
-### Fixed
-- **`catalog fetch` now exits nonzero on a failed or paused sync (Bead
-  `data-processing-uls`)** — the fetch command runs the same sync service as
-  the metadata family but was absent from the exit-code policy, so a failed
-  or paused fetch printed `status: failed` and still exited 0; it now exits 2
-  exactly like `metadata`/`library`/`lookup`. `--resolve-only` is unaffected;
-  a budget-paused run (progress persisted, resumable via `--resume-from`)
-  exits 2, matching the metadata family's identical rule.
-
-### Changed
-- **CLI split into command-family modules (Bead `data-processing-c30`)** —
-  `cli.py` shrank from 1,607 lines to a ~90-line entry (parsing, rendering,
-  exit-code policy, family dispatch); parser fragments and handlers now live
-  together in `media_catalog/cli_commands/` (admin, discovery, ingest, media,
-  metadata, lookup, export, relationships, maintenance, library, plus a shared
-  support module). The five near-identical metadata sync blocks collapsed into
-  one factory helper. Pure structure change: every command, flag, default, and
-  per-command output byte is unchanged (the only visible difference is the
-  top-level help listing regrouping stats/search ahead of fetch/discover with
-  their family), and a new drift-guard test pins that each family's declared
-  command table matches the registered parser. Test monkeypatches repointed
-  from `cli` to the family modules that now resolve those symbols.
-
-## [2026-11-02]
-
-### Added
-- **CI workflow (Bead `data-processing-sd4`, roadmap P0.5 first leg)** —
-  `.github/workflows/ci.yml` runs the repo's own gates on every push and PR to main:
-  `ruff check`, `ruff format --check`, `ty check src`, the full pytest suite (migrations
-  exercised via fresh test catalogs), `catalog adapter-doctor` offline (the 11-surface
-  fixture replay — deliberately network-free), and a package build. Late formatting
-  drift in three files caught by the new gate itself and fixed. Live golden scenarios
-  stay out of CI by design (network flake); they remain a later offline-fixture unit.
-
-### Changed
-- **CLI adapter construction unified on the shared factory** — every live
-  metadata/enrichment/lookup/library command block now builds its adapter through
-  `media_catalog.adapter_factory.adapter_construction` (the same path link-driven fetch
-  and discovery use), eliminating the last hand-rolled constructions that could drift on
-  credentials, instances, or pacing floors; the gelbooru lookup path now resolves
-  through the same factory fallthrough instead of its own construction. Offline replay and the adapter doctor keep
-  their refuse-transport constructions by design, and pixiv keeps its context-manager
-  lifecycle. CLI tests updated to patch the factory instead of constructors.
 
 ## [2026-10-30]
-
 ### Added
 - **Togeari architectural investigation recorded (Bead `data-processing-164`)** —
   `docs/plans/togeari-investigation.md`: the out-of-order KIR machine mapped (lanes, engine
@@ -441,8 +440,8 @@ Rules:
   KohakuGBC evaluation (`dhb`) revealing a concrete pipeline need.
 
 
-## [2026-10-29]
 
+## [2026-10-29]
 ### Added
 - **Sankaku metadata adapter (Bead `data-processing-4ly`, change
   `add-sankaku-metadata-adapter`)** — new provider family speaking Sankaku's API v2
@@ -459,8 +458,8 @@ Rules:
   plus a `rating:g` keyset page), scanned for login/password/token before commit. Typed
   per-post tag fetching, notes, pools, and the Idol instance remain deferred.
 
-## [2026-10-28]
 
+## [2026-10-28]
 ### Fixed
 - **Gelbooru dapi note contract verified live: XML, not JSON (Bead `data-processing-r4y`)** —
   a credentialed capture of the dapi note index (`s=note`) shows the endpoint serves XML
@@ -491,8 +490,35 @@ Rules:
   accepts `safebooru`; the capture utility honors per-instance credential policy. rule34.xxx
   stays deferred until credentials allow a live capture.
 
-## [2026-10-25]
+### Added
+- **Replay-stamp repair (Bead `data-processing-3qq`)** — `scripts/repair_replay_stamps.py`
+  (dry-run by default) repairs the damage the 2026-10-08 pre-fix reprocess runs left: fact rows
+  whose timestamp equals a reprocess run's `started_at` with an identical-facts earlier twin are
+  deleted via trigger surgery (6 metadata, 1 snapshot, 172 post-tag observations on the audited
+  catalog — every replay row had a twin, zero orphans), occurrence timestamps are restored from
+  their retained raw observations, and current-projection fields (3 posts, 55 tags, 87 post_tags,
+  2 accounts) are recomputed from the surviving history. Verified end to end on a copy of the
+  real catalog: zero replay-stamped rows remain anywhere, foreign keys clean, originals restored.
 
+
+## [2026-10-26]
+### Added
+- **Source-scoped anchorless identity + repair path (Bead `data-processing-7o0`; OpenSpec change
+  `source-scoped-anchorless-identity`)** — migration 0019 replaces 0018's anchorless partial
+  unique indexes with platform-scoped ones: byte-identical payloads from the same source share one
+  observation (blessed by decision at the candidate-lookup and library-probe call sites), while
+  different sources never fold — 0018's key conflated danbooru/aibooru lookups returning
+  identical bodies (two real-catalog collisions verified). Anchorless retention now requires a
+  declared source platform. `scripts/repair_anchorless_observations.py` (dry-run by default)
+  performs the 0018-comment trigger surgery under the strict definition — keep the earliest row,
+  dynamically re-point referencing rows, delete unreferenced members, recreate triggers verbatim,
+  verify foreign keys and zero remaining groups — reporting same-platform and cross-platform
+  folds separately; proven against a copy of the real catalog (5 folds: 3 same-platform, 2
+  cross-platform), which then migrates through 0019 cleanly. A kernel requirement now names the
+  identity rule (anchor-scoped or source-scoped content addressing).
+
+
+## [2026-10-25]
 ### Added
 - **Endpoint-kind generalization decided: conscious deferral (Bead `data-processing-9h6`,
   non-media-consumer spike F3)** — `ENDPOINT_KINDS` stays media-closed until a non-media
@@ -527,37 +553,8 @@ Rules:
   byte-identical re-intake resolves to the earliest observation instead of appending duplicates;
   anchored rows keep the pre-existing identity.
 
-## [2026-10-28]
-
-### Added
-- **Replay-stamp repair (Bead `data-processing-3qq`)** — `scripts/repair_replay_stamps.py`
-  (dry-run by default) repairs the damage the 2026-10-08 pre-fix reprocess runs left: fact rows
-  whose timestamp equals a reprocess run's `started_at` with an identical-facts earlier twin are
-  deleted via trigger surgery (6 metadata, 1 snapshot, 172 post-tag observations on the audited
-  catalog — every replay row had a twin, zero orphans), occurrence timestamps are restored from
-  their retained raw observations, and current-projection fields (3 posts, 55 tags, 87 post_tags,
-  2 accounts) are recomputed from the surviving history. Verified end to end on a copy of the
-  real catalog: zero replay-stamped rows remain anywhere, foreign keys clean, originals restored.
-
-## [2026-10-26]
-
-### Added
-- **Source-scoped anchorless identity + repair path (Bead `data-processing-7o0`; OpenSpec change
-  `source-scoped-anchorless-identity`)** — migration 0019 replaces 0018's anchorless partial
-  unique indexes with platform-scoped ones: byte-identical payloads from the same source share one
-  observation (blessed by decision at the candidate-lookup and library-probe call sites), while
-  different sources never fold — 0018's key conflated danbooru/aibooru lookups returning
-  identical bodies (two real-catalog collisions verified). Anchorless retention now requires a
-  declared source platform. `scripts/repair_anchorless_observations.py` (dry-run by default)
-  performs the 0018-comment trigger surgery under the strict definition — keep the earliest row,
-  dynamically re-point referencing rows, delete unreferenced members, recreate triggers verbatim,
-  verify foreign keys and zero remaining groups — reporting same-platform and cross-platform
-  folds separately; proven against a copy of the real catalog (5 folds: 3 same-platform, 2
-  cross-platform), which then migrates through 0019 cleanly. A kernel requirement now names the
-  identity rule (anchor-scoped or source-scoped content addressing).
 
 ## [2026-10-24]
-
 ### Added
 - **Crop-resistant hashing evaluated — negative result (Bead `data-processing-qi7`, remaining
   scope)** — the established library's segmentation-based `crop_resistant_hash` was added to the
@@ -596,8 +593,8 @@ Rules:
   gelbooru dapi note fixture is synthetic per the documented shape pending a credentialed capture
   (follow-up bead). Default sync paths are untouched.
 
-## [2026-10-23]
 
+## [2026-10-23]
 ### Added
 - **Danbooru-family pool collection (Bead `data-processing-cq0`; OpenSpec change
   `add-danbooru-pool-collection`)** — `mcat metadata danbooru-pool` (and `aibooru-pool`) fetches a
@@ -634,8 +631,8 @@ Rules:
   duplicates observation rows under a NULL identity key. Follow-ups filed as beads
   `data-processing-6y1`, `data-processing-40x`, `data-processing-9h6`.
 
-## [2026-10-21]
 
+## [2026-10-21]
 ### Added
 - **Temporal as-of semantics named and first surface landed (Bead `data-processing-2ai`;
   OpenSpec change `add-as-of-semantics`; GitHub issue #7)** — the five-timestamp vocabulary
@@ -675,8 +672,8 @@ Rules:
   counted reasons. Offline, read-only, report-only; rides the existing manifest and digest
   contracts unchanged.
 
-## [2026-10-18]
 
+## [2026-10-18]
 ### Added
 
 - **Confirmed candidates materialize into relationships (Bead `data-processing-zaf`;
@@ -694,8 +691,8 @@ Rules:
   status moves to `reviewed` with the prior status retained in history, and an
   already-confirmed row gains only the new evidence.
 
-## [2026-10-16]
 
+## [2026-10-16]
 ### Added
 
 - **`parent_of` joins the deterministic relationship seeder (Bead `data-processing-zaf`
@@ -732,8 +729,8 @@ Rules:
   migration 0015) and names the remaining `post_relations` absorption decision, replacing
   the stale "not built" / "partial, scattered" rows.
 
-## [2026-10-09]
 
+## [2026-10-09]
 ### Added
 
 - **Export projections: bounded, reproducible JSONL/CSV views over the evidence layer (Bead
@@ -752,8 +749,8 @@ Rules:
   and exports are bounded with `excluded_by_limit` reporting. Remaining on the bead:
   attribution-disagreement report, per-field source exports, variant-family grouping (Phase D).
 
-## [2026-10-08]
 
+## [2026-10-08]
 ### Fixed
 
 - **Reprocess review fixes: source observation time and schema-drift planning (Bead
@@ -797,8 +794,8 @@ Rules:
   runs recorded. Retained lookup responses and import raws have no metadata-operation
   linkage and stay out of scope.
 
-## [2026-10-07]
 
+## [2026-10-07]
 ### Added
 
 - **Pixiv engagement totals normalize (Bead `data-processing-cyp`, partial; OpenSpec change
@@ -833,8 +830,8 @@ Rules:
   `verified_md5` lookup planning exactly like a recorded post — requirement 1's non-recorded
   half now works end to end with innate image metadata preferred, per the decided design.
 
-## [2026-10-06]
 
+## [2026-10-06]
 ### Added
 
 - **Non-recorded items gain a materialize-a-seed entry point (Bead `data-processing-8b2`,
@@ -863,8 +860,8 @@ Rules:
   works; Grabber's JSON path only refuses generic favorites syntax. Requirements 1 and 2
   are no longer blocked for gelbooru.
 
-## [2026-10-05]
 
+## [2026-10-05]
 ### Added
 
 - **Danbooru-family post and artist fact normalization catches up (Bead
@@ -945,8 +942,8 @@ Rules:
   evidence only: catalog hashes remain identification metadata, and no similarity
   mechanism enters a product surface unless a generic, evidence-backed one is proven.
 
-## [2026-10-04]
 
+## [2026-10-04]
 ### Added
 
 - **The audit-immutability sweep is completed (Bead `data-processing-5de`)** — migration 0013
@@ -987,8 +984,8 @@ Rules:
   `data-processing-t08`) and the supervised matching research spike, which gates only fuzzy
   matcher proposals and is rescoped to its own lower-priority bead (`data-processing-8nj`, P3).
 
-## [2026-10-03]
 
+## [2026-10-03]
 ### Added
 
 - **The reviewed-target workflow lands (kernel Phase C)** — OpenSpec change
@@ -1052,8 +1049,8 @@ Rules:
 - **The media catalog plan is annotated** as the media-family domain plan under the kernel framing;
   its vocabulary remains authoritative for the media family.
 
-## [2026-10-02]
 
+## [2026-10-02]
 ### Added
 
 - **The Gelbooru OpenSpec change is archived with specs synced** — the 10 delta requirements were
@@ -1172,8 +1169,8 @@ Rules:
   and one — sample-versus-original dimensions — was already handled by preferring the `Size:`
   statistic.
 
-## [2026-10-01]
 
+## [2026-10-01]
 ### Added
 
 - **The Gelbooru schema audit proves the neutral schema needs no migration** — a fixture-driven
@@ -1242,8 +1239,8 @@ Rules:
   public signatures as explicit delegations on the caller's shared transaction; the root-upsert
   compatibility alias is preserved.
 
-## [2026-09-30]
 
+## [2026-09-30]
 ### Added
 
 - **Catalog persistence gains an internal shared-support package** — `media_catalog.persistence`
@@ -1265,8 +1262,8 @@ Rules:
 - **Agent instruction files corrected** — quality-gate examples in CLAUDE.md and AGENTS.md now
   reference the `media_catalog/records` package instead of the removed single-module path.
 
-## [2026-08-13]
 
+## [2026-08-13]
 ### Added
 
 - **e621 metadata can be synchronized through the catalog** — added a native adapter for bounded
@@ -1299,8 +1296,8 @@ Rules:
   record, and time boundaries now stop unadmitted work before the next provider call, including
   tag and alias pages, while retaining committed checkpoints for safe restart.
 
-## [2026-08-12]
 
+## [2026-08-12]
 ### Added
 
 - **Reviewed or explicitly selected artists can seed bounded library expansion** — added offline
@@ -1327,8 +1324,8 @@ Rules:
 - **Managed asset code now has a cohesive package layout** — moved content-addressed storage mechanics, local-file adoption, integrity verification, and read-only inspection into `media_catalog.storage` while keeping remote downloads under the separate acquisition boundary.
 - **Remote page execution now has a reusable bounded loop** — metadata synchronization and candidate lookup share request, retention, normalization, commit, continuation, and budget semantics without coupling provider adapters to catalog persistence.
 
-## [2026-08-11]
 
+## [2026-08-11]
 ### Added
 
 - **Selected remote media can be acquired into verified managed storage** — added explicit planning and execution, provider-aware request policy, resumable bounded transfers, exact hashing, inspection, quarantine, CAS publication, occurrence linking, and durable run and attempt history.
@@ -1338,8 +1335,8 @@ Rules:
 
 - **Declared provider metadata remains distinct from locally verified facts** — acquisition preserves both claims and their provenance, and media browsing reports eligibility and linked assets without exposing remote URLs, credentials, raw payloads, or private paths.
 
-## [2026-08-10]
 
+## [2026-08-10]
 ### Added
 
 - **Existing local media can be adopted into a content-addressed store** — added safe offline planning and execution, descriptor-relative path handling, SHA-256 and MD5 verification, raster inspection, versioned perceptual hashes, atomic publication, exact deduplication, reconciliation, and durable per-file outcomes.
@@ -1350,8 +1347,8 @@ Rules:
 
 - **Legacy X media paths are occurrence-level provenance rather than managed storage** — imported paths remain non-owning source references until their bytes pass the catalog-owned adoption and verification workflow.
 
-## [2026-08-09]
 
+## [2026-08-09]
 ### Added
 
 - **Offline cross-platform discovery turns retained links into reviewable evidence** — added extraction and canonicalization for profile and post URLs, typed platform references, unresolved-link retention, account and post candidates, deterministic evidence scores, and append-only review history.
@@ -1365,28 +1362,28 @@ Rules:
 
 - **URL aliases no longer replace semantic platform-reference associations** — normalized links and references use many-to-many persistence, identifier kinds distinguish stable IDs from handles, slugs, hashes, and opaque values, and mutable X handles cannot materialize identities by themselves.
 
-## [2026-08-05]
 
+## [2026-08-05]
 ### Added
 
 - **A platform-neutral media catalog now complements the X-specific tool** — added a migration-managed SQLite model for platforms, accounts and snapshots, posts, observations, media occurrences, assets, raw records, and import provenance together with initialization, integrity, statistics, and search commands.
 - **Existing X likes and xarchive bookmarks can be imported idempotently** — added immutable-source importers that preserve likes and bookmarks as distinct observations, retain unknown provider data, reconcile overlapping exports, and report inserted, updated, existing, skipped, and failed counts.
 - **The customized xarchive utility is maintained in-tree** — incorporated the locally extended bookmark parser as repository-owned code for stable bookmark JSON production and integration.
 
-## [2026-08-04]
 
+## [2026-08-04]
 ### Added
 
 - **Each repository tool has a dedicated usage guide** — added the documentation index and a detailed `x-likes` guide covering setup, archive import, enrichment, optional media downloads, hashing, output, and operational caveats.
 
-## [2026-08-03]
 
+## [2026-08-03]
 ### Changed
 
 - **X enrichment retains more accurate saved account and post information** — expanded provider normalization and database updates while preserving unavailable records and improving repeated enrichment behavior.
 
-## [2026-08-02]
 
+## [2026-08-02]
 ### Added
 
 - **The first local-first tool imports and enriches X likes** — added archive parsing, SQLite persistence, provider enrichment, optional image downloading, MD5, SHA-256 and perceptual hashing, CLI commands, and focused tests under `x_likes`.
