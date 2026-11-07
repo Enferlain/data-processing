@@ -184,6 +184,15 @@ Rules:
   CAS address (same sha256, one asset from two providers).
 
 ### Fixed
+- **Corrective migration `0028` from the deferred 9er review** — 0027's
+  rebuild had accidentally tightened `link_observations.occurrence_digest`
+  to a global inline UNIQUE (0002 keys uniqueness on digest plus extractor
+  version, so a future extractor bump could no longer record re-observations
+  and would crash the store path) and silently relaxed `discovery_run_id` to
+  nullable with an AUTOINCREMENT key; 0028 restores 0002's exact constraints
+  while keeping the attribution subject widening. The external-link-discovery
+  spec now covers attribution-subject extraction.
+
 - **Milestone B live run found four defects, all fixed** — `relationships
   list`/`show` crashed on every call (an unbound LIMIT placeholder in the
   query); planning an e621 original was impossible because one unoffered

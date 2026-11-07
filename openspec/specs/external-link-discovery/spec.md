@@ -18,6 +18,13 @@ observation, observation time, extraction version, and original URL for each occ
 - **WHEN** a retained X or xarchive post record contains supported expanded entity or card URLs
 - **THEN** discovery records each URL with its post and source-field context
 
+#### Scenario: Attribution record carries stable account URLs
+- **WHEN** a fetched artist attribution record persists account URLs (attribution rows;
+  domain-shaped entries excluded)
+- **THEN** discovery records each URL as an `attribution`-subject link observation tied to the
+  attribution entity with `attribution.url` source context, so artist stable links participate
+  in recognition and platform-reference creation like account and post links
+
 ### Requirement: Preserve original and canonical URL forms
 The system SHALL retain the original observed URL separately from its deterministic canonical form
 and SHALL identify the canonicalization algorithm and version used.
