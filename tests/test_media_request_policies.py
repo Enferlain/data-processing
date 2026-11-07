@@ -489,3 +489,19 @@ def test_gelbooru_policy_rejects_uncaptured_hosts() -> None:
             variant_key="original",
             selected_url="https://img3.gelbooru.com/images/76/1b/a.jpg",
         )
+
+
+def test_danbooru_family_sends_identifying_user_agent() -> None:
+    """Danbooru's CDN enforces the site bot policy: browser and library
+    default User-Agents get 403 and only a descriptive custom agent with the
+    site Referer is served (live matrix 2026-11-08: default-ua 403, browser
+    403, custom 'data-processing-tools/1.0'-style agent 200)."""
+    cases = (
+        (DANBOORU_MEDIA_POLICY, "https://cdn.donmai.us/a.jpg", "https://danbooru.donmai.us/"),
+        (AIBOORU_MEDIA_POLICY, "https://cdn.aibooru.download/a.jpg", "https://aibooru.online/"),
+        (GELBOORU_MEDIA_POLICY, "https://img4.gelbooru.com/a.jpg", "https://gelbooru.com/"),
+    )
+    for policy, url, referer in cases:
+        recipe = policy.recipe(media_occurrence_id=1, variant_key="original", selected_url=url)
+        assert recipe.headers["User-Agent"] == "data-processing-tools/0.1 (metadata-only catalog)"
+        assert recipe.headers["Referer"] == referer

@@ -811,7 +811,9 @@ Provider request policies are versioned and fail closed:
 - Pixiv media is restricted to `i.pximg.net` and uses the required
   `Referer: https://app-api.pixiv.net/` behavior. API refresh credentials are not forwarded to the
   media CDN.
-- Danbooru media is restricted to the configured instance plus `cdn.donmai.us`.
+- Danbooru media is restricted to the configured instance plus `cdn.donmai.us`, and sends the
+  descriptive catalog User-Agent with the site Referer — the CDN enforces the site bot policy and
+  answers 403 to browser or library-default agents (verified live 2026-11-08).
 - Sankaku media is restricted to the observed `v.sankakucomplex.com` CDN with native-client
   media headers. Signed-link renewal is a display-only operation; acquisition still uses its
   explicitly selected URL and does not silently renew a stale acquisition plan.

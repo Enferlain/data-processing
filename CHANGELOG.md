@@ -13,6 +13,17 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise but mention all changes without necessarily detailing each one
 
+## [2026-11-08]
+
+### Fixed
+- **Danbooru-family media policy sends the identifying User-Agent** — danbooru's CDN
+  enforces the site bot policy: browser and library-default agents get 403, and only a
+  descriptive custom agent with the site Referer is served (live matrix 2026-11-08:
+  default-ua 403, browser-ua 403, catalog agent 200). The danbooru-family policies
+  (danbooru/aibooru/gelbooru/rule34/safebooru) now carry the catalog's identifying
+  agent alongside the Referer, fixing failed image loads in the labeling UI and the
+  acquisition path for danbooru originals.
+
 ## [2026-11-07]
 
 ### Added

@@ -311,6 +311,9 @@ class SankakuMediaPolicy(MediaRequestPolicy):
     response_expectations = ResponseExpectations(("image/", "video/", "application/octet-stream"))
 
 
+DANBOORU_MEDIA_USER_AGENT = "data-processing-tools/0.1 (metadata-only catalog)"
+
+
 class DanbooruMediaPolicy(MediaRequestPolicy):
     def __init__(
         self,
@@ -329,7 +332,17 @@ class DanbooruMediaPolicy(MediaRequestPolicy):
         self.provider = provider
         self.allowed_hosts = hosts
         self.redirect_hosts = hosts
-        self.headers = MappingProxyType({"Referer": f"https://{base_host}/"})
+        # Danbooru's CDN enforces the site's bot policy: browser and
+        # library-default User-Agents get 403; a descriptive custom agent
+        # with the site Referer is served (live matrix 2026-11-08).  The
+        # gelbooru-family CDNs accept any agent with their Referer, so the
+        # same identifying header applies family-wide.
+        self.headers = MappingProxyType(
+            {
+                "Referer": f"https://{base_host}/",
+                "User-Agent": DANBOORU_MEDIA_USER_AGENT,
+            }
+        )
         self.response_expectations = ResponseExpectations(
             ("image/", "video/", "application/zip", "application/octet-stream")
         )
