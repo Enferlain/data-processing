@@ -33,4 +33,28 @@ class LinkOccurrenceScanner:
                 occurrences.extend(post_occurrences(dict(row), row["payload"]))
             except (TypeError, ValueError):
                 counts["failed"] += 1
+        # Artist-record URLs: attribution_urls rows are the provider's own
+        # stable account links for an artist; observing them feeds the
+        # recognized link graph so the tag <-> handle identity bridge flows
+        # (bead data-processing-9er).  Domain-only rows are not URLs.
+        attributions = self.connection.execute(
+            """SELECT attribution_entity_id, url, observed_at, raw_observation_id
+                 FROM attribution_urls
+                WHERE url_kind IS NULL OR url_kind != 'domain'"""
+        )
+        for row in attributions:
+            occurrences.append(
+                LinkOccurrence(
+                    "attribution",
+                    int(row["attribution_entity_id"]),
+                    "attribution.url",
+                    str(row["url"]),
+                    str(row["observed_at"]),
+                    raw_observation_id=(
+                        int(row["raw_observation_id"])
+                        if row["raw_observation_id"] is not None
+                        else None
+                    ),
+                )
+            )
         return occurrences

@@ -31,7 +31,7 @@ class LinkOccurrence:
     json_path: str | None = None
 
     def __post_init__(self) -> None:
-        if self.subject_kind not in {"account", "post"}:
+        if self.subject_kind not in {"account", "attribution", "post"}:
             raise ValueError(f"unsupported link subject kind: {self.subject_kind}")
         if self.subject_id <= 0:
             raise ValueError("link subject id must be positive")

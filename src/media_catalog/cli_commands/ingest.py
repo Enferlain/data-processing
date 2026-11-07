@@ -29,7 +29,7 @@ def register(commands: argparse._SubParsersAction) -> None:
     add_json(discover)
     links = commands.add_parser("links")
     links.add_argument("catalog", type=Path)
-    links.add_argument("--subject-kind", choices=("account", "post"))
+    links.add_argument("--subject-kind", choices=("account", "attribution", "post"))
     links.add_argument("--subject-id", type=int)
     links.add_argument("--source-context")
     links.add_argument("--platform")

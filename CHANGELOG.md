@@ -157,6 +157,19 @@ Rules:
 ## [2026-11-05]
 
 ### Added
+- **Attribution URLs feed the recognized link graph (Bead
+  `data-processing-9er`)** — artist-record URLs persisted by attribution
+  fetches were opaque strings in `attribution_urls`, never canonicalized or
+  recognized, so a fetched artist's stable account links (the tag-to-handle
+  identity bridge) stopped one table short. The link pass now observes them
+  as `attribution`-subject link occurrences (migration `0027` widens
+  `link_observations` with a third subject kind via the established rebuild
+  pattern): the d-rex artist record's nine URLs now carry two recognized
+  x-account references (`D_rex_art` and `d_rex_too`) with the rest honestly
+  unresolved, queryable through `catalog links --subject-kind attribution`.
+  Domain-shaped rows are skipped; candidate generation from
+  attribution-subject links is the recorded follow-up.
+
 - **Gelbooru-family media acquisition policies (Bead `data-processing-3xv`)** —
   gelbooru, rule34, and safebooru representations are acquirable, closing the
   Milestone B gap the live run exposed. Live-captured wire behavior

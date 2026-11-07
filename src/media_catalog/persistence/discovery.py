@@ -106,16 +106,18 @@ class DiscoveryWrites:
         self.connection.execute(
             """INSERT INTO link_observations
                (external_link_id, discovery_run_id, subject_kind, subject_account_id,
-                subject_post_id, account_snapshot_id, raw_observation_id, source_context,
+                subject_post_id, subject_attribution_id, account_snapshot_id,
+                raw_observation_id, source_context,
                 json_path, original_url, original_query, original_fragment, observed_at,
                 extractor_version, occurrence_digest)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
             (
                 link_id,
                 run_id,
                 occurrence.subject_kind,
                 occurrence.subject_id if occurrence.subject_kind == "account" else None,
                 occurrence.subject_id if occurrence.subject_kind == "post" else None,
+                occurrence.subject_id if occurrence.subject_kind == "attribution" else None,
                 occurrence.account_snapshot_id,
                 occurrence.raw_observation_id,
                 occurrence.source_context,

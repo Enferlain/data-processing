@@ -26,6 +26,7 @@ SOURCE_CONTEXTS = frozenset(
         "post.card",
         "post.quote",
         "post.source",
+        "attribution.url",
     }
 )
 OBJECT_KINDS = frozenset({"account", "post", "artist", "media_asset"})

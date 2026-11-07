@@ -28,12 +28,16 @@ class DiscoveryQueries:
                 clauses.append(f"{column} = ?")
                 parameters.append(filters[key])
         if filters.get("subject_id") is not None:
-            clauses.append("(lo.subject_account_id = ? OR lo.subject_post_id = ?)")
-            parameters.extend((filters["subject_id"], filters["subject_id"]))
+            clauses.append(
+                "(lo.subject_account_id = ? OR lo.subject_post_id = ?"
+                " OR lo.subject_attribution_id = ?)"
+            )
+            parameters.extend((filters["subject_id"], filters["subject_id"], filters["subject_id"]))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = self.connection.execute(
             f"""SELECT lo.link_observation_id, lo.subject_kind, lo.subject_account_id,
-                       lo.subject_post_id, lo.source_context, lo.original_url, lo.json_path,
+                       lo.subject_post_id, lo.subject_attribution_id,
+                       lo.source_context, lo.original_url, lo.json_path,
                        el.canonical_url, el.resolution_state, el.resolution_reason,
                        p.platform_key, pr.instance_host, pr.object_kind, pr.identifier_kind,
                        pr.native_identifier,
