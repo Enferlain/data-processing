@@ -14,7 +14,9 @@ Rules:
 - Be concise but mention all changes without necessarily detailing each one
 
 ## [2026-11-07]
+
 ### Added
+
 - **`catalog label` — interactive local labeling UI (Bead `data-processing-w7j`)** —
   a stdlib-only localhost server for calibrating match heuristics the way the
   operator described: brings up image pairs side by side (served from managed
@@ -30,6 +32,7 @@ Rules:
   so the calibration corpus accumulates as the catalog grows.
 
 ### Fixed
+
 - **Sankaku images in the label UI (Bead `data-processing-hjr`)** — route signed CDN media
   through native-client headers, renew expired links in memory, and retry a denied link once.
   Validate refreshed post/hash identity and use stable post links without changing catalog facts.
@@ -76,6 +79,7 @@ Rules:
   to the same identity as `/posts/N`, pinned by test.
 
 ### Changed
+
 - **Cross-check originals acquired (Bead `data-processing-ee7`)** — downloaded and verified
   original images for the two newly cataloged focused matches into managed media storage.
 - **Focused calibration cross-check (Bead `data-processing-jh3`)** — stopped the broad X
@@ -90,9 +94,10 @@ Rules:
   Certain ≲2% / uncertain 2–15% / no-match ≳25% now has labeled evidence
   behind it. Details in `docs/plans/qi7-image-hash-study.md`.
 
-
 ## [2026-11-05]
+
 ### Added
+
 - **Attribution candidates complete the artist identity bridge (Bead
   `data-processing-s1j`)** — a recognized artist-record URL now becomes a
   reviewable `attribution_match_candidates` row (migration `0029`, mirroring
@@ -129,6 +134,7 @@ Rules:
   CAS address (same sha256, one asset from two providers).
 
 ### Fixed
+
 - **Corrective migration `0028` from the deferred 9er review** — 0027's
   rebuild had accidentally tightened `link_observations.occurrence_digest`
   to a global inline UNIQUE (0002 keys uniqueness on digest plus extractor
@@ -151,6 +157,7 @@ Rules:
   open transaction before `backup()` can block on it.
 
 ### Added
+
 - **`catalog tombstone` operator command** — marks bad catalog data as
   errored without deleting evidence, productizing the 2026-11-04 lesson:
   `--post <id>… --reason <text>` marks posts unavailable with an
@@ -172,9 +179,10 @@ Rules:
   original downloaded into managed storage with its declared md5
   (`761b6db8…`) verified against the stored bytes.
 
-
 ## [2026-11-04]
+
 ### Fixed
+
 - **Source-URL lookup material kept its query string** — the alias builder
   rebuilt every non-x source URL without the query, degrading gelbooru-family
   post URLs (id in the query) to a bare site root; a wave-B source lookup
@@ -183,6 +191,7 @@ Rules:
   Grabber validation batch (2026-11-04).
 
 ### Added
+
 - **Bare-file discovery root and generational fan-out (Bead `data-processing-b8n`,
   change `add-local-file-discovery-root`, roadmap P0.1/Milestone A)** —
   `catalog discover --file <path>` now starts a session from an arbitrary local
@@ -200,6 +209,7 @@ Rules:
   intrinsic identity; operator paths stay out of reports.
 
 ### Fixed
+
 - **Bare-file fan-out corrections from the deferred reviewer pass** — the
   first-hop fetch targeted the local surrogate `post_id` instead of the
   provider-native id (so a live wave-A fetch retrieved the wrong post and
@@ -225,9 +235,10 @@ Rules:
   public operational headers (content-type, retry-after, x-rate-limit),
   matching the danbooru/e621 convention.
 
-
 ## [2026-11-03]
+
 ### Added
+
 - **Offline golden fetch scenarios from the 21-URL live batch (Bead
   `data-processing-h74`, roadmap P0.5)** — the recorded raw payloads of the
   2026-11-02 live validation batch (danbooru 6, e621 6, sankaku 6, pawchive 3)
@@ -243,6 +254,7 @@ Rules:
   timestamps) now fails CI before it can surprise a live run.
 
 ### Fixed
+
 - **`catalog fetch` now exits nonzero on a failed or paused sync (Bead
   `data-processing-uls`)** — the fetch command runs the same sync service as
   the metadata family but was absent from the exit-code policy, so a failed
@@ -252,6 +264,7 @@ Rules:
   exits 2, matching the metadata family's identical rule.
 
 ### Changed
+
 - **CLI split into command-family modules (Bead `data-processing-c30`)** —
   `cli.py` shrank from 1,607 lines to a ~90-line entry (parsing, rendering,
   exit-code policy, family dispatch); parser fragments and handlers now live
@@ -265,9 +278,10 @@ Rules:
   command table matches the registered parser. Test monkeypatches repointed
   from `cli` to the family modules that now resolve those symbols.
 
-
 ## [2026-11-02]
+
 ### Added
+
 - **CI workflow (Bead `data-processing-sd4`, roadmap P0.5 first leg)** —
   `.github/workflows/ci.yml` runs the repo's own gates on every push and PR to main:
   `ruff check`, `ruff format --check`, `ty check src`, the full pytest suite (migrations
@@ -277,6 +291,7 @@ Rules:
   stay out of CI by design (network flake); they remain a later offline-fixture unit.
 
 ### Changed
+
 - **CLI adapter construction unified on the shared factory** — every live
   metadata/enrichment/lookup/library command block now builds its adapter through
   `media_catalog.adapter_factory.adapter_construction` (the same path link-driven fetch
@@ -286,9 +301,10 @@ Rules:
   their refuse-transport constructions by design, and pixiv keeps its context-manager
   lifecycle. CLI tests updated to patch the factory instead of constructors.
 
-
 ## [2026-11-01]
+
 ### Added
+
 - **Pawchive metadata adapter (Bead `data-processing-629`, change
   `add-pawchive-metadata-adapter`)** — first-class anonymous metadata support for
   pawchive.pw, the kemono API family's only maintained instance (per the
@@ -384,9 +400,10 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
-
 ## [2026-10-31]
+
 ### Added
+
 - **KohakuGBC evaluated on the local stack (Bead `data-processing-dhb`)** —
   `docs/plans/kohakugbc-evaluation.md`: 12 maintainer-selected images through the GBC program
   with the VLM on llama-swap (`llama.cpp` flavour) and detectors on the RTX 3090 — OWLv2 pass
@@ -427,9 +444,10 @@ Rules:
   coomer.su are dead or stale by months to a year, so a future adapter ships pawchive
   alone); nothing built.
 
-
 ## [2026-10-30]
+
 ### Added
+
 - **Togeari architectural investigation recorded (Bead `data-processing-164`)** —
   `docs/plans/togeari-investigation.md`: the out-of-order KIR machine mapped (lanes, engine
   contract B1–B7, dual Python/Rust cores, replay conformance), the bead's engineering-idea
@@ -439,10 +457,10 @@ Rules:
   the catalog runs today; the kernel bookkeeping boundary stands. Revisit trigger: the
   KohakuGBC evaluation (`dhb`) revealing a concrete pipeline need.
 
-
-
 ## [2026-10-29]
+
 ### Added
+
 - **Sankaku metadata adapter (Bead `data-processing-4ly`, change
   `add-sankaku-metadata-adapter`)** — new provider family speaking Sankaku's API v2
   (live-verified host `sankakuapi.com`; the historical `capi-v2` host refuses this client):
@@ -458,9 +476,10 @@ Rules:
   plus a `rating:g` keyset page), scanned for login/password/token before commit. Typed
   per-post tag fetching, notes, pools, and the Idol instance remain deferred.
 
-
 ## [2026-10-28]
+
 ### Fixed
+
 - **Gelbooru dapi note contract verified live: XML, not JSON (Bead `data-processing-r4y`)** —
   a credentialed capture of the dapi note index (`s=note`) shows the endpoint serves XML
   regardless of `json=1`, disproving the synthetic JSON-wrapper fixture; post 953320 carries no
@@ -471,6 +490,7 @@ Rules:
   capture utility gained `capture_gelbooru_dapi_notes`.
 
 ### Added
+
 - **Crop-matching next-experiment direction recorded (Bead `data-processing-qi7`)** —
   maintainer guidance appended to `docs/plans/matching-crop-resistant-evaluation.md`: SIFT +
   RANSAC first (ORB deprioritized; learned features only if SIFT struggles; custom tiled
@@ -491,6 +511,7 @@ Rules:
   stays deferred until credentials allow a live capture.
 
 ### Added
+
 - **Replay-stamp repair (Bead `data-processing-3qq`)** — `scripts/repair_replay_stamps.py`
   (dry-run by default) repairs the damage the 2026-10-08 pre-fix reprocess runs left: fact rows
   whose timestamp equals a reprocess run's `started_at` with an identical-facts earlier twin are
@@ -500,9 +521,10 @@ Rules:
   2 accounts) are recomputed from the surviving history. Verified end to end on a copy of the
   real catalog: zero replay-stamped rows remain anywhere, foreign keys clean, originals restored.
 
-
 ## [2026-10-26]
+
 ### Added
+
 - **Source-scoped anchorless identity + repair path (Bead `data-processing-7o0`; OpenSpec change
   `source-scoped-anchorless-identity`)** — migration 0019 replaces 0018's anchorless partial
   unique indexes with platform-scoped ones: byte-identical payloads from the same source share one
@@ -517,9 +539,10 @@ Rules:
   cross-platform), which then migrates through 0019 cleanly. A kernel requirement now names the
   identity rule (anchor-scoped or source-scoped content addressing).
 
-
 ## [2026-10-25]
+
 ### Added
+
 - **Endpoint-kind generalization decided: conscious deferral (Bead `data-processing-9h6`,
   non-media-consumer spike F3)** — `ENDPOINT_KINDS` stays media-closed until a non-media
   family needs typed linking; when it does, the vocabulary extends by addition, never via a
@@ -533,6 +556,7 @@ Rules:
   in the thumbnail seeder.
 
 ### Changed
+
 - **Per-source remote-run operation registry (Bead `data-processing-6y1`,
   non-media-consumer spike F2)** — `RemoteRunRecord` now validates its operation against
   `SOURCE_OPERATIONS`, a per-platform registry: shipped media platform keys map to the shared
@@ -553,9 +577,10 @@ Rules:
   byte-identical re-intake resolves to the earliest observation instead of appending duplicates;
   anchored rows keep the pre-existing identity.
 
-
 ## [2026-10-24]
+
 ### Added
+
 - **Crop-resistant hashing evaluated — negative result (Bead `data-processing-qi7`, remaining
   scope)** — the established library's segmentation-based `crop_resistant_hash` was added to the
   matching-spike harness and measured over the full fixture set: crops land inside the negative
@@ -593,9 +618,10 @@ Rules:
   gelbooru dapi note fixture is synthetic per the documented shape pending a credentialed capture
   (follow-up bead). Default sync paths are untouched.
 
-
 ## [2026-10-23]
+
 ### Added
+
 - **Danbooru-family pool collection (Bead `data-processing-cq0`; OpenSpec change
   `add-danbooru-pool-collection`)** — `mcat metadata danbooru-pool` (and `aibooru-pool`) fetches a
   single pool by id under the bounded run contract and records its provider-declared membership
@@ -631,9 +657,10 @@ Rules:
   duplicates observation rows under a NULL identity key. Follow-ups filed as beads
   `data-processing-6y1`, `data-processing-40x`, `data-processing-9h6`.
 
-
 ## [2026-10-21]
+
 ### Added
+
 - **Temporal as-of semantics named and first surface landed (Bead `data-processing-2ai`;
   OpenSpec change `add-as-of-semantics`; GitHub issue #7)** — the five-timestamp vocabulary
   (source observation, provider-claimed, acquisition, interpretation, review) is mapped to
@@ -646,7 +673,6 @@ Rules:
   histories. No schema changes, no event-sourcing layer; follow-on surfaces (as-of on
   current-column kinds, change reports, timelines) tracked on the bead.
 
-
 - **Per-field source export projection (Bead `data-processing-1oi`, final slice; OpenSpec
   change `per-field-source-export`; GitHub issue #6)** — the `post-field-sources` kind emits
   one row per post with retained metadata observations, carrying every observed field's
@@ -656,7 +682,6 @@ Rules:
   posts without retained observations and limit overflow are excluded with counted reasons.
   Offline, read-only, manifest/digest contracts unchanged. This closes bead 1oi: framework,
   assets/posts/works/attribution-disagreements/post-field-sources kinds all delivered.
-
 
 ### Added
 
@@ -672,8 +697,8 @@ Rules:
   counted reasons. Offline, read-only, report-only; rides the existing manifest and digest
   contracts unchanged.
 
-
 ## [2026-10-18]
+
 ### Added
 
 - **Confirmed candidates materialize into relationships (Bead `data-processing-zaf`;
@@ -691,8 +716,8 @@ Rules:
   status moves to `reviewed` with the prior status retained in history, and an
   already-confirmed row gains only the new evidence.
 
-
 ## [2026-10-16]
+
 ### Added
 
 - **`parent_of` joins the deterministic relationship seeder (Bead `data-processing-zaf`
@@ -729,8 +754,8 @@ Rules:
   migration 0015) and names the remaining `post_relations` absorption decision, replacing
   the stale "not built" / "partial, scattered" rows.
 
-
 ## [2026-10-09]
+
 ### Added
 
 - **Export projections: bounded, reproducible JSONL/CSV views over the evidence layer (Bead
@@ -749,8 +774,8 @@ Rules:
   and exports are bounded with `excluded_by_limit` reporting. Remaining on the bead:
   attribution-disagreement report, per-field source exports, variant-family grouping (Phase D).
 
-
 ## [2026-10-08]
+
 ### Fixed
 
 - **Reprocess review fixes: source observation time and schema-drift planning (Bead
@@ -794,8 +819,8 @@ Rules:
   runs recorded. Retained lookup responses and import raws have no metadata-operation
   linkage and stay out of scope.
 
-
 ## [2026-10-07]
+
 ### Added
 
 - **Pixiv engagement totals normalize (Bead `data-processing-cyp`, partial; OpenSpec change
@@ -830,8 +855,8 @@ Rules:
   `verified_md5` lookup planning exactly like a recorded post — requirement 1's non-recorded
   half now works end to end with innate image metadata preferred, per the decided design.
 
-
 ## [2026-10-06]
+
 ### Added
 
 - **Non-recorded items gain a materialize-a-seed entry point (Bead `data-processing-8b2`,
@@ -860,8 +885,8 @@ Rules:
   works; Grabber's JSON path only refuses generic favorites syntax. Requirements 1 and 2
   are no longer blocked for gelbooru.
 
-
 ## [2026-10-05]
+
 ### Added
 
 - **Danbooru-family post and artist fact normalization catches up (Bead
@@ -942,8 +967,8 @@ Rules:
   evidence only: catalog hashes remain identification metadata, and no similarity
   mechanism enters a product surface unless a generic, evidence-backed one is proven.
 
-
 ## [2026-10-04]
+
 ### Added
 
 - **The audit-immutability sweep is completed (Bead `data-processing-5de`)** — migration 0013
@@ -984,8 +1009,8 @@ Rules:
   `data-processing-t08`) and the supervised matching research spike, which gates only fuzzy
   matcher proposals and is rescoped to its own lower-priority bead (`data-processing-8nj`, P3).
 
-
 ## [2026-10-03]
+
 ### Added
 
 - **The reviewed-target workflow lands (kernel Phase C)** — OpenSpec change
@@ -1049,8 +1074,8 @@ Rules:
 - **The media catalog plan is annotated** as the media-family domain plan under the kernel framing;
   its vocabulary remains authoritative for the media family.
 
-
 ## [2026-10-02]
+
 ### Added
 
 - **The Gelbooru OpenSpec change is archived with specs synced** — the 10 delta requirements were
@@ -1169,8 +1194,8 @@ Rules:
   and one — sample-versus-original dimensions — was already handled by preferring the `Size:`
   statistic.
 
-
 ## [2026-10-01]
+
 ### Added
 
 - **The Gelbooru schema audit proves the neutral schema needs no migration** — a fixture-driven
@@ -1239,8 +1264,8 @@ Rules:
   public signatures as explicit delegations on the caller's shared transaction; the root-upsert
   compatibility alias is preserved.
 
-
 ## [2026-09-30]
+
 ### Added
 
 - **Catalog persistence gains an internal shared-support package** — `media_catalog.persistence`
@@ -1262,8 +1287,8 @@ Rules:
 - **Agent instruction files corrected** — quality-gate examples in CLAUDE.md and AGENTS.md now
   reference the `media_catalog/records` package instead of the removed single-module path.
 
-
 ## [2026-08-13]
+
 ### Added
 
 - **e621 metadata can be synchronized through the catalog** — added a native adapter for bounded
@@ -1296,8 +1321,8 @@ Rules:
   record, and time boundaries now stop unadmitted work before the next provider call, including
   tag and alias pages, while retaining committed checkpoints for safe restart.
 
-
 ## [2026-08-12]
+
 ### Added
 
 - **Reviewed or explicitly selected artists can seed bounded library expansion** — added offline
@@ -1324,8 +1349,8 @@ Rules:
 - **Managed asset code now has a cohesive package layout** — moved content-addressed storage mechanics, local-file adoption, integrity verification, and read-only inspection into `media_catalog.storage` while keeping remote downloads under the separate acquisition boundary.
 - **Remote page execution now has a reusable bounded loop** — metadata synchronization and candidate lookup share request, retention, normalization, commit, continuation, and budget semantics without coupling provider adapters to catalog persistence.
 
-
 ## [2026-08-11]
+
 ### Added
 
 - **Selected remote media can be acquired into verified managed storage** — added explicit planning and execution, provider-aware request policy, resumable bounded transfers, exact hashing, inspection, quarantine, CAS publication, occurrence linking, and durable run and attempt history.
@@ -1335,8 +1360,8 @@ Rules:
 
 - **Declared provider metadata remains distinct from locally verified facts** — acquisition preserves both claims and their provenance, and media browsing reports eligibility and linked assets without exposing remote URLs, credentials, raw payloads, or private paths.
 
-
 ## [2026-08-10]
+
 ### Added
 
 - **Existing local media can be adopted into a content-addressed store** — added safe offline planning and execution, descriptor-relative path handling, SHA-256 and MD5 verification, raster inspection, versioned perceptual hashes, atomic publication, exact deduplication, reconciliation, and durable per-file outcomes.
@@ -1347,8 +1372,8 @@ Rules:
 
 - **Legacy X media paths are occurrence-level provenance rather than managed storage** — imported paths remain non-owning source references until their bytes pass the catalog-owned adoption and verification workflow.
 
-
 ## [2026-08-09]
+
 ### Added
 
 - **Offline cross-platform discovery turns retained links into reviewable evidence** — added extraction and canonicalization for profile and post URLs, typed platform references, unresolved-link retention, account and post candidates, deterministic evidence scores, and append-only review history.
@@ -1362,28 +1387,28 @@ Rules:
 
 - **URL aliases no longer replace semantic platform-reference associations** — normalized links and references use many-to-many persistence, identifier kinds distinguish stable IDs from handles, slugs, hashes, and opaque values, and mutable X handles cannot materialize identities by themselves.
 
-
 ## [2026-08-05]
+
 ### Added
 
 - **A platform-neutral media catalog now complements the X-specific tool** — added a migration-managed SQLite model for platforms, accounts and snapshots, posts, observations, media occurrences, assets, raw records, and import provenance together with initialization, integrity, statistics, and search commands.
 - **Existing X likes and xarchive bookmarks can be imported idempotently** — added immutable-source importers that preserve likes and bookmarks as distinct observations, retain unknown provider data, reconcile overlapping exports, and report inserted, updated, existing, skipped, and failed counts.
 - **The customized xarchive utility is maintained in-tree** — incorporated the locally extended bookmark parser as repository-owned code for stable bookmark JSON production and integration.
 
-
 ## [2026-08-04]
+
 ### Added
 
 - **Each repository tool has a dedicated usage guide** — added the documentation index and a detailed `x-likes` guide covering setup, archive import, enrichment, optional media downloads, hashing, output, and operational caveats.
 
-
 ## [2026-08-03]
+
 ### Changed
 
 - **X enrichment retains more accurate saved account and post information** — expanded provider normalization and database updates while preserving unavailable records and improving repeated enrichment behavior.
 
-
 ## [2026-08-02]
+
 ### Added
 
 - **The first local-first tool imports and enriches X likes** — added archive parsing, SQLite persistence, provider enrichment, optional image downloading, MD5, SHA-256 and perceptual hashing, CLI commands, and focused tests under `x_likes`.
