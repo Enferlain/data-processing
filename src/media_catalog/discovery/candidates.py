@@ -28,7 +28,22 @@ class CandidateGenerator:
                FROM platform_references WHERE platform_reference_id = ?""",
             (reference_id,),
         ).fetchone()
-        if occurrence.subject_kind == "account" and reference["object_kind"] == "account":
+        if occurrence.subject_kind == "attribution" and reference["object_kind"] == "account":
+            # A recognized artist-record URL asserts the artist claims this
+            # account identity; the target may or may not be a known account.
+            self.upsert(
+                "attribution",
+                occurrence.subject_id,
+                reference_id,
+                reference["resolved_account_id"],
+                "same_identity",
+                observation_id,
+                now,
+                extractor_version=extractor_version,
+                scoring_version=scoring_version,
+                target_kind="account",
+            )
+        elif occurrence.subject_kind == "account" and reference["object_kind"] == "account":
             if reference["identifier_kind"] != "stable_id":
                 return
             if reference["resolved_account_id"] == occurrence.subject_id:
@@ -71,7 +86,9 @@ class CandidateGenerator:
         *,
         extractor_version: str,
         scoring_version: str,
+        target_kind: str | None = None,
     ) -> None:
+        target_column = f"target_{target_kind or kind}_id"
         semantic_reference = self.connection.execute(
             """SELECT platform_id, instance_host, object_kind, identifier_kind, native_identifier
                FROM platform_references WHERE platform_reference_id = ?""",
@@ -99,7 +116,6 @@ class CandidateGenerator:
         table = f"{kind}_match_candidates"
         id_column = f"{kind}_candidate_id"
         subject_column = f"subject_{kind}_id"
-        target_column = f"target_{kind}_id"
         legacy_candidate = self.connection.execute(
             f"SELECT {id_column} FROM {table} WHERE candidate_key = ?",
             (legacy_key,),

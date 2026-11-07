@@ -157,6 +157,15 @@ Rules:
 ## [2026-11-05]
 
 ### Added
+- **Attribution candidates complete the artist identity bridge (Bead
+  `data-processing-s1j`)** — a recognized artist-record URL now becomes a
+  reviewable `attribution_match_candidates` row (migration `0029`, mirroring
+  the account candidate tables): subject is the attribution entity, target
+  the recognized account reference, relation `same_identity`, evidence the
+  provider's own listing. Live on d-rex: two pending candidates (`x:
+  d_rex_art`, `x: d_rex_too`) reviewable through the generic
+  `matches`/`match-show`/`match-review` surfaces via `attribution:ID` refs.
+
 - **Attribution URLs feed the recognized link graph (Bead
   `data-processing-9er`)** — artist-record URLs persisted by attribution
   fetches were opaque strings in `attribution_urls`, never canonicalized or

@@ -96,7 +96,9 @@ bounded resolution state instead of being guessed. Repeating discovery is safe: 
 references, candidates, and evidence use stable identities, while each run retains its own counts.
 Distinct URL aliases remain attached to the same semantic reference instead of replacing one
 another. Link output includes `identifier_kind`: `stable_id` values may support matching, while
-mutable `handle` or `slug` values and `hash`/`opaque` identifiers remain typed reference evidence.
+mutable `handle` or `slug` values and `hash`/`opaque` identifiers remain typed reference evidence —
+except as attribution candidates: an artist-record URL recognizing to a handle creates a reviewable
+`attribution:ID` candidate (artist claims that account identity) without materializing an account.
 
 ## Inspect and review matches
 

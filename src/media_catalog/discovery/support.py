@@ -15,7 +15,7 @@ def digest(*values: object) -> str:
 
 def parse_match_ref(value: str) -> tuple[str, int]:
     kind, separator, raw_id = value.partition(":")
-    if not separator or kind not in {"account", "post"} or not raw_id.isdigit():
+    if not separator or kind not in {"account", "attribution", "post"} or not raw_id.isdigit():
         raise ValueError(f"invalid candidate reference: {value}")
     return kind, int(raw_id)
 

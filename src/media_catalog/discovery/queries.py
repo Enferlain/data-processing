@@ -62,10 +62,10 @@ class DiscoveryQueries:
     def candidates(self, *, kind: str | None = None, state: str | None = None) -> dict[str, object]:
         if state is not None:
             validate_review_state(state)
-        kinds = (kind,) if kind else ("account", "post")
+        kinds = (kind,) if kind else ("account", "attribution", "post")
         results: list[dict[str, Any]] = []
         for selected in kinds:
-            if selected not in {"account", "post"}:
+            if selected not in {"account", "attribution", "post"}:
                 raise ValueError(f"unsupported candidate kind: {selected}")
             table = f"{selected}_match_candidates"
             id_column = f"{selected}_candidate_id"

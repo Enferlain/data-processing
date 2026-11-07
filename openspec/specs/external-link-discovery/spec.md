@@ -59,8 +59,14 @@ recognize.
 
 #### Scenario: Recognize a mutable X handle
 - **WHEN** a canonical URL identifies an X account only by its handle
-- **THEN** discovery records a handle-kind account reference that remains ineligible for identity
-  matching or account materialization until a stable provider account ID is known
+- **THEN** discovery records a handle-kind account reference that remains ineligible for
+  account-to-account identity matching or account materialization until a stable provider
+  account ID is known
+
+#### Scenario: Artist record lists a handle URL
+- **WHEN** an attribution entity's recognized account URL resolves to a handle-kind reference
+- **THEN** discovery may create an attribution candidate asserting the artist claims that
+  account identity, while account materialization still requires a stable provider account ID
 
 #### Scenario: Recognize a Danbooru-family object
 - **WHEN** a canonical URL identifies a supported Danbooru-family post or artist record

@@ -41,7 +41,7 @@ def register(commands: argparse._SubParsersAction) -> None:
     add_json(links)
     matches = commands.add_parser("matches")
     matches.add_argument("catalog", type=Path)
-    matches.add_argument("--kind", choices=("account", "post"))
+    matches.add_argument("--kind", choices=("account", "attribution", "post"))
     matches.add_argument("--state", choices=("pending", "confirmed", "rejected"))
     add_json(matches)
     show = commands.add_parser("match-show")
