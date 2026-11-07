@@ -89,6 +89,10 @@ def _danbooru_family(
     del query
     platform = _DANBOORU_HOST_PLATFORMS[host]
     segments = [segment for segment in path if segment not in {"en", "ja"}]
+    # Legacy /post/show/<id> pages still resolve to the same post identity
+    # as /posts/<id> (the link recognizer already accepts both).
+    if segments[:2] == ["post", "show"] and len(segments) == 3:
+        segments = ["posts", segments[2]]
     kind = segments[0] if segments else ""
     if kind != "posts" or len(segments) != 2:
         _fail(url, f"expected /posts/<id> on {host}")
@@ -108,6 +112,8 @@ def _e621_family(url: str, host: str, path: list[str], query: dict[str, list[str
     del query
     platform = _E621_HOST_PLATFORMS[host]
     segments = [segment for segment in path if segment not in {"en"}]
+    if segments[:2] == ["post", "show"] and len(segments) == 3:
+        segments = ["posts", segments[2]]
     if len(segments) != 2 or segments[0] != "posts":
         _fail(url, f"expected /posts/<id> on {host}")
     post_id = _post_id(segments[1].removesuffix(".json"))

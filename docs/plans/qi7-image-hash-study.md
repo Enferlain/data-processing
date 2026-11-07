@@ -84,3 +84,52 @@ at or under 1.7% everywhere except blockhash@8.
 - Attribution URL links did not materialize into `account_external_links`
   (0 rows) — the link pass recognized 3,193 links but artist-record URLs
   need an account to attach to; noted as an identity-flow gap.
+
+
+## Study 2 (2026-11-07): the operator's test-list corpus
+
+`docs/plans/test_list.md` — three cross-platform groups; group 3 carries the
+operator's structure note: "3 variations, one the same with and without
+text, one different from the other 2". Six originals downloaded through the
+catalog (gelbooru x5, e621 x1; danbooru copies rate-limited that day, pixiv
+needs auth, baraag unregistered — noted, not blocking: the gelbooru/e621
+files carry the same bytes).
+
+### Results (gradient@16 shown; all six methods agree in shape)
+
+| Pair class | Distances |
+|---|---|
+| Cross-platform identical (g2: gelbooru↔e621) | **0.0%** everywhere |
+| Group-3 variants (the hard middle band) | 1.6–12.5% across methods; gradient@16 pairwise 4.3% / 5.1% / **9.4%** |
+| Between-group (different artworks) | ≥ 37.5% (means ~45%) |
+| Same-artist negatives (d-rex, study 1) | ≥ 29.7% (means ~50%) |
+
+Group-3 detail matches the operator's note: the two text-variation pairs sit
+at 4.3%/5.1% and the structurally-different pair is the outlier at 9.4% —
+the hashes see the same variation structure a human sees.
+
+### Tier calibration evidence
+
+The three bands are cleanly separated for **every** method and size:
+
+- **certain**: distance ≲ 2% (cross-platform identical copies, trivial
+  re-encodes) — auto-confirmable evidence strength `strong`/`exact`
+- **uncertain**: ~2–15% (text overlays, small edits, variations) — review
+  queue, evidence `moderate`
+- **no match**: ≳ 25% — nothing between 12.5% and 29.7% was observed in
+  either study; the gap is wide enough that a 20% cutoff has margin on both
+  sides
+
+Same-artist lookalikes still produce zero near-misses at this corpus size.
+The calibration is now grounded in operator-labeled truth; the remaining
+limitation is breadth (3 artists, ~14 images), not structure.
+
+### Operator review loop (process note)
+
+The recursive process the operator described — fetch metadata, look at
+images, label related/unrelated *and in what way*, use labels to improve
+heuristics — is the existing review machinery: candidates + decisions with
+notes are the label store, and this study demonstrates the loop's first full
+cycle (test list → labels → hash distances → tier boundaries). A future
+review-sheet export (pairs with local image paths + relation note field,
+browsable offline) would remove the CLI friction; filed as follow-up.

@@ -154,6 +154,25 @@ Rules:
   migration `0025` rebuilds the table with the check relaxed, and a live-captured
   fixture case (post 6577789: wrapped envelope, negative down) pins the contract.
 
+## [2026-11-07]
+
+### Fixed
+- **Legacy `/post/show/<id>` links resolve (danbooru-family + e621-family)** —
+  the operator's test list uses danbooru's old route; the link recognizer
+  already accepted both path shapes but the fetch resolver did not, so
+  `catalog fetch` rejected them. Both families now normalize `/post/show/N`
+  to the same identity as `/posts/N`, pinned by test.
+
+### Changed
+- **qi7 study 2: tier calibration grounded in labeled truth** — the
+  operator's three-group test list (including a with/without-text variation
+  set) populates the middle band the two-threshold design needed:
+  cross-platform identical files hash at 0%, text/variation pairs at
+  1.6–12.5% (matching the operator's own structure note), different
+  artworks never below 37.5%, same-artist negatives never below 29.7%.
+  Certain ≲2% / uncertain 2–15% / no-match ≳25% now has labeled evidence
+  behind it. Details in `docs/plans/qi7-image-hash-study.md`.
+
 ## [2026-11-05]
 
 ### Added

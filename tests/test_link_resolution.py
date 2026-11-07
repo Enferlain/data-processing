@@ -239,3 +239,17 @@ def test_fetch_failed_sync_exits_nonzero(
     assert raised.value.code == 2
     # The failure is still rendered before the nonzero exit.
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+def test_legacy_post_show_paths_resolve() -> None:
+    """Danbooru-family and e621-family legacy /post/show/<id> pages (used in
+    the operator's test list) resolve to the same identity as /posts/<id>."""
+    from media_catalog.link_resolution import resolve_link
+
+    for url, platform, target in (
+        ("https://danbooru.donmai.us/post/show/9714844", "danbooru", "9714844"),
+        ("https://e621.net/post/show/5433323", "e621", "5433323"),
+    ):
+        resolved = resolve_link(url)
+        assert (resolved.platform, resolved.target) == (platform, target)
+        assert resolved.canonical_url.endswith(f"/posts/{target}")
