@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from urllib.parse import SplitResult, urljoin, urlsplit
 
+from media_catalog.adapters.danbooru.config import DANBOORU_USER_AGENT
 from media_catalog.adapters.e621.config import E621_USER_AGENT
 
 
@@ -311,9 +312,6 @@ class SankakuMediaPolicy(MediaRequestPolicy):
     response_expectations = ResponseExpectations(("image/", "video/", "application/octet-stream"))
 
 
-DANBOORU_MEDIA_USER_AGENT = "data-processing-tools/0.1 (metadata-only catalog)"
-
-
 class DanbooruMediaPolicy(MediaRequestPolicy):
     def __init__(
         self,
@@ -340,7 +338,7 @@ class DanbooruMediaPolicy(MediaRequestPolicy):
         self.headers = MappingProxyType(
             {
                 "Referer": f"https://{base_host}/",
-                "User-Agent": DANBOORU_MEDIA_USER_AGENT,
+                "User-Agent": DANBOORU_USER_AGENT,
             }
         )
         self.response_expectations = ResponseExpectations(

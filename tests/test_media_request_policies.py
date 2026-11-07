@@ -495,7 +495,7 @@ def test_danbooru_family_sends_identifying_user_agent() -> None:
     """Danbooru's CDN enforces the site bot policy: browser and library
     default User-Agents get 403 and only a descriptive custom agent with the
     site Referer is served (live matrix 2026-11-08: default-ua 403, browser
-    403, custom 'data-processing-tools/1.0'-style agent 200)."""
+    403, custom 'data-processing-tools/0.1' agent 200)."""
     cases = (
         (DANBOORU_MEDIA_POLICY, "https://cdn.donmai.us/a.jpg", "https://danbooru.donmai.us/"),
         (AIBOORU_MEDIA_POLICY, "https://cdn.aibooru.download/a.jpg", "https://aibooru.online/"),

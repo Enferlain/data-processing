@@ -21,6 +21,9 @@ ADAPTER_VERSION = "danbooru-native-v2"
 ENUMERATION_VERSION = "library-expansion-v1"
 
 
+DANBOORU_USER_AGENT = "data-processing-tools/0.1 (metadata-only catalog)"
+
+
 @dataclass(frozen=True, slots=True)
 class DanbooruInstance:
     platform_key: str
@@ -28,7 +31,7 @@ class DanbooruInstance:
     schema_version: str
     login_env: str
     api_key_env: str
-    user_agent: str = "data-processing-tools/0.1 (metadata-only catalog)"
+    user_agent: str = DANBOORU_USER_AGENT
     minimum_interval_seconds: float = 1.0
     page_size: int = 200
     lookup_capabilities: LookupCapabilities = field(default_factory=lambda: LookupCapabilities(()))

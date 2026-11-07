@@ -829,6 +829,8 @@ Provider request policies are versioned and fail closed:
 - Rule34 media is restricted to `api-cdn.rule34.xxx`; its DAPI needs credentials but the
   image CDN does not. Safebooru media is served from the `safebooru.org` base host itself.
 
+Every danbooru-family policy additionally sends the catalog's identifying User-Agent
+(`data-processing-tools/0.1 (metadata-only catalog)`), matching the metadata adapters.
 Every redirect hop is manually checked. HTTP, downgrade, user-info, IP-literal, unexpected-port,
 and off-policy destinations are rejected before requesting them. Credential values, cookies,
 authorization headers, signed query values, and rendered request URLs are excluded from acquisition
