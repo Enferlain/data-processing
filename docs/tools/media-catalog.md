@@ -1013,6 +1013,36 @@ scope. Generic filtered counts, cross-database alias mapping, Gelbooru support, 
 fuzzy search remain future work. Live e621 smoke tests are disabled by default and are not required
 for offline operation.
 
+## Back up and restore the catalog
+
+`catalog backup` takes an online, consistent snapshot via SQLite `VACUUM INTO` — safe while other
+processes (the labeling server, a discovery run) hold the catalog open, committed WAL frames
+included. Each backup is a timestamped file plus a JSON manifest recording the schema version,
+per-table row counts, the managed-root registry (identities, location counts, byte totals), and
+the backup file's SHA-256. Media bytes are not copied: roots are content-addressed and
+operator-managed; keep separate copies of media trees.
+
+```bash
+uv run catalog backup catalog-output/catalog.sqlite3 --keep 5 --json
+uv run catalog restore catalog-output/catalog-backups/20261108T164315Z.sqlite3 \
+   --to /tmp/recovered.sqlite3 --verify --json
+uv run catalog restore catalog-output/catalog-backups/20261108T164315Z.sqlite3 \
+   --to /tmp/recovered.sqlite3 --verify --media-root /private/catalog-media --json
+```
+
+The default destination is `<catalog-stem>-backups/` beside the catalog; `--dest` overrides it and
+`--keep N` prunes the oldest complete backups beyond N (never the newest verified one). Restore is
+verify-first: the manifest digest must match before anything is written, an existing target needs
+`--force`, `--verify` runs `integrity_check` plus foreign-key checks and compares row counts to the
+manifest, and each `--media-root` re-verifies that tree against the restored catalog through the
+asset verifier (restore = re-verify fingerprints). A tampered backup is refused by digest before
+any target file appears.
+
+`catalog doctor` reports backup state from the conventional directory: no backups is reported
+neutrally, but the latest backup whose digest no longer matches fails the doctor — that is the
+recovery path silently rotting.
+
+
 ## Recovery and reconciliation
 
 - A malformed import rolls back normalized records, records a failed import run, and retains a

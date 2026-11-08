@@ -17,6 +17,15 @@ Rules:
 
 ### Added
 
+- **`catalog backup` / `catalog restore --verify` (Bead `data-processing-dbq`, roadmap P0.5)** —
+  online consistent catalog snapshots via SQLite `VACUUM INTO` (safe under active WAL writers
+  such as the labeling server) into a timestamped file plus a self-describing manifest (schema
+  version, row counts, managed-root registry, SHA-256). Restore is verify-first: digest check
+  before any write, `--force` for existing targets, `--verify` integrity/foreign-key/row-count
+  checks, and `--media-root` re-verifies media trees through the asset verifier. `--keep N`
+  retention never prunes the newest verified backup, and `catalog doctor` now reports backup
+  state — neutral when absent, failing when the latest backup's digest drifts. No schema change;
+  backups are sidecar files.
 - **Discovery search policy, freshness ledger, and run transparency (Bead `data-processing-19p`)** —
   `catalog discover` now obeys an explicit search policy and remembers what was searched.
   Executed searches land in a durable attempt ledger (migration `0031`) keyed by
