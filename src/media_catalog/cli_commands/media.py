@@ -222,15 +222,23 @@ def _execute_assets(arguments: argparse.Namespace) -> dict[str, object]:
         if not arguments.media_root.is_dir():
             raise ValueError("managed media root must be an existing directory")
         limits = acquisition_limits(arguments)
-        preview = plan_acquisition(
-            arguments.catalog,
-            parse_acquisition_selections(arguments.select),
-            max_items=limits.max_items,
-        )
         inspection = InspectionLimits(
             limits.max_item_bytes, arguments.max_pixels, arguments.max_frames
         )
-        with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+        # Planning reads through the open database's supported snapshot, so
+        # committed WAL frames from a concurrently writing process (e.g. the
+        # labeling server) are planned against instead of rejected; the
+        # explicitly read-only download-plan command keeps its stricter
+        # no-WAL guarantee.
+        with (
+            CatalogDatabase(arguments.catalog) as database,
+            httpx.Client() as client,
+        ):
+            preview = plan_acquisition(
+                database,
+                parse_acquisition_selections(arguments.select),
+                max_items=limits.max_items,
+            )
             result = AcquisitionService(
                 database,
                 HTTPTransferEngine(client),

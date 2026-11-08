@@ -16,6 +16,7 @@ from typing import Any
 
 from media_catalog.database import CatalogDatabase
 from media_catalog.records import RelationshipRecord
+from media_catalog.relationships.materialize import ensure_work_anchor
 from media_catalog.writer import CatalogWriter
 
 # Candidate relation kind -> (relationship kind, endpoint altitude).
@@ -39,7 +40,9 @@ class MaterializationItem:
         }
 
 
-def _resolve(connection: Any, row: Any) -> tuple[str, int, str, str, int] | None:
+def _resolve(
+    writer: CatalogWriter, connection: Any, row: Any, now: str
+) -> tuple[str, int, str, str, int] | None:
     """Subject kind/id, relationship kind, target kind/id — or None when unusable."""
 
     subject_post = int(row["subject_post_id"])
@@ -49,21 +52,14 @@ def _resolve(connection: Any, row: Any) -> tuple[str, int, str, str, int] | None
     kind = row["relation_kind"]
     if kind in _POST_LEVEL:
         return "post", subject_post, _POST_LEVEL[kind], "post", target_post
-    subject_work = connection.execute(
-        "SELECT work_id FROM works WHERE origin_post_id = ?", (subject_post,)
-    ).fetchone()
-    target_work = connection.execute(
-        "SELECT work_id FROM works WHERE origin_post_id = ?", (target_post,)
-    ).fetchone()
+    # Work-level kinds resolve through the posts' deterministic work anchors;
+    # a missing anchor for a post with occurrences is ensured lazily so the
+    # works-materialize ordering never gates relationship materialization.
+    subject_work = ensure_work_anchor(writer, connection, subject_post, now)
+    target_work = ensure_work_anchor(writer, connection, target_post, now)
     if subject_work is None or target_work is None:
         return None
-    return (
-        "work",
-        int(subject_work[0]),
-        _WORK_LEVEL[kind],
-        "work",
-        int(target_work[0]),
-    )
+    return "work", subject_work, _WORK_LEVEL[kind], "work", target_work
 
 
 def materialize_candidates(
@@ -111,7 +107,7 @@ def _materialize_one(
     kind = row["relation_kind"]
     if kind == "unresolved":
         return MaterializationItem(candidate_id, "refused", "unresolved_relation_kind", None)
-    resolved = _resolve(connection, row)
+    resolved = _resolve(writer, connection, row, now)
     if resolved is None:
         if row["target_post_id"] is None:
             return MaterializationItem(candidate_id, "refused", "target_reference_unresolved", None)

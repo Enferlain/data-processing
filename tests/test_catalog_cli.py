@@ -1285,6 +1285,95 @@ def test_download_plan_and_run_queries_are_redacted_and_network_free(
     assert shown["status"] == "failed"
 
 
+def test_selected_download_plans_against_committed_wal_frames(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A selected download must plan against committed WAL state (bead 818).
+
+    The labeling server keeps WAL frames flowing; the mutating download
+    command plans through the open database's supported snapshot instead of
+    the path-based read-only open that refuses any WAL frames.
+    """
+    import media_catalog.cli_commands.media as media_module
+
+    catalog = tmp_path / "private" / "catalog.sqlite3"
+    with CatalogDatabase(catalog) as database, database.transaction():
+        platform_id = int(
+            database.connection.execute(
+                "SELECT platform_id FROM platforms WHERE platform_key = 'pixiv'"
+            ).fetchone()[0]
+        )
+        post_id = int(
+            database.connection.execute(
+                """INSERT INTO posts (
+                       platform_id, native_post_id, first_seen_at, last_seen_at
+                   ) VALUES (?, 'wal-download-cli', '2026-08-10T00:00:00Z',
+                             '2026-08-10T00:00:00Z')""",
+                (platform_id,),
+            ).lastrowid
+        )
+        database.connection.execute(
+            """INSERT INTO media_occurrences (
+                   post_id, source_key, media_index, media_type, remote_url,
+                   availability, observed_at
+               ) VALUES (?, 'wal:p0', 0, 'image/png',
+                         'https://i.pximg.net/wal.png', 'available',
+                         '2026-08-10T00:00:00Z')""",
+            (post_id,),
+        )
+
+    # A second live connection holds committed WAL frames open, exactly like
+    # the labeling server writing while a download is requested.
+    labeler = sqlite3.connect(catalog)
+    try:
+        labeler.execute("PRAGMA journal_mode=WAL")
+        labeler.execute(
+            "UPDATE posts SET last_seen_at = '2026-11-08T00:00:00Z'"
+            " WHERE native_post_id = 'wal-download-cli'"
+        )
+        labeler.commit()
+        assert Path(f"{catalog}-wal").exists()
+
+        captured: dict[str, object] = {}
+
+        class FakeAcquisitionService:
+            def __init__(self, database, engine, media_root, *, inspection_limits=None):
+                pass
+
+            def execute(self, preview, limits):
+                captured["preview"] = preview
+
+                class Result:
+                    def as_dict(self):
+                        return {"status": "complete", "counts": {"planned": 1}}
+
+                return Result()
+
+        monkeypatch.setattr(media_module, "AcquisitionService", FakeAcquisitionService)
+        media_root = tmp_path / "media"
+        media_root.mkdir()
+        main(
+            [
+                "assets",
+                "download",
+                str(catalog),
+                "--media-root",
+                str(media_root),
+                "--select",
+                "1:primary",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["status"] == "complete"
+        preview = captured["preview"].as_dict()
+        assert preview["counts"]["eligible"] == 1
+    finally:
+        labeler.close()
+
+
 def test_media_browser_is_offline_redacted_and_feeds_download_planning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

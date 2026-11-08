@@ -233,6 +233,46 @@ def test_confirmed_candidates_materialize_with_provenance(tmp_path: Path) -> Non
         assert _snapshot(c) == before
 
 
+def test_confirmed_work_candidates_materialize_without_works_first(
+    tmp_path: Path,
+) -> None:
+    """Relationship materialization must not depend on works order (bead e2l).
+
+    A confirmed same_work candidate materializes with the posts' work anchors
+    ensured lazily under the same deterministic rule; running works
+    materialization afterwards finds everything existing and idempotent.
+    """
+
+    catalog = tmp_path / "catalog.sqlite3"
+    ids = _seed(catalog)
+    with CatalogDatabase(catalog) as database:
+        result = materialize_candidates(database, clock=lambda: NOW)
+
+    by_candidate = {item["candidate_id"]: item for item in result["results"]}
+    same_work = by_candidate[ids["same_work_confirmed"]]
+    assert same_work["outcome"] == "materialized", same_work
+    # The occurrence-less target keeps its honest refusal.
+    assert by_candidate[ids["anchor_missing"]]["reason"] == "work_anchor_missing"
+
+    with CatalogDatabase(catalog) as database:
+        works = materialize_works(database, clock=lambda: NOW)
+        relationship = database.connection.execute(
+            """SELECT subject_kind, relation_kind, target_kind, epistemic_status
+                 FROM relationships WHERE relationship_id = ?""",
+            (same_work["relationship_id"],),
+        ).fetchone()
+        anchors = database.connection.execute(
+            "SELECT COUNT(*) FROM works WHERE origin_post_id IN (?, ?)",
+            (ids["4001"], ids["4002"]),
+        ).fetchone()[0]
+    assert tuple(relationship) == ("work", "same_work", "work", "reviewed")
+    assert anchors == 2
+    # Works materialization afterwards creates nothing new: idempotent.
+    assert works["works_created"] == 0
+    assert works["works_existing"] == 2
+    assert works["representations_linked"] == 0
+
+
 def test_rematerialization_is_idempotent_with_evidence_top_up(tmp_path: Path) -> None:
     catalog = tmp_path / "catalog.sqlite3"
     ids = _seed(catalog)

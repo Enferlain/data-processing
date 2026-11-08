@@ -39,6 +39,19 @@ Rules:
   (danbooru/aibooru/gelbooru/rule34/safebooru) now carry the catalog's identifying
   agent alongside the Referer, fixing failed image loads in the labeling UI and the
   acquisition path for danbooru originals.
+- **Selected downloads plan against committed WAL state (Bead `data-processing-818`)** —
+  `catalog assets download` previously planned via the path-based read-only open, which
+  refuses any WAL frames and made ordinary selected downloads fail while the labeling
+  server was writing. The mutating download command now opens the catalog and plans
+  through the supported snapshot, so committed concurrent writes are planned against;
+  the explicitly read-only `download-plan` keeps its stricter no-WAL guarantee.
+- **Relationship materialization no longer requires works-first ordering (Bead
+  `data-processing-e2l`)** — `catalog relationships materialize` refused confirmed
+  work-level candidates with `work_anchor_missing` whenever `catalog works materialize`
+  had not run yet. Work anchors for posts with occurrences are now ensured lazily under
+  the same deterministic rule (kind from occurrence count, representations linked), making
+  the two commands order-independent and idempotent; only a target post with no
+  representations to anchor keeps the refusal.
 
 ## [2026-11-07]
 

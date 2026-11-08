@@ -633,10 +633,13 @@ Confirmed match candidates cross into this model explicitly:
 relationship under a fixed mapping (`sourced_from`/`repost_of` → `reposted_from` between
 the posts; `same_work`/`variant_of`/`derived_from` between the posts' work anchors),
 attaches the candidate's whole evidence bundle, and records a decision naming the
-candidate. Re-running attaches new evidence but never duplicates anything; pending or
-rejected candidates, unresolved kinds, reference-only targets, and missing work anchors
-are refused with typed reasons; matchers and lookups never materialize anything on their
-own:
+candidate. Work anchors for posts with occurrences are ensured lazily under
+the same deterministic rule as `catalog works materialize`, so the two
+commands have no required order; only a target post with no representations
+to anchor is refused (`work_anchor_missing`). Re-running attaches new
+evidence but never duplicates anything; pending or rejected candidates,
+unresolved kinds, and reference-only targets are refused with typed reasons;
+matchers and lookups never materialize anything on their own:
 
 ```bash
 uv run catalog relationships materialize catalog-output/catalog.sqlite3 --json
@@ -819,7 +822,10 @@ Planning opens the current catalog read-only, performs no HTTP request, creates 
 layout, and does not expose rendered/signed media URLs. It reports excluded, already-satisfied, and
 eligible items plus stable policy and target digests. If the selected URL, variant, provider policy,
 source observation, or compatible declared claim changes before execution, the item is recorded as
-stale without making a request.
+stale without making a request. The read-only `download-plan` command refuses a catalog with live
+WAL writers (use a backup); the executing `download` command instead plans through the supported
+snapshot of the open catalog, so committed writes from a concurrently running process — the labeling
+server, say — are planned against, not rejected.
 
 Create a dedicated existing directory for managed media, make a catalog backup, then execute with
 finite limits:
