@@ -9,19 +9,20 @@ answer. Roadmap P0.2 (local and external database discovery) and the stage-2
 design note (`docs/plans/search-indexing-design.md`, bead
 `data-processing-an1`) call for reusable local indexes that are search
 infrastructure — never truth, never copied into the primary catalog.
-
-## What Changes
-
 - **Index registration** (migration `0032`): `search_index_registrations`
   binds a provider-scoped lookup database to a discovery target name, with
-  snapshot revision and private path (`managed_roots.private_path` precedent).
+  snapshot revision and private path (`managed_roots.private_path`
+  precedent). The target name — not the path — is the identity: moving the
+  file and updating the registration preserves search history and freshness.
 - **`lookup-v1` projection** (`media_catalog/search_index/`): our own SQLite
   format (posts/post_sources/post_artists/index_meta with md5/url/artist
   indexes) built from raw provider artifacts — importer for e621's official
-  daily gzipped-CSV DB exports (SHA-256 verified) and for a danbooru metadata
-  snapshot. Raw artifacts are kept beside the projection; the projection is
-  rebuildable, never the only copy.
-- **Discovery integration**: index targets appear as `source_kind='index'`
+  daily gzipped-CSV DB exports (SHA-256 verified). Raw artifacts are
+  retained untouched beside the projection (their path and digest recorded
+  in `index_meta`); the projection is derived and rebuildable. The danbooru
+  snapshot importer is a follow-up task gated on the operator supplying a
+  concrete artifact — e621 alone is the first complete vertical slice.
+- **Discovery integration**: index targets appear as `index`-kind target
   rows in the existing planner/report/ledger — same policy filters, same
   freshness skips, same `--dry-run`/`--search-state` explanations. Index
   steps execute offline (no `--live`, no request budget), ordered before
@@ -31,10 +32,14 @@ infrastructure — never truth, never copied into the primary catalog.
   leads; live sessions feed them into the existing wave-A `fetch_post`
   generation so only the normal fetch pipeline creates catalog facts. A
   zero-result index search records its snapshot and scope.
-- **Teach-on-result**: successful provider fetches and candidate lookups
-  upsert their (post id, md5, sources, artist tags) into the provider's
-  registered index (`origin='api'`); index write failures are logged, never
-  fail the catalog write.
+- **Teach-on-result at the shared post-commit boundary**: every path that
+  persists a provider post — `catalog fetch`, direct metadata sync,
+  candidate lookup, and discovery — writes through the normalized-page
+  persistence layer; its post-commit hook upserts (post id, md5, sources,
+  artist tags) into the provider's registered index (`origin='api'`).
+  Failure-contained: index writes are logged at most as a diagnostic note
+  and can never fail or roll back a catalog write; a no-op when no index is
+  registered.
 - **Maintenance CLI, separate from discovery**: `catalog index register`,
   `catalog index list`, `catalog index import` (offline build from a
   downloaded artifact). Refresh/download strategies stay later slices.

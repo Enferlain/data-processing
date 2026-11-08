@@ -13,14 +13,17 @@ subject × target × method × version × evidence; offline local steps; wave-A
 fetch follow-ups from provider-lookup hits; `--dry-run`/`--search-state`.
 
 ## Goals / Non-Goals
+Goals: registration + lookup-v1 projection + the e621 export importer, index
+read path through the existing planner/executor/ledger, leads table + fetch
+bridge, teach-on-result at the shared normalized-post boundary, maintenance
+CLI.
 
-Goals: registration + lookup-v1 projection + two importers (e621 export,
-danbooru snapshot), index read path through the existing planner/executor/
-ledger, leads table + fetch bridge, teach-on-result, maintenance CLI.
+Non-Goals (later): the danbooru snapshot importer (gated on the operator
+supplying a concrete artifact; e621 is the first complete vertical slice),
+refresh/download automation (`index refresh`, `cid` watermarks, `id_range`
+sync), `artist_identifier` method, iqdb/phash tier-2 and reverse-image
+tier-4 targets, semantic indexes.
 
-Non-Goals (later slices): refresh/download automation (`index refresh`,
-`cid` watermarks, `id_range` sync), `artist_identifier` method, iqdb/phash
-tier-2 and reverse-image tier-4 targets, semantic indexes.
 
 ## Decisions
 
@@ -41,29 +44,41 @@ lookup-v1@def…)".
 
 ### D3 — Registration in the catalog, projection outside it
 
-`search_index_registrations` (migration 0032) holds target name, provider key
-for fetch routing, format, private path, revision mirror, timestamps —
-mirroring `managed_roots` conventions. The projection file lives under the
+`search_index_registrations` (migration 0032) holds the target name, provider
+key for fetch routing, format, private path, revision mirror, timestamps —
+mirroring `managed_roots` conventions. **The target name is the identity**;
+the path is mutable plumbing, so moving the projection and updating the path
+keeps history and freshness intact. The projection file lives under the
 operator's indexes directory; the catalog never stores index rows.
 `discovery_index_hits` (session-scoped leads) is the only new catalog data,
 and only ever holds leads.
 
-### D4 — Import is offline, streamed, atomic
+### D4 — Import is offline, streamed, atomic; artifacts retained untouched
 
 `index import` reads the raw artifact (e621: gzip CSV streamed with bounded
-memory; danbooru: metadata snapshot file), builds a temp projection,
-records `index_meta`, then `os.replace`s into place. Checksum verification
-when supplied; failed import leaves the previous projection untouched.
-Swap atomicity means concurrent sessions see old-or-new, never partial.
+memory), builds a temp projection, records `index_meta` (including the
+artifact's path and digest), then `os.replace`s into place. Checksum
+verification when supplied; failed import leaves the previous projection
+untouched. The artifact itself is never modified or deleted — it is the
+rebuild source; the projection is derived. Swap atomicity means concurrent
+sessions see old-or-new, never partial. The danbooru snapshot importer is a
+follow-up task in this change, gated on the operator supplying a concrete
+artifact; e621 alone is the first complete vertical slice.
 
-### D5 — Teaching is a completion-path hook with failure containment
+### D5 — Teaching at the shared post-commit normalized-post boundary
 
-One function `teach_provider_result(database, provider, post_identity)` is
-called from fetch/lookup step completion in the orchestrator. It opens the
-provider's registered index (if any), upserts with
-`origin='api', last_confirmed_at=now`, and converts any error into a step
-detail note. Catalog transactions are already committed at that point, so
-index writes can never roll back catalog truth.
+Every path that persists a provider post writes through `NormalizedPageWriter`
+(`remote_sync/persistence.py`) — `catalog fetch` and direct metadata sync via
+`MetadataSyncService`, candidate lookups via `CandidateLookupService`, and
+discovery's provider/fetch steps through those same services (reprocess
+re-confirms through the same writer). The hook lives there — once — not in
+any caller: after a page's catalog transaction commits, the writer invokes
+`search_index.teach(provider, post_identity)`, which opens the provider's
+registered index (if any) and upserts with `origin='api',
+last_confirmed_at=now`. Failure containment is structural: post-commit means
+no catalog transaction can roll back from an index error; the hook wraps
+everything and reduces any failure to a bounded diagnostic note on the run;
+no registered index ⇒ no-op. No per-entry-point wiring exists to drift.
 
 ### D6 — Bridge reuses wave A
 
@@ -76,11 +91,14 @@ native id) already exists. Hits carry no trust: they are fetch suggestions.
 - [e621 posts export is 1.86 GB; import time and disk] → streamed build,
   documented; artists/sources subsets can be imported without posts for
   identifier-only use later.
-- [Danbooru snapshot format varies by dataset] → importer works from a
-  declared column map; the exact Jannchie layout is verified at
-  implementation time and recorded in `index_meta.builder_version`.
-- [Stale registrations (file moved/deleted)] → planner reports the index
-  target excluded with the file problem named; discovery continues.
+- [Danbooru snapshot format is unresolved] → the importer is a gated
+  follow-up task in this change, started only when the operator supplies a
+  concrete artifact; its layout is then verified and recorded in
+  `index_meta.builder_version`. It cannot expand the e621 vertical slice.
+- [Stale registrations (file missing at the recorded path)] → planner
+  reports the index target excluded with the file problem named; discovery
+  continues; re-pointing the registration at the moved file restores the
+  same target identity and history.
 - [Teaching doubles write work on fetches] → bounded upsert; measured
   negligible vs network cost.
 
@@ -92,5 +110,6 @@ native id) already exists. Hits carry no trust: they are fetch suggestions.
 ## Open Questions
 
 - Danbooru snapshot source for the first real import (Jannchie HF dataset vs
-  operator-provided CSV) — resolved when the operator supplies the artifact;
-  the importer contract is fixed either way.
+  operator-provided CSV) — the importer starts only when the operator
+  supplies the artifact; e621 is the first complete vertical slice either
+  way, so this question gates a follow-up task, not the slice.

@@ -7,15 +7,18 @@ discovery targets — disposable, refreshable search infrastructure whose hits
 are leads for the normal fetch pipeline, never catalog facts.
 
 ## ADDED Requirements
-
 ### Requirement: index registration binds a provider lookup database
 
 A registered index SHALL bind a unique target name, the provider platform key
 used for fetch routing, the index format, the private path to its SQLite
 file, and the snapshot revision recorded inside it. Registration SHALL
 validate that the file exists, is readable, and self-reports the expected
-format and provider. Index maintenance (register/list/import) SHALL be
-separate commands from discovery; discovery only reads.
+format and provider. The target name — not the filesystem path — SHALL be
+the target's identity in the ledger, policies, and reports: changing the
+path (moved file, new artifact location) updates the registration without
+creating a new target or resetting search history. Index maintenance
+(register/list/import) SHALL be separate commands from discovery; discovery
+only reads.
 
 #### Scenario: register validates the projection
 
@@ -23,17 +26,28 @@ separate commands from discovery; discovery only reads.
   lookup-v1 projection, or self-reports a different provider
 - **THEN** registration fails naming the problem and nothing is recorded
 
+#### Scenario: moving the file preserves the target
+
+- **WHEN** a registered index file moves and the registration's path is
+  updated to the new location
+- **THEN** the target name, prior search attempts, and freshness state are
+  unchanged and later runs search the same target
+
+
 ### Requirement: imports build a verified rebuildable projection
 
 `catalog index import` SHALL build the lookup-v1 projection from a raw
 provider artifact (e621 daily DB export: gzipped CSV with published SHA-256;
-danbooru metadata snapshot) into a temporary database, verify the artifact
+the danbooru snapshot importer is a follow-up once a concrete artifact and
+its layout are verified) into a temporary database, verify the artifact
 checksum when one is supplied, record snapshot identity (source digest,
 revision, built-at, builder version, record counts, high-water marks) in
-`index_meta`, and swap it into place transactionally. The raw artifact
-SHALL remain on disk beside the projection; rebuilding from it SHALL produce
-an equivalent projection. Importing writes nothing into the primary catalog
-beyond the registration row.
+`index_meta`, and swap it into place transactionally. The raw artifact is
+**retained untouched, separate from the derived projection**: the importer
+records the artifact's path and digest and never modifies or deletes it;
+the projection is rebuildable from the artifact, never the reverse.
+Importing writes nothing into the primary catalog beyond the registration
+row.
 
 #### Scenario: checksum mismatch refuses import
 
@@ -88,13 +102,18 @@ pipeline writes catalog facts with provenance.
 - **THEN** the session plans a `fetch_post` follow-up for that provider post
   id and no catalog record is created by the index step itself
 
-### Requirement: remote results teach the index
+### Requirement: remote results teach the index at a shared post-commit boundary
 
-After a successful provider fetch or candidate lookup, the fetched post's
-identity (provider post id, md5, source URLs, artist tags) SHALL be upserted
-into that provider's registered index with API origin and confirmation time.
-An index write failure SHALL be recorded on the step without failing or
-rolling back any catalog write, and SHALL never block the discovery result.
+Teaching SHALL live at the shared post-commit boundary where provider posts
+are persisted — the normalized-page persistence layer — so that `catalog
+fetch`, direct metadata sync, candidate lookup, and discovery all teach
+registered indexes whenever they persist a provider post, with no per-entry
+point wiring. The post's identity (provider post id, md5, source URLs,
+artist tags) SHALL be upserted into that provider's registered index with
+API origin and confirmation time. Teaching SHALL be failure-contained: index
+writes run after the catalog commit, are wrapped so any error becomes at
+most a bounded diagnostic note, and can never fail, roll back, or delay
+catalog success. With no registered index the hook SHALL be a no-op.
 
 #### Scenario: a fetched post becomes searchable locally
 

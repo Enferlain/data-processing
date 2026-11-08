@@ -54,8 +54,11 @@ indexes/<provider>/state.json        snapshot identity + watermarks
 downloads/<provider>/…               raw provider artifacts (kept; rebuild source)
 ```
 
-Raw artifacts stay separate from the projection so a schema change never
-makes our projection the only copy of anything.
+Raw artifacts are **retained separately from the derived projection**: the
+importer records the artifact's path and digest in `index_meta` and never
+modifies or deletes it; the projection is always rebuildable from the
+artifact, and the artifact is never rebuilt from the projection. A schema
+change therefore never makes our projection the only copy of anything.
 
 ### lookup-v1 projection schema (ours)
 
@@ -97,10 +100,15 @@ Parquet/DuckDB stay bulk/rebuild tools, not lookup targets.
 
 ### Registration and discovery integration (reuses stage 1 verbatim)
 
-- New migration: `search_index_registrations` (source name, provider
+- New migration: `search_index_registrations` (target name, provider
   platform key for fetch routing, index_kind/format, private path, snapshot
   revision, registered_at/last_refreshed_at). Path storage follows the
   `managed_roots.private_path` precedent.
+- **Identity is the target name, never the path**: the registration (and
+  every ledger attempt, policy reference, and report row) keys on the
+  registered target name; the path is mutable plumbing. Moving or renaming
+  the projection file and updating the registration preserves the target's
+  identity, search history, and freshness state.
 - Index targets appear in the planner as `source_kind='index'`, one decision
   row per (index, method) — included/excluded by the same `--include-source`
   policy, skipped fresh with the attempt named, explainable in `--dry-run`
@@ -131,20 +139,21 @@ existing wave-A planner unions these hits with lookup-run hits and plans
 real provenance. Zero-result index searches record their snapshot and scope
 like every other bounded search.
 
-### Teaching: every remote result feeds the index (hard requirement)
+### Teaching: one post-commit boundary, every entry point (hard requirement)
 
-Provider fetches and candidate lookups upsert (post_id, md5, sources, artist
-tags) into that provider's registered `lookup.sqlite` with
-`origin='api', last_confirmed_at=now`. Index write failures are logged on the
-step and never fail or roll back a catalog write. This turns gelbooru/sankaku
-indexes into persistent shared caches of discovered knowledge without any
-bulk crawl.
-
-### Maintenance is a separate lifecycle
-
-Discovery only reads. Maintenance commands own writes:
-
-- `catalog index register/list` — bind a projection to a provider target.
+Teaching lives at the **normalized-post persistence boundary**, not in any
+one caller: every path that persists a provider post — `catalog fetch`,
+direct metadata sync, candidate lookup, and discovery (whose provider steps
+run through the same services) — writes through `NormalizedPageWriter`
+(`remote_sync/persistence.py`); that is the single hook point. When a page
+commit lands, the writer's post-commit hook upserts the post identity
+(provider post id, md5, sources, artist tags) into that provider's registered
+`lookup.sqlite` with `origin='api', last_confirmed_at=now` (reprocess passes
+through the same writer and re-confirms for free). Failure containment is
+structural: the hook runs after the page's catalog transaction commits, wraps
+everything in try/except, and records at most a bounded diagnostic note — an
+index write can never fail, roll back, or delay catalog success. With no
+registered index the hook is a no-op.
 - `catalog index import --provider e621 --export posts.csv.gz` — verify
   SHA-256, stream-build the projection, transactional swap, bump revision.
   (Network download itself is an operator `curl`/explicit live step in slice 1;
@@ -219,10 +228,15 @@ subject/method/evidence* — exactly what the stage-1 freshness key expresses.
 ## 6. Slice plan
 
 1. **add-local-search-indexes** (first change): registration migration,
-   `lookup-v1` projection + e621 export importer + danbooru metadata
-   importer, index read path in planning/execution/ledger (`--dry-run`,
-   `--search-state` show targets), `discovery_index_hits` + fetch bridge,
-   teach-on-result hook, `catalog index register/list/import`, docs/tests.
+   `lookup-v1` projection + e621 export importer, index read path in
+   planning/execution/ledger (`--dry-run`, `--search-state` show targets),
+   `discovery_index_hits` + fetch bridge, teach-on-result at the shared
+   normalized-post boundary, `catalog index register/list/import`,
+   docs/tests. **e621 alone is the complete first vertical slice** — its
+   daily exports are verified and cover the whole architecture; the danbooru
+   snapshot importer is a follow-up task inside the same change, started
+   only once the operator supplies a concrete artifact and its layout is
+   verified (unresolved format must not expand the first slice).
 2. Refresh lifecycle: `index refresh` per-provider strategies + watermarks.
 3. `artist_identifier` method (provider artist-URL search + local artist
    index resolution).
