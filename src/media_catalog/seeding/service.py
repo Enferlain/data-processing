@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -61,6 +60,21 @@ class _SeedFile:
 
 def _digest(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def find_file_seed_id(connection: Any, verified_md5: str, verified_sha256: str) -> int | None:
+    """The canonical seed subject for a verified hash pair, if one exists.
+
+    Both bare-file materialization and search-state resolution key on this
+    identity; one lookup keeps them from drifting apart.
+    """
+    row = connection.execute(
+        """SELECT discovery_file_seed_id FROM discovery_file_seeds
+            WHERE verified_md5 = ? AND verified_sha256 = ?
+            ORDER BY discovery_file_seed_id LIMIT 1""",
+        (verified_md5, verified_sha256),
+    ).fetchone()
+    return int(row["discovery_file_seed_id"]) if row else None
 
 
 class SeedMaterializationService:
@@ -196,7 +210,21 @@ class SeedMaterializationService:
             # Non-raster or undecodable content keeps null dimensions; the
             # verified hashes carry the seed identity either way.
             width = height = None
-            mime_type = mimetypes.guess_type(seed_file.path.name)[0]
+        # Content identity first: re-discovering the same bytes reuses the
+        # same seed subject (the freshness ledger keys on it), mirroring the
+        # idempotent URL seed path.  Provenance fields stay from the first
+        # materialization.
+        existing_seed_id = find_file_seed_id(
+            self._database.connection, seed_file.md5, seed_file.sha256
+        )
+        if existing_seed_id is not None:
+            return {
+                "status": "existing",
+                "seed_kind": "local_file",
+                "file_seed_id": existing_seed_id,
+                "verified_md5": seed_file.md5,
+                "verified_sha256": seed_file.sha256,
+            }
         cursor = self._database.connection.execute(
             """INSERT INTO discovery_file_seeds
                    (discovery_session_id, verified_md5, verified_sha256,

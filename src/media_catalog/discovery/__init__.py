@@ -8,8 +8,8 @@ from media_catalog.discovery.candidates import CandidateGenerator
 from media_catalog.discovery.orchestration import (
     LOOKUP_PROVIDERS,
     DiscoveryOrchestrator,
-    DiscoveryStepPlan,
 )
+from media_catalog.discovery.planning import PlannedSearch
 from media_catalog.discovery.posts import PostMatchManager
 from media_catalog.discovery.queries import DiscoveryQueries
 from media_catalog.discovery.review import MatchReviewService
@@ -214,4 +214,4 @@ class DiscoveryService:
         )
 
 
-__all__ = ["LOOKUP_PROVIDERS", "DiscoveryOrchestrator", "DiscoveryStepPlan"]
+__all__ = ["LOOKUP_PROVIDERS", "DiscoveryOrchestrator", "PlannedSearch"]

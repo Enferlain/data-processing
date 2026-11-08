@@ -91,11 +91,16 @@ from media_catalog.records.common import (
     validate_version,
 )
 from media_catalog.records.discovery import (
+    SEARCH_ATTEMPT_OUTCOMES,
+    SEARCH_ATTEMPT_STATUSES,
     CandidateRecord,
     EvidenceRecord,
     LinkOccurrence,
     PlatformReferenceRecord,
     ReviewDecisionRecord,
+    SearchAttemptRecord,
+    validate_search_attempt_outcome,
+    validate_search_attempt_status,
 )
 from media_catalog.records.library import (
     LIBRARY_AUTHORITY_MODES,
@@ -244,6 +249,8 @@ __all__ = [
     "REMOTE_RUN_STATUSES",
     "REVIEW_STATES",
     "ROOT_KINDS",
+    "SEARCH_ATTEMPT_OUTCOMES",
+    "SEARCH_ATTEMPT_STATUSES",
     "SOURCE_CONTEXTS",
     "SOURCE_KINDS",
     "SOURCE_OPERATIONS",
@@ -298,6 +305,7 @@ __all__ = [
     "RemoteRequestRecord",
     "RemoteRunRecord",
     "ReviewDecisionRecord",
+    "SearchAttemptRecord",
     "TagAliasObservationRecord",
     "TagObservationRecord",
     "WorkRecord",
@@ -353,6 +361,8 @@ __all__ = [
     "validate_review_state",
     "validate_role",
     "validate_root_kind",
+    "validate_search_attempt_outcome",
+    "validate_search_attempt_status",
     "validate_secret_free_identity",
     "validate_source_context",
     "validate_source_kind",

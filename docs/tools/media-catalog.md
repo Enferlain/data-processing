@@ -445,6 +445,55 @@ through the existing managed-storage machinery into the designated media root �
 verified SHA-256/MD5, detected dimensions, and a recorded perceptual hash linked to the stub's
 occurrence, so `verified_md5` (and declared-MD5) lookup planning works from the stub too.
 
+## Run a discovery session with a search policy
+
+`catalog discover` plans and executes one bounded discovery session per subject — a post URL,
+an existing post/account id, or an arbitrary local file (bare-file discovery starts from its
+verified hashes). Planning is offline and reports every considered (source, method) pair as
+planned, skipped, or excluded with the reason. Local catalog steps execute without network;
+provider lookups run only with `--live`, through the same bounded candidate-lookup machinery.
+
+```bash
+uv run catalog discover catalog-output/catalog.sqlite3 --url https://e926.net/posts/6823045
+uv run catalog discover catalog-output/catalog.sqlite3 --post 42 --post 57 --live
+uv run catalog discover catalog-output/catalog.sqlite3 --file /path/to/art.jpg --dry-run --json
+uv run catalog discover catalog-output/catalog.sqlite3 --session 32
+```
+
+Every executed search is recorded in a durable attempt ledger keyed by subject × search target
+× method × strategy version × query evidence, so a later run skips steps whose previous attempt
+is still fresh (`skipped` naming the attempt) instead of re-querying providers. Failed,
+interrupted, or budget-deferred work is never fresh and is retried. Control freshness and scope
+with policy flags:
+
+```bash
+uv run catalog discover catalog-output/catalog.sqlite3 --post 42 --recheck force --live
+uv run catalog discover catalog-output/catalog.sqlite3 --post 42 \
+  --recheck stale --stale-after 30d --live
+uv run catalog discover catalog-output/catalog.sqlite3 --post 42 \
+  --exclude-source danbooru --method verified_md5 --live
+uv run catalog discover catalog-output/catalog.sqlite3 --post 42 --search-mode trails
+```
+
+- `--recheck unsearched` (default) searches only what has no fresh successful attempt;
+  `stale` also replans successes older than `--stale-after`; `force` re-executes everything.
+- `--include-source`/`--exclude-source` restrict targets (valid names: `catalog` plus the
+  provider keys); `--method` restricts methods; unknown names are rejected, never silently
+  matched.
+- `--search-mode trails` (default) follows known references, ids, and hashes only; artist/text
+  search methods stay excluded unless active search is allowed (`--search-term` implies it).
+- `--dry-run` reports the plan — including freshness skips — without executing anything.
+- `--search-state` inspects a subject offline: per target × method, the latest attempt's time,
+  outcome, scope, strategy version, and its freshness verdict under the given policy. Nothing
+  is written and no session is created.
+
+Steps that never started because the request/time budget ran out end `deferred` (not failed)
+and resume on the next run. Sessions report `requests_used` and, when any step is deferred,
+status `partial`. A zero-result search records the scope it searched — it never claims the item
+does not exist on that source. Repeat subjects (`--post 42 --post 57 ...`) run sequentially
+under one shared budget with per-subject progress on stderr and an aggregate report in JSON.
+
+
 ## Reprocess retained raw under a newer normalizer
 
 Normalizer improvements do not require refetching: every retained provider response can be

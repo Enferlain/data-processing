@@ -21,10 +21,10 @@ from media_catalog.records import (
 )
 from media_catalog.writer import CatalogWriter
 
-RECORD_SIGNATURE_DIGEST = "9794e4ce5692ecdae1f7aab8f4c7ca5d9315ed698cf756ae32b16c7531a25e33"
-RECORD_PUBLIC_NAMES_DIGEST = "94ccd94c0b09a89970f7e5a4b55d62363022450828980388f899925e5c5a9b15"
+RECORD_SIGNATURE_DIGEST = "b0c13bd2a8c92e5f54ab78aae164cac66db1e6811e595b28801ce13cc39998b0"
+RECORD_PUBLIC_NAMES_DIGEST = "db8ca57ab43cfe1b9648c86d8f366ce812d1af1f2a91b2f131756d9c314d6dfc"
 WRITER_SIGNATURE_DIGEST = "ab79afd492cf3e8c3be216660e5087a7660671b66d6715952ada1d4a647b0c92"
-RECORD_FIELD_SURFACE_DIGEST = "b59ae982f039639a4ec4b46cec328c769b63152f98e308b0e2aeb35549e5271d"
+RECORD_FIELD_SURFACE_DIGEST = "11af85a8a0f5fb90d7136e72c1bf28350d7e43fa2c59b4ff3fc474ce7de0031e"
 
 
 def _digest(lines: list[str]) -> str:
@@ -50,14 +50,14 @@ def _writer_signatures() -> list[str]:
 def test_records_public_constructor_surface_is_stable() -> None:
     signatures = _record_signatures()
 
-    assert len(signatures) == 50
+    assert len(signatures) == 51
     assert _digest(signatures) == RECORD_SIGNATURE_DIGEST, "\n".join(signatures)
 
 
 def test_records_public_name_surface_is_stable() -> None:
     names = sorted(records.__all__)
 
-    assert len(names) == 170
+    assert len(names) == 175
     assert all(not name.startswith("_") for name in names)
     assert all(hasattr(records, name) for name in names)
     assert {"REMOTE_OPERATIONS", "REMOTE_OUTCOMES", "REMOTE_RUN_STATUSES"} <= set(names)
@@ -104,7 +104,7 @@ def test_record_families_preserve_fields_defaults_and_frozen_behavior() -> None:
             parts.append(f"{field.name}={default}")
         field_lines.append(f"{name}({', '.join(parts)})")
 
-    assert len(field_lines) == 50
+    assert len(field_lines) == 51
     assert _digest(field_lines) == RECORD_FIELD_SURFACE_DIGEST, "\n".join(field_lines)
 
 

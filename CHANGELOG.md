@@ -15,6 +15,22 @@ Rules:
 
 ## [2026-11-08]
 
+### Added
+
+- **Discovery search policy, freshness ledger, and run transparency (Bead `data-processing-19p`)** —
+  `catalog discover` now obeys an explicit search policy and remembers what was searched.
+  Executed searches land in a durable attempt ledger (migration `0031`) keyed by
+  subject x target x method x strategy version x query evidence, so repeat runs skip fresh
+  successes (naming the attempt) and retry only failed, deferred, or never-attempted work;
+  zero-result searches record their scope and never assert nonexistence. New operator surface:
+  `--recheck unsearched|stale|force` with `--stale-after`, `--include-source`/`--exclude-source`,
+  `--method`, `--search-mode trails|active`, `--dry-run`, `--search-state` (offline inspection
+  of per-target attempts and freshness), and repeatable subject inputs running sequentially
+  under one shared budget with per-subject progress and aggregate counts. Budget-exhausted
+  steps end `deferred` (resumable) instead of failed; sessions track `requests_used`. Bare-file
+  discovery is idempotent by content, so freshness applies to file subjects too. Stage 2
+  (index/optimization targets) and stage 3 (more providers) extend the same vocabulary.
+
 ### Fixed
 - **Danbooru-family media policy sends the identifying User-Agent** — danbooru's CDN
   enforces the site bot policy: browser and library-default agents get 403, and only a

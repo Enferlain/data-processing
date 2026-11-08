@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from media_catalog.records.common import (
+    REMOTE_OUTCOMES,
+    _validate_choice,
     normalize_timestamp,
     validate_evidence_direction,
     validate_evidence_stance,
@@ -108,3 +110,78 @@ class ReviewDecisionRecord:
         if self.evidence_generation < 0:
             raise ValueError("evidence generation must not be negative")
         object.__setattr__(self, "decided_at", normalize_timestamp(self.decided_at))
+
+
+SEARCH_ATTEMPT_STATUSES = frozenset({"running", "complete", "failed"})
+SEARCH_ATTEMPT_OUTCOMES = frozenset(REMOTE_OUTCOMES | {"error", "provider_failure"})
+
+
+def validate_search_attempt_status(value: str) -> str:
+    return _validate_choice(value, SEARCH_ATTEMPT_STATUSES, "search attempt status")
+
+
+def validate_search_attempt_outcome(value: str) -> str:
+    return _validate_choice(value, SEARCH_ATTEMPT_OUTCOMES, "search attempt outcome")
+
+
+@dataclass(frozen=True, slots=True)
+class SearchAttemptRecord:
+    """One durable cross-session search attempt (the freshness ledger row)."""
+
+    source_kind: str
+    source: str
+    method: str
+    strategy_version: str
+    query_digest: str
+    status: str
+    started_at: str
+    discovery_session_id: int
+    subject_post_id: int | None = None
+    subject_account_id: int | None = None
+    subject_file_id: int | None = None
+    outcome: str | None = None
+    result_count: int = 0
+    scope: str | None = None
+    requests_used: int = 0
+    discovery_step_id: int | None = None
+    candidate_lookup_run_id: int | None = None
+    finished_at: str | None = None
+
+    def __post_init__(self) -> None:
+        subjects = (
+            self.subject_post_id,
+            self.subject_account_id,
+            self.subject_file_id,
+        )
+        if sum(value is not None for value in subjects) != 1:
+            raise ValueError("a search attempt requires exactly one subject id")
+        for name, value in (
+            ("source kind", self.source_kind),
+            ("source", self.source),
+            ("method", self.method),
+        ):
+            if not value or not value.strip():
+                raise ValueError(f"search attempt {name} must not be empty")
+        validate_version(self.strategy_version)
+        if len(self.query_digest) != 64 or any(
+            char not in "0123456789abcdefABCDEF" for char in self.query_digest
+        ):
+            raise ValueError("search attempt query digest must be 64 hex characters")
+        validate_search_attempt_status(self.status)
+        if self.outcome is not None:
+            validate_search_attempt_outcome(self.outcome)
+        for name, value in (
+            ("result count", self.result_count),
+            ("requests used", self.requests_used),
+        ):
+            if value < 0:
+                raise ValueError(f"search attempt {name} must not be negative")
+        if self.scope is not None and len(self.scope) > 1000:
+            raise ValueError("search attempt scope exceeds 1000 characters")
+        if self.status == "running" and self.finished_at is not None:
+            raise ValueError("a running search attempt must not carry a finish time")
+        if self.status != "running" and self.finished_at is None:
+            raise ValueError("a finished search attempt requires a finish time")
+        object.__setattr__(self, "started_at", normalize_timestamp(self.started_at))
+        if self.finished_at is not None:
+            object.__setattr__(self, "finished_at", normalize_timestamp(self.finished_at))
