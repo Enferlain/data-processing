@@ -118,10 +118,16 @@ Parquet/DuckDB stay bulk/rebuild tools, not lookup targets.
   artist-name lookups via `post_artists`/artist export. `fetch_post`
   follow-ups fetch by provider post id through the existing wave machinery.
 - **Freshness**: the attempt's strategy version becomes
-  `lookup-v1.<snapshot_revision>` — a refreshed snapshot changes the version,
-  so every subject's index searches replan under the new revision. This is
-  the "searched e621 snapshot 2026-11-08, not just e621" guarantee, for free,
-  from the stage-1 key.
+  `lookup-v1.<revision>.g<overlay_generation>` where `<revision>` is the base
+  import identity (artifact digest + builder version + scope: `full` when
+  the artifact was consumed to EOF, else the bounded prefix size — a bounded
+  shakeout and a full import of the same artifact are different revisions)
+  and the overlay generation counts teach mutations since the build (bumped
+  only when a teach batch actually changes content). Refresh, expanded
+  import, or taught content each change the version, so affected subjects'
+  index searches replan — a remote result teaching the exact md5 of a prior
+  miss invalidates that miss. This is the "searched e621 snapshot 2026-11-08,
+  not just e621" guarantee, extended to mutable taught content.
 - **Execution is offline**: index steps are local reads; they run without
   `--live`, consume no request budget, and order before provider steps
   (planner emits tier 0 → tier 1 → providers). Local-first is structural,
@@ -147,14 +153,23 @@ direct metadata sync, candidate lookup, and discovery (whose provider steps
 run through the same services) — writes through `NormalizedPageWriter`
 (`remote_sync/persistence.py`); that is the single hook point. When a page
 commit lands, the writer's post-commit hook upserts the post identity
-(provider post id, md5, sources, artist tags) into that provider's registered
-`lookup.sqlite` with `origin='api', last_confirmed_at=now` (reprocess passes
-through the same writer and re-confirms for free). Failure containment is
-structural: the hook runs after the page's catalog transaction commits, wraps
-everything in try/except, and records at most a bounded diagnostic note — an
-index write can never fail, roll back, or delay catalog success. With no
-registered index the hook is a no-op.
-- `catalog index import --provider e621 --export posts.csv.gz` — verify
+(provider post id, md5, canonical URL, provider source URLs, artist tags)
+into that provider's registered `lookup.sqlite` with `origin='api',
+last_confirmed_at=now` (reprocess passes through the same writer and
+re-confirms for free). Each batch is one projection transaction — whole or
+rolled back, never partial — bumps the overlay generation only when content
+actually changed, and records a durable `teach_log` row for inspection.
+Failure containment is structural: the hook runs after the page's catalog
+transaction commits, wraps everything in try/except, and records at most a
+bounded diagnostic note — an index write can never fail, roll back, or delay
+catalog success. With no registered index the hook is a no-op.
+
+### Maintenance is a separate lifecycle
+
+Discovery only reads. Maintenance commands own writes:
+
+- `catalog index register/list` — bind a projection to a provider target.
+- `catalog index import --provider e621 --artifact posts.csv.gz` — verify
   SHA-256, stream-build the projection, transactional swap, bump revision.
   (Network download itself is an operator `curl`/explicit live step in slice 1;
   a `--download` convenience can follow.)

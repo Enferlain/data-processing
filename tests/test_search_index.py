@@ -13,6 +13,7 @@ import csv
 import gzip
 import io
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -518,6 +519,238 @@ def _raw_observation(catalog: Path) -> int:
 
 
 _raw_observation_counter = [1]
+
+
+# ── Corrective freshness semantics ───────────────────────────────────────
+
+
+def test_expanding_a_bounded_import_invalidates_zero_result_searches(
+    catalog: Path, artifact: Path, tmp_path: Path
+) -> None:
+    """A bounded shakeout and a full import of one artifact are different
+    snapshots: the coverage change must replan prior index searches."""
+    projection = tmp_path / "lookup.sqlite"
+    # head1 keeps only row 1 (post 4242 / MD5_A); the subject carries the
+    # row-2 md5, so the bounded projection misses it; the full import covers
+    # it and must invalidate the bounded zero-result attempt.
+    head = import_e621_export(artifact, destination=projection, max_records=1)
+    assert head.scope == "head1" and head.record_count == 1
+    _register(catalog, "e621", projection)
+    with CatalogDatabase(catalog) as database:
+        seed_cursor = database.connection.execute(
+            """INSERT INTO posts (platform_id, native_post_id, first_seen_at, last_seen_at)
+               SELECT platform_id, '910', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+                 FROM platforms WHERE platform_key = 'e621'"""
+        )
+        database.connection.execute(
+            """INSERT INTO media_occurrences (post_id, source_key, media_index,
+                                              media_type, declared_md5, observed_at)
+               VALUES (?, 'idx:p1', 0, 'image/png', ?, '2026-01-01T00:00:00Z')""",
+            (int(seed_cursor.lastrowid), MD5_B),
+        )
+        database.connection.commit()
+        seed_id = int(seed_cursor.lastrowid)
+        first = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["method"]): s for s in first["steps"]}
+    assert steps[("index", "declared_md5")]["status"] == "complete"
+    assert steps[("index", "declared_md5")]["result_count"] == 0  # bounded miss
+
+    full = import_e621_export(artifact, destination=projection)
+    assert full.scope == "full"
+    assert full.snapshot_revision != head.snapshot_revision
+    _register(catalog, "e621", projection)
+    with CatalogDatabase(catalog) as database:
+        second = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["method"]): s for s in second["steps"]}
+    # Not fresh under the expanded scope: re-executed and now hits.
+    assert steps[("index", "declared_md5")]["status"] == "complete"
+    assert steps[("index", "declared_md5")]["result_count"] == 1
+
+
+def test_teaching_new_content_invalidates_zero_result_searches(
+    catalog: Path, tmp_path: Path
+) -> None:
+    """A remote result that teaches the exact md5 of a prior miss must make
+    that miss non-fresh: the overlay generation rides the version."""
+    from media_catalog.remote_sync.persistence import NormalizedPageWriter
+    from media_catalog.writer import CatalogWriter
+
+    projection = _gelbooru_projection(tmp_path)
+    _register(catalog, "gelbooru", projection)
+    with CatalogDatabase(catalog) as database:
+        seed_cursor = database.connection.execute(
+            """INSERT INTO posts (platform_id, native_post_id, first_seen_at, last_seen_at)
+               SELECT platform_id, 'seed-gb', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+                 FROM platforms WHERE platform_key = 'gelbooru'"""
+        )
+        database.connection.execute(
+            """INSERT INTO media_occurrences (post_id, source_key, media_index,
+                                              media_type, declared_md5, observed_at)
+               VALUES (?, 'gb:p0', 0, 'image/png', ?, '2026-01-01T00:00:00Z')""",
+            (int(seed_cursor.lastrowid), MD5_A),
+        )
+        database.connection.commit()
+        seed_id = int(seed_cursor.lastrowid)
+
+        first = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["method"]): s for s in first["steps"]}
+    assert steps[("index", "declared_md5")]["result_count"] == 0
+
+    with CatalogDatabase(catalog) as database:
+        writer = CatalogWriter(database)
+        page_writer = NormalizedPageWriter(writer)
+        with database.transaction():
+            page_writer.write(
+                _normalized_post_page("gelbooru", "555", MD5_A, "https://gelbooru.com/i/555"),
+                observed_at="2026-11-08T00:00:00Z",
+                raw_observation_id=_raw_observation(catalog),
+                adapter_version="test-v1",
+            )
+        snapshot_after_teach = read_snapshot(projection)
+    assert snapshot_after_teach.overlay_generation == 1
+
+    with CatalogDatabase(catalog) as database:
+        second = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["method"]): s for s in second["steps"]}
+    assert steps[("index", "declared_md5")]["status"] == "complete"  # replanned
+    assert steps[("index", "declared_md5")]["result_count"] == 1  # taught hit
+
+
+def test_reconfirmation_teach_does_not_bump_generation(catalog: Path, tmp_path: Path) -> None:
+    from media_catalog.remote_sync.persistence import NormalizedPageWriter
+    from media_catalog.writer import CatalogWriter
+
+    projection = _gelbooru_projection(tmp_path)
+    _register(catalog, "gelbooru", projection)
+
+    def teach_once() -> None:
+        with CatalogDatabase(catalog) as database:
+            writer = CatalogWriter(database)
+            page_writer = NormalizedPageWriter(writer)
+            with database.transaction():
+                page_writer.write(
+                    _normalized_post_page("gelbooru", "556", MD5_B, "https://gelbooru.com/i/556"),
+                    observed_at="2026-11-08T00:00:00Z",
+                    raw_observation_id=_raw_observation(catalog),
+                    adapter_version="test-v1",
+                )
+
+    teach_once()
+    first = read_snapshot(projection)
+    assert first.overlay_generation == 1
+    teach_once()  # pure reconfirmation: nothing new
+    second = read_snapshot(projection)
+    assert second.overlay_generation == 1  # unchanged content, unchanged version
+
+
+def test_failed_teach_batch_rolls_back_completely(catalog: Path, tmp_path: Path) -> None:
+    from media_catalog.search_index.projection import _TeachWriter
+
+    projection = _gelbooru_projection(tmp_path)
+    before = read_snapshot(projection)
+    batch = [
+        {"provider": "gelbooru", "native_id": "700", "md5": MD5_A, "sources": [], "artists": []},
+        # A non-numeric id fails mid-batch after BEGIN: the whole batch must
+        # roll back, not commit the rows written before the failure.
+        {
+            "provider": "gelbooru",
+            "native_id": "not-a-number",
+            "md5": None,
+            "sources": [],
+            "artists": [],
+        },
+    ]
+    with pytest.raises(ValueError):
+        _TeachWriter(projection).teach_batch(batch, seen_at="2026-11-08T00:00:00Z")
+    after = read_snapshot(projection)
+    assert after.overlay_generation == before.overlay_generation
+    target = registered_targets_stub(projection)
+    assert lookup(target, method="verified_md5", values=[MD5_A]) == []
+
+
+def test_teach_log_records_landed_batches(catalog: Path, tmp_path: Path) -> None:
+    from media_catalog.remote_sync.persistence import NormalizedPageWriter
+    from media_catalog.writer import CatalogWriter
+
+    projection = _gelbooru_projection(tmp_path)
+    _register(catalog, "gelbooru", projection)
+    with CatalogDatabase(catalog) as database:
+        writer = CatalogWriter(database)
+        page_writer = NormalizedPageWriter(writer)
+        with database.transaction():
+            page_writer.write(
+                _normalized_post_page("gelbooru", "710", MD5_A, "https://gelbooru.com/i/710"),
+                observed_at="2026-11-08T00:00:00Z",
+                raw_observation_id=_raw_observation(catalog),
+                adapter_version="test-v1",
+            )
+    connection = sqlite3.connect(projection)
+    try:
+        rows = connection.execute(
+            "SELECT posts, changed, overlay_generation FROM teach_log"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert rows == [(1, 1, 1)]
+
+
+def test_teach_populates_source_urls_and_artist_tags(catalog: Path, tmp_path: Path) -> None:
+    from media_catalog.adapters import NormalizedItem, NormalizedPage
+    from media_catalog.remote_sync.persistence import NormalizedPageWriter
+    from media_catalog.writer import CatalogWriter
+
+    projection = _gelbooru_projection(tmp_path)
+    _register(catalog, "gelbooru", projection)
+    page = NormalizedPage(
+        (
+            NormalizedItem(
+                object_kind="post",
+                native_id="720",
+                data={
+                    "platform": "gelbooru",
+                    "canonical_url": "https://gelbooru.com/index.php?page=post&s=view&id=720",
+                    "observation_time": "2026-11-08T00:00:00Z",
+                },
+            ),
+            NormalizedItem(
+                object_kind="external_reference",
+                native_id="720:ref0",
+                data={
+                    "platform": "gelbooru",
+                    "post_id": "720",
+                    "reference_kind": "source_url",
+                    "value": "https://www.pixiv.net/artworks/999",
+                },
+            ),
+            NormalizedItem(
+                object_kind="post_tag",
+                native_id="720:tag0",
+                data={
+                    "platform": "gelbooru",
+                    "post_id": "720",
+                    "category": "artist",
+                    "normalized_name": "some_artist",
+                    "spelling": "some_artist",
+                },
+            ),
+        )
+    )
+    with CatalogDatabase(catalog) as database:
+        writer = CatalogWriter(database)
+        with database.transaction():
+            NormalizedPageWriter(writer).write(
+                page,
+                observed_at="2026-11-08T00:00:00Z",
+                raw_observation_id=_raw_observation(catalog),
+                adapter_version="test-v1",
+            )
+    target = registered_targets_stub(projection)
+    url_hits = lookup(
+        target, method="source_post_url", values=["https://www.pixiv.net/artworks/999"]
+    )
+    assert [hit["post_native_id"] for hit in url_hits] == ["720"]
+    artist_hits = lookup(target, method="artist_exact_name", values=["some_artist"])
+    assert [hit["post_native_id"] for hit in artist_hits] == ["720"]
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────

@@ -25,7 +25,11 @@ Registered indexes then appear in `catalog discover` as ordinary `index`-kind ta
 same policy filters, freshness skips, and `--dry-run`/`--search-state` explanations as every
 other target. Index steps run offline (no `--live`, no request budget) and are ordered before
 provider steps: catalog, then indexes, then the network. A refreshed snapshot is a new strategy
-version (`lookup-v1.<revision>`), so every subject's index searches replan after a refresh. In
+version (`lookup-v1.<revision>.g<generation>`) — the revision encodes the artifact digest,
+builder, and actual import scope (`full`, or the bounded prefix when `--max-records` stopped
+early, so a bounded shakeout and a full import are different snapshots), and the generation
+counts teach mutations — so an expanded import, a refresh, or newly taught content replans
+every affected subject. In
 live sessions, index hits feed the same bounded `fetch_post` follow-up generation as provider
 lookup hits.
 

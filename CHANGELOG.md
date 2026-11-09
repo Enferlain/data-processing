@@ -80,6 +80,20 @@ Rules:
   the two commands order-independent and idempotent; only a target post with no
   representations to anchor keeps the refusal.
 
+- **Search-index freshness correctness (Bead `data-processing-an1` review)** — two gaps in
+  slice 1 where index searches could wrongly stay fresh. (1) Bounded `--max-records` imports
+  shared the full import's revision: the snapshot revision now identifies the actual
+  searchable scope (artifact digest + builder version + `full` when the artifact was consumed
+  to EOF, else the bounded prefix), so expanding a bounded import replans prior zero-result
+  searches. (2) Teach-on-result mutated projections invisibly to freshness: each teach batch
+  is now one projection transaction (whole or rolled back — no partial rows on failure), bumps
+  a teach overlay generation only when content actually changed (reconfirmations do not churn
+  freshness), records a durable `teach_log` row for inspection, and the generation rides the
+  target version (`lookup-v1.<revision>.g<n>`) so taught content invalidates prior attempts —
+  including zero-result ones. Teach material now also covers provider source URLs
+  (`source_url` external references) and artist tags, completing the spec contract; catalog
+  success remains fully independent of index-teach success.
+
 ## [2026-11-07]
 
 ### Added

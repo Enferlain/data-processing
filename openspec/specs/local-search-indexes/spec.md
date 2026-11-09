@@ -41,13 +41,24 @@ provider artifact (e621 daily DB export: gzipped CSV with published SHA-256;
 the danbooru snapshot importer is a follow-up once a concrete artifact and
 its layout are verified) into a temporary database, verify the artifact
 checksum when one is supplied, record snapshot identity (source digest,
-revision, built-at, builder version, record counts, high-water marks) in
-`index_meta`, and swap it into place transactionally. The raw artifact is
+revision, import scope, built-at, builder version, record counts, high-water
+marks) in `index_meta`, and swap it into place transactionally. The snapshot
+revision SHALL identify the actual searchable scope — artifact digest plus
+builder version plus `full` when the artifact was consumed to EOF, or the
+bounded prefix size otherwise — so a bounded import and a full import of the
+same artifact are different snapshots. The raw artifact is
 **retained untouched, separate from the derived projection**: the importer
 records the artifact's path and digest and never modifies or deletes it;
 the projection is rebuildable from the artifact, never the reverse.
 Importing writes nothing into the primary catalog beyond the registration
 row.
+
+#### Scenario: expanding a bounded import replans prior misses
+
+- **WHEN** a bounded import answered zero results for a subject and a full
+  import of the same artifact then runs
+- **THEN** the subject's index searches are not fresh under the expanded
+  scope and execute again
 
 #### Scenario: checksum mismatch refuses import
 
@@ -108,12 +119,21 @@ Teaching SHALL live at the shared post-commit boundary where provider posts
 are persisted — the normalized-page persistence layer — so that `catalog
 fetch`, direct metadata sync, candidate lookup, and discovery all teach
 registered indexes whenever they persist a provider post, with no per-entry
-point wiring. The post's identity (provider post id, md5, source URLs,
-artist tags) SHALL be upserted into that provider's registered index with
-API origin and confirmation time. Teaching SHALL be failure-contained: index
-writes run after the catalog commit, are wrapped so any error becomes at
-most a bounded diagnostic note, and can never fail, roll back, or delay
-catalog success. With no registered index the hook SHALL be a no-op.
+point wiring. The post's identity (provider post id, md5, provider source
+URLs including the canonical URL, artist tags) SHALL be upserted into that
+provider's registered index with API origin and confirmation time. Each
+teach batch SHALL be one transaction against the projection: it either lands
+whole or rolls back completely, never committing a partial batch. A landed
+batch that changed content SHALL bump the projection's teach overlay
+generation — the generation rides the target's version alongside the base
+snapshot revision, so taught content invalidates prior attempts (including
+zero-result ones); a pure reconfirmation SHALL leave the generation, and
+therefore freshness, unchanged. Every landed batch SHALL be recorded in a
+durable per-projection teach log for inspection. Teaching SHALL be
+failure-contained: index writes run after the catalog commit, are wrapped so
+any error becomes at most a bounded diagnostic, and can never fail, roll
+back, or delay catalog success. With no registered index the hook SHALL be a
+no-op.
 
 #### Scenario: a fetched post becomes searchable locally
 
@@ -121,3 +141,17 @@ catalog success. With no registered index the hook SHALL be a no-op.
   a registered index
 - **THEN** a later offline discovery for that post's md5 finds it in the
   gelbooru index without any network request
+
+#### Scenario: taught content invalidates a prior miss
+
+- **WHEN** an index search completed with zero results and a remote result
+  later teaches the exact md5 or source URL that would now hit
+- **THEN** the prior attempt is not fresh under the bumped overlay
+  generation and the search executes again, finding the taught row
+
+#### Scenario: failed teach batch leaves no partial rows
+
+- **WHEN** a teach batch fails partway through
+- **THEN** the projection is rolled back to its pre-batch state — no rows,
+  no generation bump, no teach-log entry — and the catalog write that
+  triggered it remains committed

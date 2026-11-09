@@ -146,6 +146,7 @@ class NormalizedPageWriter:
                     "canonical_url": _text(data.get("canonical_url")),
                     "md5": None,
                     "sources": [],
+                    "artists": [],
                 }
                 self._write_post_facts(result.id, data, observed_at, raw_observation_id)
             elif item.object_kind == "attribution":
@@ -211,6 +212,19 @@ class NormalizedPageWriter:
                 )
             elif item.object_kind == "post_tag":
                 post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
+                if _text(data.get("category")) == "artist":
+                    native_id = str(data.get("post_id"))
+                    teach_items.setdefault(
+                        (platform, native_id),
+                        {
+                            "provider": platform,
+                            "native_id": native_id,
+                            "canonical_url": None,
+                            "md5": None,
+                            "sources": [],
+                            "artists": [],
+                        },
+                    )["artists"].append(_required_text(data, "spelling"))
                 self.writer.upsert_tag(
                     post_id,
                     TagObservationRecord(
@@ -246,6 +260,7 @@ class NormalizedPageWriter:
                             "canonical_url": None,
                             "md5": None,
                             "sources": [],
+                            "artists": [],
                         },
                     )
                     teach["md5"] = declared_md5.lower()
@@ -270,6 +285,20 @@ class NormalizedPageWriter:
             elif item.object_kind == "external_reference":
                 post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 target_platform = _text(data.get("target_platform"))
+                reference_url = _text(data.get("value"))
+                if reference_url and _text(data.get("reference_kind")) == "source_url":
+                    native_id = str(data.get("post_id"))
+                    teach_items.setdefault(
+                        (platform, native_id),
+                        {
+                            "provider": platform,
+                            "native_id": native_id,
+                            "canonical_url": None,
+                            "md5": None,
+                            "sources": [],
+                            "artists": [],
+                        },
+                    )["sources"].append(reference_url)
                 self.writer.add_post_external_reference(
                     post_id,
                     PostExternalReferenceRecord(

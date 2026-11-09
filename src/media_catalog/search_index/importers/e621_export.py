@@ -35,11 +35,13 @@ class ImportResult:
     record_count: int
     artifact_digest: str
     artifact_path: str
+    scope: str = "unknown"
 
     def as_dict(self) -> dict[str, object]:
         return {
             "projection": self.projection_path.name,
             "snapshot_revision": self.snapshot_revision,
+            "scope": self.scope,
             "record_count": self.record_count,
             "artifact_digest": self.artifact_digest,
             "artifact": self.artifact_path,
@@ -86,7 +88,14 @@ def import_e621_export(
     checksum: str | None = None,
     max_records: int | None = None,
 ) -> ImportResult:
-    """Build a lookup-v1 projection from an e621 posts DB export."""
+    """Build a lookup-v1 projection from an e621 posts DB export.
+
+    The snapshot revision identifies the ACTUAL searchable scope: artifact
+    digest + builder version + ``full`` when the artifact was consumed to
+    EOF, else ``head<n>`` for the bounded prefix.  A bounded shakeout and a
+    full import of the same artifact are therefore different revisions, and
+    expanding coverage invalidates prior searches.
+    """
     artifact = Path(artifact)
     if not artifact.is_file():
         raise ValueError(f"artifact does not exist: {artifact.name}")
@@ -96,16 +105,12 @@ def import_e621_export(
             f"artifact checksum mismatch: expected {checksum.strip().lower()[:16]}…,"
             f" computed {digest[:16]}…"
         )
-    revision = digest[:16]
+    if max_records is not None and max_records < 1:
+        raise ValueError("max_records must be positive")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    builder = ProjectionBuilder(
-        provider="e621",
-        destination=destination,
-        artifact_path=artifact,
-        artifact_digest=digest,
-        snapshot_revision=revision,
-        builder_version=BUILDER_VERSION,
-    )
+
+    truncated = False
+    builder: ProjectionBuilder | None = None
     try:
         with gzip.open(artifact, "rt", encoding="utf-8", newline="") as handle:
             reader = csv.DictReader(handle)
@@ -117,8 +122,19 @@ def import_e621_export(
                     + ", ".join(missing)
                     + f"; available: {', '.join(sorted(header))}"
                 )
+            builder = ProjectionBuilder(
+                provider="e621",
+                destination=destination,
+                artifact_path=artifact,
+                artifact_digest=digest,
+                # The scope suffix is resolved at commit, once the rows have
+                # said whether the artifact was consumed to EOF.
+                snapshot_revision=f"{digest[:12]}-{BUILDER_VERSION}-pending",
+                builder_version=BUILDER_VERSION,
+            )
             for index, row in enumerate(reader):
                 if max_records is not None and index >= max_records:
+                    truncated = True
                     break
                 builder.add_post(
                     post_id=int(row["id"]),
@@ -136,14 +152,18 @@ def import_e621_export(
                     sources=[_canonical(url) for url in _parse_array(row.get("source"))],
                     artists=[tag for tag in (row.get("tag_string_artist") or "").split() if tag],
                 )
+        assert builder is not None
+        scope_value = f"head{max_records}" if truncated else "full"
         result = ImportResult(
-            projection_path=builder.commit(),
-            snapshot_revision=revision,
+            projection_path=builder.commit(scope=scope_value),
+            snapshot_revision=builder.snapshot_revision,
             record_count=builder.record_count or 0,
             artifact_digest=digest,
             artifact_path=str(artifact),
+            scope=scope_value,
         )
     except BaseException:
-        builder.discard()
+        if builder is not None:
+            builder.discard()
         raise
     return result

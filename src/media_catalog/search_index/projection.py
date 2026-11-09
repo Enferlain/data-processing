@@ -10,7 +10,6 @@ writer afterwards.
 from __future__ import annotations
 
 import datetime as _dt
-import json
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -56,18 +55,34 @@ CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 
 @dataclass(frozen=True, slots=True)
 class SnapshotInfo:
+    """The projection's searchable identity.
+
+    ``revision`` identifies the base import (artifact digest + builder +
+    scope: a bounded head-N import is a different revision from a full one,
+    so expanding coverage invalidates prior searches).  ``overlay_generation``
+    counts teach mutations since the build — the version that freshness
+    compares is ``lookup-v1.<revision>.g<generation>``, so taught content
+    replans prior attempts too.
+    """
+
     provider: str
     revision: str
     source_digest: str | None
     artifact_path: str | None
     record_count: int
     format: str
+    scope: str = "unknown"
+    overlay_generation: int = 0
 
 
 def _snapshot_from_meta(meta: dict[str, str]) -> SnapshotInfo:
     revision = meta.get("snapshot_revision") or ""
     if not revision:
         raise ValueError("projection is missing its snapshot revision")
+    try:
+        generation = int(meta.get("overlay_generation", "0"))
+    except ValueError:
+        generation = 0
     return SnapshotInfo(
         provider=meta.get("provider") or "",
         revision=revision,
@@ -75,6 +90,8 @@ def _snapshot_from_meta(meta: dict[str, str]) -> SnapshotInfo:
         artifact_path=meta.get("artifact_path"),
         record_count=int(meta.get("record_count", "0")),
         format=meta.get("format") or "",
+        scope=meta.get("scope") or "unknown",
+        overlay_generation=generation,
     )
 
 
@@ -119,6 +136,7 @@ class ProjectionBuilder:
         artifact_digest: str,
         snapshot_revision: str,
         builder_version: str,
+        scope: str = "unknown",
         record_count: int | None = None,
     ) -> None:
         self.provider = provider
@@ -127,6 +145,7 @@ class ProjectionBuilder:
         self.artifact_digest = artifact_digest
         self.snapshot_revision = snapshot_revision
         self.builder_version = builder_version
+        self.scope = scope
         self.record_count = record_count
         self._temp = destination.with_name(destination.name + ".build-tmp")
         if self._temp.exists():
@@ -191,13 +210,22 @@ class ProjectionBuilder:
         if self._temp.exists():
             self._temp.unlink()
 
-    def commit(self) -> Path:
+    def commit(self, *, scope: str | None = None) -> Path:
         count = int(self._connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0])
         self.record_count = count
+        if scope is not None:
+            self.scope = scope
+            if self.snapshot_revision.endswith("-pending"):
+                # The import scope is only known after the rows are read
+                # (EOF means full); resolve it into the revision so a
+                # bounded shakeout and a full import never share identity.
+                self.snapshot_revision = self.snapshot_revision[: -len("-pending")] + f"-{scope}"
         meta = {
             "format": LOOKUP_FORMAT,
             "provider": self.provider,
             "snapshot_revision": self.snapshot_revision,
+            "scope": self.scope,
+            "overlay_generation": "0",
             "source_digest": self.artifact_digest,
             "artifact_path": self.artifact_path,
             "record_count": str(self.record_count if self.record_count is not None else count),
@@ -238,10 +266,13 @@ class IndexTarget:
 
     @property
     def version(self) -> str:
-        revision = self.snapshot.revision if self.snapshot else "unknown"
-        # Version charset follows the records VERSION_PATTERN; the revision
-        # rides the strategy version so refresh invalidates freshness.
-        return f"{LOOKUP_FORMAT}.{revision}"
+        # Version charset follows the records VERSION_PATTERN; the base
+        # revision (artifact + builder + import scope) and the teach overlay
+        # generation both ride the strategy version, so an expanded import or
+        # taught content invalidates prior attempts.
+        if self.snapshot is None:
+            return f"{LOOKUP_FORMAT}.unknown"
+        return f"{LOOKUP_FORMAT}.{self.snapshot.revision}.g{self.snapshot.overlay_generation}"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -250,6 +281,8 @@ class IndexTarget:
             "format": LOOKUP_FORMAT,
             "path": self.path.name,
             "snapshot_revision": self.snapshot.revision if self.snapshot else None,
+            "scope": self.snapshot.scope if self.snapshot else None,
+            "overlay_generation": (self.snapshot.overlay_generation if self.snapshot else None),
             "record_count": self.snapshot.record_count if self.snapshot else None,
             "problem": self.problem,
         }
@@ -395,8 +428,13 @@ def teach(
 
     Called from the shared post-commit boundary (NormalizedPageWriter) for
     every persisted provider post.  Each item: provider, native_id, md5,
-    canonical_url, sources.  Returns the number of indexes written; the hook
-    contains all failures, so this raises only on programmer error.
+    canonical_url, sources (provider source URLs), artists.  Each index
+    write is one transaction: either the whole batch lands and the teach
+    overlay generation is bumped when content changed, or the transaction
+    rolls back leaving the projection (and its generation) untouched.  A
+    durable ``teach_log`` row records every landed batch for inspection.
+    Returns the number of indexes written; failures are contained here —
+    the committed catalog write is never affected.
     """
     by_provider: dict[str, list[dict[str, Any]]] = {}
     for item in items:
@@ -411,13 +449,46 @@ def teach(
         path = Path(str(row["private_path"]))
         if not path.is_file():
             continue
-        writer = _TeachWriter(path, provider)
         try:
             snapshot = read_snapshot(path)
-            if snapshot is None or snapshot.provider != provider:
+            if snapshot.provider != provider:
                 continue
+            _TeachWriter(path).teach_batch(batch, seen_at=seen_at)
+            written += 1
+        except (sqlite3.Error, OSError, ValueError):
+            # Failure containment is the whole point: an unwritable index
+            # never affects the catalog write that already committed, and a
+            # failed batch leaves no partial rows behind.
+            continue
+    return written
+
+
+_TEACH_LOG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS teach_log (
+    teach_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    taught_at TEXT NOT NULL,
+    posts INTEGER NOT NULL,
+    changed INTEGER NOT NULL,
+    overlay_generation INTEGER NOT NULL
+)
+"""
+
+
+class _TeachWriter:
+    """One transactional teach batch against a projection (teach hook only)."""
+
+    def __init__(self, path: Path) -> None:
+        self.connection = sqlite3.connect(path, timeout=5.0)
+        self.connection.row_factory = sqlite3.Row
+        self.connection.execute("PRAGMA busy_timeout = 5000")
+
+    def teach_batch(self, batch: list[dict[str, Any]], *, seen_at: str) -> dict[str, int]:
+        self.connection.execute(_TEACH_LOG_SCHEMA)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            changed = 0
             for item in batch:
-                writer.teach_one(
+                changed += self._teach_one(
                     post_id=int(str(item["native_id"])),
                     md5=item.get("md5"),
                     sources=[
@@ -425,27 +496,41 @@ def teach(
                         for url in [item.get("canonical_url"), *item.get("sources", [])]
                         if url
                     ],
+                    artists=[str(tag) for tag in item.get("artists", ()) if tag],
                     seen_at=seen_at,
                 )
-            writer.close()
-            written += 1
-        except (sqlite3.Error, OSError, ValueError):
-            # Failure containment is the whole point: an unwritable index
-            # never affects the catalog write that already committed.
-            writer.close()
-            continue
-    return written
+            generation = self._bump_generation() if changed else self._generation()
+            self.connection.execute(
+                """INSERT INTO teach_log
+                       (taught_at, posts, changed, overlay_generation)
+                   VALUES (?, ?, ?, ?)""",
+                (seen_at, len(batch), changed, generation),
+            )
+            self.connection.commit()
+        except BaseException:
+            # Roll back, never commit whatever happened before the failure.
+            self.connection.rollback()
+            raise
+        finally:
+            self.connection.close()
+        return {"posts": len(batch), "changed": changed, "overlay_generation": generation}
 
-
-class _TeachWriter:
-    """Minimal in-place upserts on a projection (teach hook only)."""
-
-    def __init__(self, path: Path, provider: str) -> None:
-        self.connection = sqlite3.connect(path)
-        self.connection.row_factory = sqlite3.Row
-        self.provider = provider
-
-    def teach_one(self, *, post_id: int, md5: str | None, sources: list[str], seen_at: str) -> None:
+    def _teach_one(
+        self,
+        *,
+        post_id: int,
+        md5: str | None,
+        sources: list[str],
+        artists: list[str],
+        seen_at: str,
+    ) -> int:
+        """Upsert one identity; returns 1 when content actually changed."""
+        existing = self.connection.execute(
+            "SELECT md5 FROM posts WHERE post_id = ?", (post_id,)
+        ).fetchone()
+        new_post = existing is None
+        new_md5 = md5 is not None and (existing is None or existing["md5"] is None)
+        changed = 1 if (new_post or new_md5) else 0
         self.connection.execute(
             """INSERT INTO posts (post_id, md5, origin, first_seen_at, last_confirmed_at)
                VALUES (?, ?, 'api', ?, ?)
@@ -455,15 +540,32 @@ class _TeachWriter:
             (post_id, md5, seen_at, seen_at),
         )
         for url in sources:
-            self.connection.execute(
+            cursor = self.connection.execute(
                 "INSERT OR IGNORE INTO post_sources (post_id, normalized_url) VALUES (?, ?)",
                 (post_id, url),
             )
+            changed += cursor.rowcount
+        for artist in artists:
+            cursor = self.connection.execute(
+                "INSERT OR IGNORE INTO post_artists (post_id, artist_tag) VALUES (?, ?)",
+                (post_id, artist),
+            )
+            changed += cursor.rowcount
+        return min(1, changed)
 
-    def close(self) -> None:
-        self.connection.commit()
-        self.connection.close()
+    def _generation(self) -> int:
+        row = self.connection.execute(
+            "SELECT value FROM index_meta WHERE key = 'overlay_generation'"
+        ).fetchone()
+        try:
+            return int(row["value"]) if row else 0
+        except ValueError:
+            return 0
 
-
-def teach_json_note(count: int) -> str:
-    return json.dumps({"taught": count})
+    def _bump_generation(self) -> int:
+        generation = self._generation() + 1
+        self.connection.execute(
+            "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('overlay_generation', ?)",
+            (str(generation),),
+        )
+        return generation
