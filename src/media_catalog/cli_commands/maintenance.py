@@ -28,7 +28,7 @@ _REPROCESS_PROVIDERS = (
 )
 
 
-COMMANDS = ("reprocess", "seed", "tombstone", "label")
+COMMANDS = ("reprocess", "seed", "tombstone", "label", "index")
 
 
 def register(commands: argparse._SubParsersAction) -> None:
@@ -88,6 +88,59 @@ def register(commands: argparse._SubParsersAction) -> None:
         help="Revisit ready unsure pairs; preserve and defer labels with missing media",
     )
 
+    index_cmd = commands.add_parser(
+        "index",
+        description=(
+            "Local search index maintenance: register/list/import provider"
+            " lookup projections (discovery only reads them)"
+        ),
+    )
+    index_commands = index_cmd.add_subparsers(dest="index_command", required=True)
+    index_register = index_commands.add_parser(
+        "register", description="Bind a lookup-v1 projection to a discovery target"
+    )
+    index_register.add_argument("catalog", type=Path)
+    index_register.add_argument(
+        "--provider", required=True, help="provider platform key (e621, danbooru, ...)"
+    )
+    index_register.add_argument(
+        "--path",
+        type=Path,
+        help="projection file (default: <catalog-stem>-indexes/<provider>/lookup.sqlite)",
+    )
+    index_register.add_argument(
+        "--name", help="target name (default: the provider key); the identity, not the path"
+    )
+    add_json(index_register)
+    index_list = index_commands.add_parser("list", description="Show registered indexes")
+    index_list.add_argument("catalog", type=Path)
+    add_json(index_list)
+    index_import = index_commands.add_parser(
+        "import",
+        description="Build a lookup-v1 projection from a raw provider artifact (offline)",
+    )
+    index_import.add_argument("catalog", type=Path)
+    index_import.add_argument(
+        "--provider", required=True, choices=("e621",), help="artifact source provider"
+    )
+    index_import.add_argument(
+        "--artifact", type=Path, required=True, help="downloaded provider artifact (kept untouched)"
+    )
+    index_import.add_argument(
+        "--checksum", help="published SHA-256 of the artifact; verified before building"
+    )
+    index_import.add_argument(
+        "--path",
+        type=Path,
+        help="projection destination (default: <catalog-stem>-indexes/<provider>/lookup.sqlite)",
+    )
+    index_import.add_argument(
+        "--max-records",
+        type=int,
+        help="bounded import for testing: only the first N export rows",
+    )
+    add_json(index_import)
+
 
 def execute(arguments: argparse.Namespace) -> dict[str, object]:
     catalog_label = public_path(arguments.catalog)
@@ -120,6 +173,8 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             revisit_unsure=arguments.revisit_unsure,
         )
         return {"status": "stopped"}
+    if arguments.command == "index":
+        return _execute_index(arguments)
     if arguments.command == "tombstone":
         with CatalogDatabase(arguments.catalog) as database:
             if arguments.post is not None:
@@ -139,3 +194,105 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             media_root=arguments.media_root,
         )
     return {"catalog": catalog_label, **result}
+
+
+def _default_index_path(catalog: Path, provider: str) -> Path:
+    return catalog.parent / f"{catalog.stem}-indexes" / provider / "lookup.sqlite"
+
+
+def _upsert_registration(
+    database: CatalogDatabase,
+    *,
+    name: str,
+    provider: str,
+    path: Path,
+    revision: str,
+) -> None:
+    now = utc_now()
+    existing = database.connection.execute(
+        "SELECT search_index_registration_id, registered_at"
+        " FROM search_index_registrations WHERE target_name = ?",
+        (name,),
+    ).fetchone()
+    if existing is None:
+        database.connection.execute(
+            """INSERT INTO search_index_registrations
+                   (target_name, provider, index_format, private_path,
+                    snapshot_revision, registered_at)
+               VALUES (?, ?, 'lookup-v1', ?, ?, ?)""",
+            (name, provider, str(path), revision, now),
+        )
+    else:
+        # Path and revision are plumbing; the target identity (name) and its
+        # registration history are preserved across moves and refreshes.
+        database.connection.execute(
+            """UPDATE search_index_registrations
+                  SET provider = ?, private_path = ?, snapshot_revision = ?,
+                      last_refreshed_at = ?
+                WHERE target_name = ?""",
+            (provider, str(path), revision, now, name),
+        )
+    database.connection.commit()
+
+
+def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
+    from media_catalog.search_index.projection import (
+        LOOKUP_FORMAT,
+        read_snapshot,
+        registered_targets,
+    )
+
+    catalog = arguments.catalog
+    label = public_path(catalog)
+    if arguments.index_command == "list":
+        with CatalogDatabase(catalog) as database:
+            targets = registered_targets(database.connection)
+        return {
+            "catalog": label,
+            "count": len(targets),
+            "indexes": [target.as_dict() for target in targets],
+        }
+    if arguments.index_command == "register":
+        provider = arguments.provider.strip()
+        name = (arguments.name or provider).strip()
+        path = arguments.path or _default_index_path(catalog, provider)
+        snapshot = read_snapshot(path)  # raises on missing/wrong format
+        if snapshot.provider != provider:
+            raise ValueError(
+                f"projection reports provider {snapshot.provider or '?'},"
+                f" registration names {provider}"
+            )
+        with CatalogDatabase(catalog) as database:
+            _upsert_registration(
+                database, name=name, provider=provider, path=path, revision=snapshot.revision
+            )
+        return {
+            "catalog": label,
+            "target": name,
+            "provider": provider,
+            "format": LOOKUP_FORMAT,
+            "snapshot_revision": snapshot.revision,
+            "record_count": snapshot.record_count,
+        }
+    # import
+    provider = arguments.provider
+    if provider != "e621":  # pragma: no cover - argparse choices guard this
+        raise ValueError(f"no importer for provider {provider}")
+    from media_catalog.search_index.importers.e621_export import import_e621_export
+
+    destination = arguments.path or _default_index_path(catalog, provider)
+    result = import_e621_export(
+        arguments.artifact,
+        destination=destination,
+        checksum=arguments.checksum,
+        max_records=arguments.max_records,
+    )
+    with CatalogDatabase(catalog) as database:
+        _upsert_registration(
+            database,
+            name=provider,
+            provider=provider,
+            path=destination,
+            revision=result.snapshot_revision,
+        )
+    return {"catalog": label, "target": provider, **result.as_dict()}

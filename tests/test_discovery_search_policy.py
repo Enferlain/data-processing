@@ -21,6 +21,7 @@ from media_catalog.discovery.orchestration import DiscoveryOrchestrator
 from media_catalog.discovery.policy import (
     RECHECK_STALE,
     SearchPolicy,
+    method_version,
 )
 from media_catalog.discovery.run import DiscoveryRunService, SubjectInput
 
@@ -664,7 +665,10 @@ def test_strategy_version_drift_verdict_explains_and_replans() -> None:
         "finished_at": "2026-11-08T00:00:01Z",
     }
     verdict = freshness_verdict(
-        SearchPolicy(), attempt, method="verified_md5", now=datetime.now(UTC)
+        SearchPolicy(),
+        attempt,
+        expected_version=method_version("verified_md5"),
+        now=datetime.now(UTC),
     )
     assert verdict.fresh is False
     assert "prior attempt under strategy version lookup-v0" in verdict.reason

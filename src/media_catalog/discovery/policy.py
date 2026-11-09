@@ -138,7 +138,7 @@ def freshness_verdict(
     policy: SearchPolicy,
     attempt: Any,
     *,
-    method: str,
+    expected_version: str,
     now: datetime,
 ) -> FreshnessVerdict:
     """Is the latest attempt for this key still fresh under this policy?
@@ -146,12 +146,14 @@ def freshness_verdict(
     ``attempt`` is a ledger row (mapping) or None.  Only completed successful
     attempts can be fresh; failed, deferred, and interrupted work never is, so
     later runs retry it.  A zero-result success is fresh: it completed its
-    bounded scope.
-
+    bounded scope.  ``expected_version`` is the caller's current strategy
+    version for the step — provider methods stamp ``method_version(method)``,
+    index steps stamp ``lookup-v1.<snapshot revision>`` — so a semantics or
+    snapshot change invalidates old attempts with an explainable verdict.
     """
     if attempt is None:
         return FreshnessVerdict(False, "never attempted")
-    version = method_version(method)
+    version = expected_version
     if attempt["strategy_version"] != version:
         return FreshnessVerdict(
             False,

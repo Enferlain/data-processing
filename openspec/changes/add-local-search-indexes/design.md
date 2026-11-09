@@ -37,10 +37,10 @@ to `search_index.lookup()` instead of an adapter. Reports, ledger attempts,
 ### D2 — Snapshot revision rides the existing version column
 
 Attempt `strategy_version` for index methods is
-`lookup-v1@<snapshot_revision>` (revision = export checksum prefix or
+`lookup-v1.<snapshot_revision>` (revision = export checksum prefix or
 dataset digest, from `index_meta`). Refresh ⇒ new version ⇒ replan, with the
-verdict explaining "prior attempt under lookup-v1@abc… (current
-lookup-v1@def…)".
+verdict explaining "prior attempt under lookup-v1.abc… (current
+lookup-v1.def…)".
 
 ### D3 — Registration in the catalog, projection outside it
 

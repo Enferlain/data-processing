@@ -9,7 +9,10 @@ PLATFORM_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 INSTANCE_PATTERN = re.compile(
     r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$"
 )
-VERSION_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*-v[1-9][0-9]*$")
+# The optional dot-suffix carries a variant after the base version — search
+# index attempts stamp "lookup-v1.<snapshot revision>" so a refreshed
+# snapshot is a new strategy version for every subject.
+VERSION_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*-v[1-9][0-9]*([.][a-z0-9_.-]+)?$")
 HEX_PATTERN = re.compile(r"^[0-9a-f]+$")
 PARTICIPANT_ROLES = frozenset(
     {"author", "uploader", "artist", "creator", "reposter", "commissioner", "source_attributor"}

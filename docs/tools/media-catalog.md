@@ -450,8 +450,10 @@ occurrence, so `verified_md5` (and declared-MD5) lookup planning works from the 
 `catalog discover` plans and executes one bounded discovery session per subject — a post URL,
 an existing post/account id, or an arbitrary local file (bare-file discovery starts from its
 verified hashes). Planning is offline and reports every considered (source, method) pair as
-planned, skipped, or excluded with the reason. Local catalog steps execute without network;
 provider lookups run only with `--live`, through the same bounded candidate-lookup machinery.
+Registered local search indexes sit between them: offline `index`-kind targets ordered before
+providers, with snapshot-scoped freshness and hits that bridge to normal fetches — see
+[Local search indexes](local-search-indexes.md).
 
 ```bash
 uv run catalog discover catalog-output/catalog.sqlite3 --url https://e926.net/posts/6823045

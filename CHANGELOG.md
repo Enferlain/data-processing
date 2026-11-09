@@ -17,6 +17,24 @@ Rules:
 
 ### Added
 
+- **Local search indexes: lookup-v1 projections as offline discovery targets (Bead
+  `data-processing-an1`, stage 2 slice 1)** — `catalog index register/list/import` maintain
+  per-provider disposable SQLite lookup databases (migration `0032`; default
+  `<catalog-stem>-indexes/<provider>/lookup.sqlite`) built from raw provider artifacts: the
+  e621 daily DB export importer verifies the published SHA-256, streams the gzipped CSV,
+  records the snapshot identity, and swaps atomically; artifacts are retained untouched as
+  the rebuild source. Registered indexes appear in `catalog discover` as ordinary `index`
+  targets — same policy filters, freshness skips, and `--dry-run`/`--search-state`
+  explanations — executing offline and ordered before providers, with snapshot-scoped
+  strategy versions (`lookup-v1.<revision>`) so a refreshed snapshot replans every subject.
+  Index hits are leads (`discovery_index_hits`) that bridge into the existing fetch
+  follow-up generation; only the fetch pipeline writes catalog facts. Every persisted
+  provider post — fetch, metadata sync, candidate lookup, discovery — teaches its
+  provider's index at a shared post-commit boundary in the normalized-page writer
+  (failure-contained; rolled-back transactions teach nothing; no-op without a
+  registration). The version-pattern contract gained an optional dot-suffix for
+  snapshot-stamped versions. Danbooru importer and refresh strategies are follow-ups.
+
 - **`catalog backup` / `catalog restore --verify` (Bead `data-processing-dbq`, roadmap P0.5)** —
   online consistent catalog snapshots via SQLite `VACUUM INTO` (safe under active WAL writers
   such as the labeling server) into a timestamped file plus a self-describing manifest (schema

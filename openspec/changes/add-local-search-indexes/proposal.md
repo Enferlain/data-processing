@@ -26,7 +26,7 @@ infrastructure — never truth, never copied into the primary catalog.
   rows in the existing planner/report/ledger — same policy filters, same
   freshness skips, same `--dry-run`/`--search-state` explanations. Index
   steps execute offline (no `--live`, no request budget), ordered before
-  provider steps. Attempt versions are `lookup-v1@<snapshot_revision>`, so a
+  provider steps. Attempt versions are `lookup-v1.<snapshot_revision>`, so a
   refreshed snapshot replans every subject's index searches.
 - **Hit bridge**: index hits land in a `discovery_index_hits` side table as
   leads; live sessions feed them into the existing wave-A `fetch_post`

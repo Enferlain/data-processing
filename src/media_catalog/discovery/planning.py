@@ -30,6 +30,7 @@ from media_catalog.discovery.policy import (
     freshness_verdict,
     method_version,
 )
+from media_catalog.search_index.projection import registered_targets
 
 # Providers that declare bounded lookup capabilities today; safebooru/rule34/
 # e926 deliberately ship none until captured, and sankaku/pixiv/pawchive have
@@ -38,7 +39,20 @@ LOOKUP_PROVIDERS: tuple[Any, ...] = (DANBOORU, AIBOORU, E621, GELBOORU)
 
 LOCAL = "local"
 PROVIDER = "provider"
+INDEX = "index"
 LOCAL_SOURCE = "catalog"
+
+# Methods a lookup-v1 projection can serve; artist strategies stay gated by
+# the active-search policy even here.
+INDEX_METHODS = (
+    "verified_md5",
+    "declared_md5",
+    "source_post_url",
+    "external_post_id",
+    "artist_exact_name",
+    "artist_alias",
+    "artist_text",
+)
 
 PLANNED = "planned"
 SKIPPED = "skipped"
@@ -103,6 +117,29 @@ def post_canonical_url(connection: Any, seed_post: int) -> str | None:
     if row is None:
         return None
     return row["canonical_url"]
+
+
+def _seed_platform_key(connection: Any, seed_post: int | None) -> str | None:
+    """The platform key of a post seed, for provider-namespaced decisions."""
+    if seed_post is None:
+        return None
+    row = connection.execute(
+        """SELECT platform.platform_key FROM posts p
+             JOIN platforms platform ON platform.platform_id = p.platform_id
+            WHERE p.post_id = ?""",
+        (seed_post,),
+    ).fetchone()
+    return str(row["platform_key"]) if row else None
+
+
+def _seed_native_post_id(connection: Any, seed_post: int | None) -> str | None:
+    """The provider-native id of a post seed."""
+    if seed_post is None:
+        return None
+    row = connection.execute(
+        "SELECT native_post_id FROM posts WHERE post_id = ?", (seed_post,)
+    ).fetchone()
+    return str(row["native_post_id"]) if row else None
 
 
 def file_seed_hashes(connection: Any, seed_file: int) -> list[str]:
@@ -170,6 +207,7 @@ def plan_searches(
         applicable: bool,
         material_detail: str | None,
         digest_values: Any,
+        target_note: str | None = None,
     ) -> PlannedSearch:
         if not applicable:
             return PlannedSearch(
@@ -198,7 +236,12 @@ def plan_searches(
             method=method,
             query_digest=digest,
         )
-        verdict = freshness_verdict(policy, attempt, method=method, now=now)
+        expected_version = (
+            target_note
+            if source_kind == INDEX and target_note is not None
+            else method_version(method)
+        )
+        verdict = freshness_verdict(policy, attempt, expected_version=expected_version, now=now)
         if verdict.fresh:
             return PlannedSearch(
                 source_kind=source_kind,
@@ -207,7 +250,7 @@ def plan_searches(
                 status=SKIPPED,
                 detail=verdict.reason,
                 query_digest=digest,
-                target=digest,
+                target=target_note or digest,
             )
         detail = None if attempt is None else verdict.reason
         return PlannedSearch(
@@ -217,7 +260,7 @@ def plan_searches(
             status=PLANNED,
             detail=detail,
             query_digest=digest,
-            target=digest,
+            target=target_note or digest,
         )
 
     steps: list[PlannedSearch] = []
@@ -263,6 +306,78 @@ def plan_searches(
             ),
         )
     )
+
+    # Index targets: registered provider lookup projections, offline like the
+    # local steps and ordered before providers.  Each contributes the same
+    # decision shape — skipped fresh with the attempt named, excluded by
+    # policy or material, planned under the snapshot's revision.
+    for target in registered_targets(connection):
+        for method in INDEX_METHODS:
+            if target.problem is not None:
+                # A broken registration dominates: every method row names
+                # the file problem instead of a material reason.
+                steps.append(
+                    PlannedSearch(
+                        source_kind=INDEX,
+                        source=target.name,
+                        method=method,
+                        status=EXCLUDED,
+                        detail=target.problem,
+                    )
+                )
+                continue
+            strategy = LookupStrategy(method)
+            values = materials.get(strategy) or []
+            has_material = bool(values)
+            # external_post_id is platform-namespaced.  Cross-platform id
+            # references count only for the matching provider's index; a
+            # subject that IS the provider's post can always search its own
+            # id there.
+            if method == "external_post_id":
+                own_platform = _seed_platform_key(connection, seed_post)
+                own_native = (
+                    _seed_native_post_id(connection, seed_post) if seed_post is not None else None
+                )
+                cross_platform = any(material.platform == target.provider for material in values)
+                if own_platform == target.provider and own_native is not None:
+                    applicable = True
+                    material_detail = None
+                    digest_values: list[str] = [own_native]
+                elif cross_platform:
+                    applicable = True
+                    material_detail = None
+                    digest_values = [material.digest for material in values]
+                else:
+                    applicable = False
+                    material_detail = "no matching provider id on the seed for this index"
+                    digest_values = []
+                steps.append(
+                    decide(
+                        source_kind=INDEX,
+                        source=target.name,
+                        method=method,
+                        applicable=applicable,
+                        material_detail=material_detail,
+                        digest_values=digest_values,
+                        target_note=target.version,
+                    )
+                )
+                continue
+            material_detail = (
+                "no query material on the seed for this method" if not has_material else None
+            )
+            applicable = has_material
+            steps.append(
+                decide(
+                    source_kind=INDEX,
+                    source=target.name,
+                    method=method,
+                    applicable=applicable,
+                    material_detail=material_detail,
+                    digest_values=[material.digest for material in values],
+                    target_note=target.version,
+                )
+            )
 
     # Provider targets: one decision per (provider, strategy), planned when
     # the provider declares it and the seed carries material, excluded when

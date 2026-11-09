@@ -20,10 +20,16 @@ from typing import Any
 from media_catalog.adapter_factory import adapter_construction
 from media_catalog.adapters import AdapterOperation
 from media_catalog.adapters.contracts import LookupStrategy
-from media_catalog.candidate_lookup.planning import LookupLimits, _post_materials
+from media_catalog.candidate_lookup.planning import (
+    LookupLimits,
+    _account_materials,
+    _file_materials,
+    _post_materials,
+)
 from media_catalog.candidate_lookup.service import CandidateLookupService
 from media_catalog.discovery.attempts import SearchAttemptLedger, SubjectRef
 from media_catalog.discovery.planning import (
+    INDEX,
     LOCAL,
     LOOKUP_PROVIDERS,
     PLANNED,
@@ -46,6 +52,8 @@ from media_catalog.discovery.policy import (
 )
 from media_catalog.link_resolution import resolve_link
 from media_catalog.records import SearchAttemptRecord
+from media_catalog.search_index.projection import lookup as index_lookup
+from media_catalog.search_index.projection import target_by_name
 from media_catalog.seeding import SeedMaterializationService
 
 DEFERRED = "deferred"
@@ -73,6 +81,19 @@ def _session_subject(session: sqlite3.Row) -> SubjectRef:
         account_id=session["seed_account_id"],
         file_id=session["seed_file_id"],
     )
+
+
+def _seed_platform(connection: sqlite3.Connection, session: sqlite3.Row) -> str | None:
+    """The platform key of the session's seed post, when it is one."""
+    if session["seed_post_id"] is None:
+        return None
+    row = connection.execute(
+        """SELECT platform.platform_key FROM posts p
+             JOIN platforms platform ON platform.platform_id = p.platform_id
+            WHERE p.post_id = ?""",
+        (int(session["seed_post_id"]),),
+    ).fetchone()
+    return str(row["platform_key"]) if row else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +307,11 @@ class DiscoveryOrchestrator:
             if row["source_kind"] == LOCAL:
                 self._run_local_step(session, row, subject)
                 continue
+            if row["source_kind"] == INDEX:
+                # Index steps are local reads: offline like the catalog
+                # steps, no request budget, ordered before providers.
+                self._run_index_step(session, row, subject)
+                continue
             if not session["live_authorized"]:
                 continue
             remaining = budget_total - spent
@@ -433,11 +459,14 @@ class DiscoveryOrchestrator:
             "UPDATE discovery_steps SET status = ? WHERE discovery_step_id = ?",
             (RUNNING, row["discovery_step_id"]),
         )
+        # Index steps stamp the projection's snapshot revision (carried in
+        # target) as their strategy version: refresh ⇒ replan.
+        version = row["target"] if row["source_kind"] == INDEX else method_version(row["method"])
         record = SearchAttemptRecord(
             source_kind=row["source_kind"],
             source=row["source"],
             method=row["method"],
-            strategy_version=method_version(row["method"]),
+            strategy_version=version,
             query_digest=row["query_digest"],
             status="running",
             started_at=_now(),
@@ -453,6 +482,135 @@ class DiscoveryOrchestrator:
         # visible rather than rolled back.
         self._database.connection.commit()
         return attempt_id
+
+    def _run_index_step(
+        self,
+        session: sqlite3.Row,
+        row: sqlite3.Row,
+        subject: SubjectRef,
+    ) -> None:
+        """Execute one offline index lookup and record hits as leads."""
+        connection = self._database.connection
+        attempt_id = self._begin_attempt(session, row, subject)
+        target = target_by_name(connection, row["source"])
+        values = self._index_lookup_values(session, row, target)
+        hits: list[dict[str, Any]] = []
+        problem: str | None = None
+        if target is None:
+            problem = "index registration no longer exists"
+        elif target.problem is not None:
+            problem = target.problem
+        elif values:
+            try:
+                hits = index_lookup(target, method=row["method"], values=values)
+            except ValueError as error:
+                problem = str(error)
+        now = _now()
+        for hit in hits:
+            connection.execute(
+                """INSERT INTO discovery_index_hits
+                       (discovery_session_id, provider, post_native_id, md5,
+                        snapshot_revision, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    session["discovery_session_id"],
+                    hit["provider"],
+                    hit["post_native_id"],
+                    hit["md5"],
+                    target.snapshot.revision if target and target.snapshot else "",
+                    now,
+                ),
+            )
+        scope = (
+            f"index lookup {row['method']} on {row['target']}:"
+            f" {len(hits)} hit(s), scope {len(values)} value(s)"
+        )
+        if problem is not None:
+            detail = problem
+            outcome: str | None = "error"
+            status = "failed"
+        else:
+            detail = scope
+            outcome = "success"
+            status = "complete"
+        self._finish_step(
+            session["discovery_session_id"],
+            row["discovery_step_id"],
+            status,
+            outcome=outcome,
+            detail=detail,
+            result_count=len(hits) if problem is None else 0,
+        )
+        if attempt_id is not None:
+            self._ledger.finish(
+                attempt_id,
+                status="complete" if status == "complete" else "failed",
+                outcome=outcome if problem is None else "error",
+                result_count=len(hits) if problem is None else 0,
+                scope=detail if problem is None else None,
+                requests_used=0,
+                finished_at=_now(),
+            )
+
+    def _index_lookup_values(
+        self,
+        session: sqlite3.Row,
+        row: sqlite3.Row,
+        target: Any,
+    ) -> list[str]:
+        """Resolve the step's query values from the seed, like provider
+        lookups re-resolve materials; empty when the method cannot serve."""
+        method = row["method"]
+        connection = self._database.connection
+        if method == "external_post_id":
+            # Platform-namespaced: the seed's provider id only matches an
+            # index of the same provider.
+            if target is None or target.provider != _seed_platform(connection, session):
+                return []
+            native = session["seed_post_id"]
+            if native is None:
+                return []
+            platform_row = connection.execute(
+                """SELECT p.native_post_id FROM posts p
+                    WHERE p.post_id = ?""",
+                (int(native),),
+            ).fetchone()
+            return [str(platform_row["native_post_id"])] if platform_row else []
+        strategies = {
+            "verified_md5": (LookupStrategy.VERIFIED_MD5,),
+            "declared_md5": (LookupStrategy.DECLARED_MD5,),
+            "source_post_url": (LookupStrategy.SOURCE_POST_URL,),
+            "artist_exact_name": (LookupStrategy.ARTIST_EXACT_NAME,),
+            "artist_alias": (LookupStrategy.ARTIST_ALIAS,),
+            "artist_text": (LookupStrategy.ARTIST_TEXT,),
+        }
+        try:
+            strategies_lookup = strategies[method]
+        except KeyError:
+            return []
+        seed_post = session["seed_post_id"]
+        if seed_post is not None:
+            _, materials, _ = _post_materials(connection, int(seed_post))
+        elif session["seed_file_id"] is not None:
+            _, materials, _ = _file_materials(connection, int(session["seed_file_id"]))
+        else:
+            strategies_artist = tuple(
+                strategy for strategy in LookupStrategy if strategy.value.startswith("artist_")
+            )
+            try:
+                _, materials, _ = _account_materials(
+                    connection,
+                    int(session["seed_account_id"]),
+                    strategies_artist,
+                    session["search_term"],
+                )
+            except ValueError:
+                return []
+        values: list[str] = []
+        for strategy in strategies_lookup:
+            for material in materials.get(strategy) or ():
+                values.extend(material.values)
+        return values
 
     def _defer_step(self, session: sqlite3.Row, row: sqlite3.Row, detail: str) -> None:
         """Budget ran out before this step started: deferred, not failed.
@@ -615,7 +773,9 @@ class DiscoveryOrchestrator:
             method=method,
             query_digest=query_digest,
         )
-        verdict = freshness_verdict(policy, attempt, method=method, now=datetime.now(UTC))
+        verdict = freshness_verdict(
+            policy, attempt, expected_version=method_version(method), now=datetime.now(UTC)
+        )
         return verdict.reason if verdict.fresh else None
 
     def _plan_followup(
@@ -651,6 +811,19 @@ class DiscoveryOrchestrator:
                 session["seed_account_id"],
             ),
         ).fetchall()
+        # Index hits are leads with provider-native ids already: they join
+        # wave A directly, same fetch suggestions as lookup hits.
+        for index_hit in connection.execute(
+            """SELECT provider, post_native_id FROM discovery_index_hits
+                WHERE discovery_session_id = ?""",
+            (session_id,),
+        ).fetchall():
+            hits.append(
+                {
+                    "platform_key": index_hit["provider"],
+                    "native_post_id": index_hit["post_native_id"],
+                }
+            )
         existing = self._existing_step_identities(session_id)
         planned: list[int] = []
         for hit in hits:

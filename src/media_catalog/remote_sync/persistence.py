@@ -28,10 +28,33 @@ class NormalizedWriteResult:
 
 
 class NormalizedPageWriter:
-    """Persist one normalized provider page without owning its transaction."""
+    """Persist one normalized provider page without owning its transaction.
+
+    Committed top-level posts are taught to registered search indexes at the
+    shared post-commit boundary: the writer enqueues them on the database's
+    post-commit queue, so ``catalog fetch``, direct metadata sync, candidate
+    lookup, discovery fetches/lookups, and reprocess all teach with one hook,
+    and a rolled-back transaction discards its teach batch.  Teach failures
+    are contained by the teach function itself and can never affect catalog
+    success.
+    """
 
     def __init__(self, writer: CatalogWriter) -> None:
         self.writer = writer
+
+    def _enqueue_teach(self, items: list[dict[str, Any]]) -> None:
+        if not items:
+            return
+        from media_catalog.search_index.projection import teach
+
+        database = self.writer.database
+
+        def teach_after_commit() -> None:
+            # Failures are contained inside teach: the committed catalog
+            # write is never affected by an index write.
+            teach(database.connection, items)
+
+        database.enqueue_post_commit(teach_after_commit)
 
     def write(
         self,
@@ -59,6 +82,7 @@ class NormalizedPageWriter:
         accounts: dict[tuple[str, str], int] = {}
         posts: dict[tuple[str, str], int] = {}
         top_level_post_ids: set[int] = set()
+        teach_items: dict[tuple[str, str], dict[str, Any]] = {}
         for item in page.items:
             data = item.data
             platform = _required_text(data, "platform")
@@ -116,6 +140,13 @@ class NormalizedPageWriter:
                 )
                 posts[(platform, native_id)] = result.id
                 top_level_post_ids.add(result.id)
+                teach_items[(platform, native_id)] = {
+                    "provider": platform,
+                    "native_id": native_id,
+                    "canonical_url": _text(data.get("canonical_url")),
+                    "md5": None,
+                    "sources": [],
+                }
                 self._write_post_facts(result.id, data, observed_at, raw_observation_id)
             elif item.object_kind == "attribution":
                 self.writer.upsert_attribution(
@@ -201,6 +232,23 @@ class NormalizedPageWriter:
             elif item.object_kind == "media_occurrence":
                 post_id = self._post_id(posts, platform, data.get("post_id"), observed_at)
                 self._write_media(post_id, data, observed_at, raw_observation_id)
+                declared_md5 = _text(data.get("declared_md5"))
+                if declared_md5:
+                    # The media item may reference a parent/child post that
+                    # was not a top-level item; teach that identity too — it
+                    # is provider truth either way.
+                    native_id = _text(data.get("post_id")) or str(data.get("post_id"))
+                    teach = teach_items.setdefault(
+                        (platform, native_id),
+                        {
+                            "provider": platform,
+                            "native_id": native_id,
+                            "canonical_url": None,
+                            "md5": None,
+                            "sources": [],
+                        },
+                    )
+                    teach["md5"] = declared_md5.lower()
             elif item.object_kind == "tag_alias":
                 self.writer.upsert_tag_alias(
                     TagAliasObservationRecord(
@@ -254,6 +302,7 @@ class NormalizedPageWriter:
         # remains correct if relation materialization later changes how the
         # per-page post cache is maintained. Referenced parent/child posts are
         # deliberately absent from this result.
+        self._enqueue_teach(list(teach_items.values()))
         return NormalizedWriteResult(len(page.items), tuple(sorted(top_level_post_ids)))
 
     def _write_post_facts(

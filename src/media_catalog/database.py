@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import stat
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from importlib import resources
 from pathlib import Path
@@ -67,6 +67,7 @@ class CatalogDatabase:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.connection = sqlite3.connect(path, timeout=5.0)
+        self._post_commit_callbacks: list[Callable[[], None]] = []
         try:
             self.connection.row_factory = sqlite3.Row
             self._check_version()
@@ -219,6 +220,14 @@ class CatalogDatabase:
     def schema_version(self) -> int:
         return int(self.connection.execute("PRAGMA user_version").fetchone()[0])
 
+    def enqueue_post_commit(self, callback: Callable[[], None]) -> None:
+        """Run callback after the next transaction commit (never on rollback).
+
+        Deferred side-channel writes (e.g. teaching search indexes) attach
+        here instead of writing inside the catalog transaction.
+        """
+        self._post_commit_callbacks.append(callback)
+
     @contextmanager
     def transaction(self) -> Iterator[None]:
         if self.connection.in_transaction:
@@ -228,9 +237,20 @@ class CatalogDatabase:
             yield
         except BaseException:
             self.connection.rollback()
+            # The writes these callbacks describe rolled back with the
+            # transaction; discard rather than teach facts that never landed.
+            self._post_commit_callbacks.clear()
             raise
         else:
             self.connection.commit()
+            callbacks = self._post_commit_callbacks
+            self._post_commit_callbacks = []
+            for callback in callbacks:
+                # Post-commit side-channel failures (search-index teaching)
+                # are contained by their own hooks; never surface into the
+                # already-committed catalog write.
+                with suppress(Exception):
+                    callback()
 
     def _check_version(self) -> None:
         found = self.schema_version

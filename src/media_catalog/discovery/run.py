@@ -22,6 +22,7 @@ from media_catalog.discovery.attempts import SearchAttemptLedger, SubjectRef
 from media_catalog.discovery.orchestration import DiscoveryOrchestrator
 from media_catalog.discovery.policy import (
     SearchPolicy,
+    method_version,
 )
 from media_catalog.link_resolution import resolve_link
 from media_catalog.seeding import find_file_seed_id
@@ -266,7 +267,9 @@ class DiscoveryRunService:
                     verdict = freshness_verdict(
                         policy,
                         attempt,
-                        method=step.method,
+                        expected_version=step.target
+                        if step.source_kind == "index" and step.target
+                        else method_version(step.method),
                         now=datetime.now(UTC),
                     )
                     entry["fresh"] = verdict.fresh

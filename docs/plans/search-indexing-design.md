@@ -118,7 +118,7 @@ Parquet/DuckDB stay bulk/rebuild tools, not lookup targets.
   artist-name lookups via `post_artists`/artist export. `fetch_post`
   follow-ups fetch by provider post id through the existing wave machinery.
 - **Freshness**: the attempt's strategy version becomes
-  `lookup-v1@<snapshot_revision>` — a refreshed snapshot changes the version,
+  `lookup-v1.<snapshot_revision>` — a refreshed snapshot changes the version,
   so every subject's index searches replan under the new revision. This is
   the "searched e621 snapshot 2026-11-08, not just e621" guarantee, for free,
   from the stage-1 key.
