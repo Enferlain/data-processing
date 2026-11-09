@@ -6,20 +6,29 @@ and never as truth. An index hit means "this provider probably has this post at 
 only the normal fetch pipeline creates catalog records.
 
 ```bash
-curl -O https://static1.e621.net/data/db_export/posts.csv.gz   # operator downloads the artifact
 uv run catalog index import catalog-output/catalog.sqlite3 \
-   --provider e621 --artifact posts.csv.gz --json
+   --provider e621 --download --json
 uv run catalog index list catalog-output/catalog.sqlite3 --json
 ```
 
-`import` verifies the published SHA-256 when `--checksum` is given, streams the artifact with
-bounded memory into `<catalog-stem>-indexes/<provider>/lookup.sqlite` (md5 / normalized source
-URL / artist-tag indexes), records the snapshot identity (artifact path and digest, revision,
-record counts, builder version) in the projection, and swaps it into place atomically. The raw
-artifact is retained untouched beside the projection — the projection is always rebuildable from
-it, never the reverse. `register` binds an existing projection to a target name (the identity —
-moving the file and re-pointing the registration preserves search history and freshness);
-`list` shows registrations and any file problems.
+`--download` is the explicit network path: one request to e621's public db_exports listing,
+one streamed artifact download (identifying User-Agent), SHA-256 verified against the
+listing before the import reads it, retained under
+`<catalog-stem>-indexes/e621/downloads/posts.csv.gz`. A matching existing artifact is
+reused without a second download — so for e621, re-running `import --download` **is** the
+refresh: a newer export is a new checksum, a new snapshot revision, and every subject's
+index searches replan. Prefer `--artifact` with your own file when you already downloaded
+it (optionally with `--checksum`).
+
+`import` verifies the published SHA-256 when supplied (always, with `--download`), streams
+the artifact with bounded memory into `<catalog-stem>-indexes/<provider>/lookup.sqlite`
+(md5 / normalized source URL / artist-tag indexes), records the snapshot identity
+(artifact path and digest, revision, scope, record counts, builder version) in the
+projection, and swaps it into place atomically. The raw artifact is retained untouched —
+the projection is always rebuildable from it, never the reverse. `register` binds an
+existing projection to a target name (the identity — moving the file and re-pointing the
+registration preserves search history and freshness); `list` shows registrations and any
+file problems.
 
 Registered indexes then appear in `catalog discover` as ordinary `index`-kind targets with the
 same policy filters, freshness skips, and `--dry-run`/`--search-state` explanations as every

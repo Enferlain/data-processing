@@ -171,12 +171,15 @@ Discovery only reads. Maintenance commands own writes:
 - `catalog index register/list` — bind a projection to a provider target.
 - `catalog index import --provider e621 --artifact posts.csv.gz` — verify
   SHA-256, stream-build the projection, transactional swap, bump revision.
-  (Network download itself is an operator `curl`/explicit live step in slice 1;
-  a `--download` convenience can follow.)
-- `catalog index refresh` (later slice) — e621: fetch today's export and
-  rebuild; danbooru: watermark increment; gelbooru: `cid` window with overlap
-  + dedup; sankaku: bounded `id_range`. State/watermarks live in `state.json`
-  + `index_meta`, never in the primary catalog beyond registration.
+- `catalog index import --provider e621 --download` — fetch today's export
+  from the public db_exports listing (checksum-verified, identifying
+  User-Agent, artifact retained under downloads/); a matching existing
+  artifact is reused. For e621 this **is** the refresh: daily full exports
+  mean no separate watermark machinery.
+- `catalog index refresh` (later slice, non-export providers) — danbooru:
+  watermark increment; gelbooru: `cid` window with overlap + dedup; sankaku:
+  bounded `id_range`. State/watermarks live in `state.json` + `index_meta`,
+  never in the primary catalog beyond registration.
 
 ## 3. Artist-identifier search (investigation)
 

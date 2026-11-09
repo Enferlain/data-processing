@@ -117,14 +117,25 @@ def register(commands: argparse._SubParsersAction) -> None:
     add_json(index_list)
     index_import = index_commands.add_parser(
         "import",
-        description="Build a lookup-v1 projection from a raw provider artifact (offline)",
+        description=(
+            "Build a lookup-v1 projection from a raw provider artifact"
+            " (--download fetches it from the provider's export listing,"
+            " checksum-verified)"
+        ),
     )
     index_import.add_argument("catalog", type=Path)
     index_import.add_argument(
         "--provider", required=True, choices=("e621",), help="artifact source provider"
     )
-    index_import.add_argument(
-        "--artifact", type=Path, required=True, help="downloaded provider artifact (kept untouched)"
+    artifact_source = index_import.add_mutually_exclusive_group(required=True)
+    artifact_source.add_argument(
+        "--artifact", type=Path, help="downloaded provider artifact (kept untouched)"
+    )
+    artifact_source.add_argument(
+        "--download",
+        action="store_true",
+        help="fetch the export from the provider (e621 db_exports listing), verify its"
+        " published checksum, retain it under <catalog-stem>-indexes/<provider>/downloads/",
     )
     index_import.add_argument(
         "--checksum", help="published SHA-256 of the artifact; verified before building"
@@ -194,6 +205,10 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             media_root=arguments.media_root,
         )
     return {"catalog": catalog_label, **result}
+
+
+def _default_downloads_dir(catalog: Path, provider: str) -> Path:
+    return catalog.parent / f"{catalog.stem}-indexes" / provider / "downloads"
 
 
 def _default_index_path(catalog: Path, provider: str) -> Path:
@@ -281,10 +296,27 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
     from media_catalog.search_index.importers.e621_export import import_e621_export
 
     destination = arguments.path or _default_index_path(catalog, provider)
+    download_note: dict[str, object] | None = None
+    artifact_path = arguments.artifact
+    checksum = arguments.checksum
+    if arguments.download:
+        # Explicit network: listing request + streamed artifact download,
+        # verified against the provider's published checksum.  A matching
+        # existing artifact is reused, so re-running is the refresh.
+        from media_catalog.search_index.download import (
+            download_e621_export,
+            download_result_dict,
+        )
+
+        artifact_path, listing = download_e621_export(
+            _default_downloads_dir(catalog, provider), export_name="posts"
+        )
+        checksum = listing.checksum
+        download_note = download_result_dict(artifact_path, listing)
     result = import_e621_export(
-        arguments.artifact,
+        artifact_path,
         destination=destination,
-        checksum=arguments.checksum,
+        checksum=checksum,
         max_records=arguments.max_records,
     )
     with CatalogDatabase(catalog) as database:
@@ -295,4 +327,7 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
             path=destination,
             revision=result.snapshot_revision,
         )
-    return {"catalog": label, "target": provider, **result.as_dict()}
+    payload: dict[str, object] = {"catalog": label, "target": provider, **result.as_dict()}
+    if download_note is not None:
+        payload["download"] = download_note
+    return payload

@@ -521,6 +521,111 @@ def _raw_observation(catalog: Path) -> int:
 _raw_observation_counter = [1]
 
 
+# ── Explicit artifact download (--download) ─────────────────────────────
+
+
+class _FakeExportServer:
+    """Serves the e621 db_exports listing and a small gzipped posts export."""
+
+    def __init__(self, artifact_bytes: bytes) -> None:
+        self.artifact_bytes = artifact_bytes
+        self.checksum = sha256_of(artifact_bytes)
+        self.file_requests = 0
+
+    def handler(self, request: object) -> object:
+        import httpx
+
+        url = str(request.url)
+        if url.endswith("/db_exports.json"):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "name": "posts",
+                        "file_name": "posts.csv.gz",
+                        "file_size": len(self.artifact_bytes),
+                        "checksum": self.checksum,
+                        "updated_at": "2026-11-09T00:04:56.927-05:00",
+                        "url": "https://static1.e621.net/data/db_export/posts.csv.gz",
+                    }
+                ],
+            )
+        if url.endswith("posts.csv.gz"):
+            self.file_requests += 1
+            return httpx.Response(200, content=self.artifact_bytes)
+        raise AssertionError(f"unrecorded url: {url}")
+
+
+def sha256_of(payload: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _export_bytes(rows: int) -> bytes:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=["id", "md5", "source", "tag_string_artist"])
+    writer.writeheader()
+    for index in range(rows):
+        writer.writerow(
+            {
+                "id": str(1000 + index),
+                "md5": f"{index:032x}",
+                "source": "",
+                "tag_string_artist": "",
+            }
+        )
+    return gzip.compress(buffer.getvalue().encode("utf-8"))
+
+
+def test_download_import_verifies_checksum_and_reuses_existing(
+    catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    from media_catalog.search_index import download as download_module
+
+    server = _FakeExportServer(_export_bytes(3))
+    monkeypatch.setattr(
+        download_module,
+        "_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(server.handler)),
+    )
+    downloads = tmp_path / "downloads"
+    artifact, listing = download_module.download_e621_export(downloads)
+    assert artifact == downloads / "posts.csv.gz"
+    assert listing.checksum == server.checksum
+    assert server.file_requests == 1
+
+    # A matching existing artifact is reused: no second file download.
+    _, _ = download_module.download_e621_export(downloads)
+    assert server.file_requests == 1
+
+    projection = tmp_path / "lookup.sqlite"
+    result = import_e621_export(artifact, destination=projection, checksum=listing.checksum)
+    assert result.record_count == 3 and result.scope == "full"
+
+
+def test_download_refuses_checksum_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    from media_catalog.search_index import download as download_module
+    from media_catalog.search_index.download import ExportDownloadError
+
+    server = _FakeExportServer(_export_bytes(2))
+    server.checksum = "0" * 64  # lie about the checksum
+    monkeypatch.setattr(
+        download_module,
+        "_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(server.handler)),
+    )
+    with pytest.raises(ExportDownloadError, match="checksum mismatch"):
+        download_module.download_e621_export(tmp_path / "d")
+    assert not list((tmp_path / "d").glob("*.part"))
+
+
 # ── Corrective freshness semantics ───────────────────────────────────────
 
 

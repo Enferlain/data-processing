@@ -11,7 +11,21 @@ Rules:
 
 - Use proper sub titles "Added", "Changed", "Removed" and "Fixed"
 - Keep proper track of days for where entries should go
-- Be concise but mention all changes without necessarily detailing each one
+- Be concise and mention all changes without necessarily detailing each one
+
+## [2026-11-10]
+
+### Added
+
+- **`catalog index import --download` (Bead `data-processing-an1`)** — the explicit network
+  path for e621 index imports: one request to the public `/db_exports.json` listing, one
+  streamed artifact download with the identifying e621 User-Agent, SHA-256 verified against
+  the listing before the import reads it, retained under
+  `<catalog-stem>-indexes/e621/downloads/`. A matching existing artifact is reused without a
+  second download, so for e621 — daily full exports — re-running `import --download` is the
+  refresh: a newer export is a new checksum and snapshot revision, replanning every subject's
+  index searches. Mutually exclusive with `--artifact`; two mocked-transport tests cover the
+  verify/reuse/mismatch paths.
 
 ## [2026-11-08]
 

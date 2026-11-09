@@ -65,6 +65,19 @@ row.
 - **WHEN** the supplied artifact hash does not match its published checksum
 - **THEN** import fails before any projection is built or swapped
 
+#### Scenario: downloaded artifact is checksum-verified against the listing
+
+- **WHEN** `catalog index import --download` fetches the export and the
+  downloaded bytes do not match the provider listing's published checksum
+- **THEN** the download fails, nothing is imported, and no partial artifact
+  file remains
+
+#### Scenario: re-running the download is the refresh
+
+- **WHEN** `--download` runs again and the listing still names the same
+  checksum as the retained artifact
+- **THEN** the artifact is reused without a second download
+
 #### Scenario: rebuilt projection replaces atomically
 
 - **WHEN** an import completes while a discovery session holds the previous
