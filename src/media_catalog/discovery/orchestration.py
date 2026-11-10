@@ -505,22 +505,49 @@ class DiscoveryOrchestrator:
                 hits = index_lookup(target, method=row["method"], values=values)
             except ValueError as error:
                 problem = str(error)
+            except sqlite3.Error as error:
+                # A projection whose schema does not match its advertised
+                # capabilities fails this step, not the whole session.
+                problem = f"index lookup failed: {error}"
         now = _now()
-        for hit in hits:
-            connection.execute(
-                """INSERT INTO discovery_index_hits
-                       (discovery_session_id, provider, post_native_id, md5,
-                        snapshot_revision, recorded_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    session["discovery_session_id"],
-                    hit["provider"],
-                    hit["post_native_id"],
-                    hit["md5"],
-                    target.snapshot.revision if target and target.snapshot else "",
-                    now,
-                ),
-            )
+        if row["method"] == "artist_identifier":
+            # Artist entries are not posts: leads only, never facts, and
+            # never fetch follow-ups.
+            for hit in hits:
+                connection.execute(
+                    """INSERT INTO discovery_artist_leads
+                           (discovery_session_id, provider, artist_native_id,
+                            artist_name, other_names, matched_url, is_active,
+                            snapshot_revision, recorded_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        session["discovery_session_id"],
+                        hit["provider"],
+                        hit["artist_id"],
+                        hit["name"],
+                        " ".join(hit["other_names"]),
+                        hit["matched_url"],
+                        1 if hit["is_active"] else 0,
+                        target.snapshot.revision if target and target.snapshot else "",
+                        now,
+                    ),
+                )
+        else:
+            for hit in hits:
+                connection.execute(
+                    """INSERT INTO discovery_index_hits
+                           (discovery_session_id, provider, post_native_id, md5,
+                            snapshot_revision, recorded_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        session["discovery_session_id"],
+                        hit["provider"],
+                        hit["post_native_id"],
+                        hit["md5"],
+                        target.snapshot.revision if target and target.snapshot else "",
+                        now,
+                    ),
+                )
         scope = (
             f"index lookup {row['method']} on {row['target']}:"
             f" {len(hits)} hit(s), scope {len(values)} value(s)"
@@ -580,6 +607,9 @@ class DiscoveryOrchestrator:
             "verified_md5": (LookupStrategy.VERIFIED_MD5,),
             "declared_md5": (LookupStrategy.DECLARED_MD5,),
             "source_post_url": (LookupStrategy.SOURCE_POST_URL,),
+            # Identifier probes are the seed's source-URL material (the
+            # artist's stable page URL), like the planner decides.
+            "artist_identifier": (LookupStrategy.SOURCE_POST_URL,),
             "artist_exact_name": (LookupStrategy.ARTIST_EXACT_NAME,),
             "artist_alias": (LookupStrategy.ARTIST_ALIAS,),
             "artist_text": (LookupStrategy.ARTIST_TEXT,),
@@ -610,6 +640,11 @@ class DiscoveryOrchestrator:
         for strategy in strategies_lookup:
             for material in materials.get(strategy) or ():
                 values.extend(material.values)
+        if method == "artist_identifier" and session["seed_post_id"] is not None:
+            # Shared collector, so planner and executor can never drift.
+            from media_catalog.discovery.planning import artist_identifier_values
+
+            return artist_identifier_values(connection, int(session["seed_post_id"]), values)
         return values
 
     def _defer_step(self, session: sqlite3.Row, row: sqlite3.Row, detail: str) -> None:

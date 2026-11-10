@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -43,12 +45,15 @@ INDEX = "index"
 LOCAL_SOURCE = "catalog"
 
 # Methods a lookup-v1 projection can serve; artist strategies stay gated by
-# the active-search policy even here.
+# the active-search policy even here.  artist_identifier is index-only (the
+# artists-export projection): it probes source-URL material against artist
+# entry URLs; the provider-side strategy is a deliberate follow-up.
 INDEX_METHODS = (
     "verified_md5",
     "declared_md5",
     "source_post_url",
     "external_post_id",
+    "artist_identifier",
     "artist_exact_name",
     "artist_alias",
     "artist_text",
@@ -108,6 +113,77 @@ def post_source_urls(connection: Any, seed_post: int) -> list[str]:
             (seed_post,),
         )
     ]
+
+
+def seed_account_profile_urls(connection: Any, seed_post: int) -> list[str]:
+    """Canonical profile URLs of the seed post's participating accounts.
+
+    The artist's stable account identity, not a post URL: artist entries on
+    the providers list profile pages, so identifier resolution probes the
+    accounts behind the seed.  X/twitter accounts map deterministically to
+    ``https://x.com/<handle>`` (native id = handle), like the synthesized
+    post URLs elsewhere in planning.
+    """
+    urls: list[str] = []
+    for row in connection.execute(
+        """SELECT DISTINCT p.platform_key, a.native_account_id, a.canonical_url
+             FROM post_participants pp
+             JOIN accounts a ON a.account_id = pp.account_id
+             JOIN platforms p ON p.platform_id = a.platform_id
+            WHERE pp.post_id = ? AND a.native_account_id != ''""",
+        (seed_post,),
+    ):
+        canonical = row["canonical_url"]
+        if canonical:
+            urls.append(str(canonical))
+        elif str(row["platform_key"]) in ("x", "twitter"):
+            native = str(row["native_account_id"]).lstrip("@")
+            # Numeric native ids are account IDs, not handles: synthesizing
+            # https://x.com/123456 probes nothing (and a numeric-looking
+            # handle would be a false match).
+            if native and not native.isdigit():
+                urls.append(f"https://x.com/{native}")
+    return urls
+
+
+def _x_profile_url(url: str) -> str | None:
+    """The profile URL behind an x/twitter URL (`…/<handle>/status/…`)."""
+    match = re.match(r"https://(?:www\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})(?:/|$)", url)
+    return f"https://x.com/{match.group(1)}" if match else None
+
+
+def artist_identifier_values(
+    connection: Any,
+    seed_post: int | None,
+    material_values: Iterable[str] = (),
+) -> list[str]:
+    """Probe values for the index ``artist_identifier`` method.
+
+    Artist entries list PROFILE pages, so the probes are the seed's account
+    identities first (participating accounts; profiles derived from
+    x/twitter status URLs — the handle IS the stable identity), then the
+    recorded source URLs verbatim.  Shared by the planner and the executor
+    so the two can never drift.
+    """
+    values: list[str] = []
+
+    def add(url: str | None) -> None:
+        if url and url not in values:
+            values.append(url)
+
+    if seed_post is not None:
+        for url in seed_account_profile_urls(connection, seed_post):
+            add(url)
+        for url in post_source_urls(connection, seed_post):
+            add(url)
+            add(_x_profile_url(url))
+        canonical = post_canonical_url(connection, seed_post)
+        if canonical is not None:
+            add(canonical)
+            add(_x_profile_url(canonical))
+    for value in material_values:
+        add(value)
+    return values
 
 
 def post_canonical_url(connection: Any, seed_post: int) -> str | None:
@@ -323,6 +399,41 @@ def plan_searches(
                         method=method,
                         status=EXCLUDED,
                         detail=target.problem,
+                    )
+                )
+                continue
+            if not target.serves(method):
+                steps.append(
+                    PlannedSearch(
+                        source_kind=INDEX,
+                        source=target.name,
+                        method=method,
+                        status=EXCLUDED,
+                        detail="index does not serve this method",
+                    )
+                )
+                continue
+            if method == "artist_identifier":
+                # Identifier probes come from the shared collector: account
+                # identities first (artist entries list PROFILE pages),
+                # then the source-URL material verbatim.
+                strategy_materials = materials.get(LookupStrategy.SOURCE_POST_URL) or []
+                probes = artist_identifier_values(
+                    connection,
+                    seed_post,
+                    (value for material in strategy_materials for value in material.values),
+                )
+                steps.append(
+                    decide(
+                        source_kind=INDEX,
+                        source=target.name,
+                        method=method,
+                        applicable=bool(probes),
+                        material_detail=(
+                            None if probes else "no query material on the seed for this method"
+                        ),
+                        digest_values=probes,
+                        target_note=target.version,
                     )
                 )
                 continue

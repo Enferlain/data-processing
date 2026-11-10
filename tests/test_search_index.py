@@ -1096,3 +1096,282 @@ def test_register_validates_missing_file(
             ]
         )
     assert "not a lookup-v1 projection" in str(raised.value) or raised.value.code
+
+
+# ── artist_identifier (artists-export index) ──────────────────────────
+
+
+# The real e621 artists.csv.gz header, in order (2026-11-09 export); the URL
+# columns are plain whitespace-separated strings, not postgres arrays.
+REAL_ARTIST_EXPORT_COLUMNS = (
+    "id",
+    "name",
+    "other_names",
+    "group_name",
+    "linked_user_id",
+    "is_active",
+    "is_locked",
+    "creator_id",
+    "created_at",
+    "updated_at",
+    "active_urls",
+    "inactive_urls",
+)
+
+ARTIST_URL = "https://www.furaffinity.net/user/shiuk/"
+
+
+def _write_artists_export(path: Path, rows: list[dict[str, str]]) -> str:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(REAL_ARTIST_EXPORT_COLUMNS))
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    path.write_bytes(gzip.compress(buffer.getvalue().encode("utf-8")))
+    return sha256_file(path)
+
+
+def _artist_rows() -> list[dict[str, str]]:
+    return [
+        {
+            "id": "1",
+            "name": "shiuk",
+            "other_names": "{shiuk_art,shuik_salamander}",
+            "group_name": "",
+            "linked_user_id": "",
+            "is_active": "t",
+            "is_locked": "f",
+            "creator_id": "1",
+            "created_at": "2020-03-05 10:20:10.734773",
+            "updated_at": "2026-08-05 18:49:54.39134",
+            "active_urls": f"{ARTIST_URL} https://www.weasyl.com/profile/shiuk"
+            " furaffinity.net/user/shiuk/",
+            "inactive_urls": "https://old.example.com/shiuk",
+        },
+        {
+            "id": "2",
+            "name": "second_artist",
+            "other_names": "{}",
+            "group_name": "",
+            "linked_user_id": "",
+            "is_active": "f",
+            "is_locked": "f",
+            "creator_id": "1",
+            "created_at": "2020-03-05 10:20:10.734773",
+            "updated_at": "2026-08-05 18:49:54.39134",
+            "active_urls": "https://www.example.com/second",
+            "inactive_urls": "",
+        },
+    ]
+
+
+def _seed_post_with_source_link(catalog: Path, url: str) -> int:
+    raw_observation_id = _raw_observation(catalog)
+    with CatalogDatabase(catalog) as database, database.transaction():
+        platform_id = int(
+            database.connection.execute(
+                "SELECT platform_id FROM platforms WHERE platform_key = 'gelbooru'"
+            ).fetchone()[0]
+        )
+        post_cursor = database.connection.execute(
+            """INSERT INTO posts (platform_id, native_post_id, first_seen_at, last_seen_at)
+               VALUES (?, 'artist-seed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')""",
+            (platform_id,),
+        )
+        post_id = int(post_cursor.lastrowid)
+        link_cursor = database.connection.execute(
+            """INSERT INTO external_links (canonical_url, canonicalization_version,
+                                            resolution_state)
+               VALUES (?, 'url-canonicalizer-v1', 'recognized')""",
+            (url,),
+        )
+        database.connection.execute(
+            """INSERT INTO post_external_references
+                   (post_id, external_link_id, reference_kind, raw_observation_id, observed_at)
+               VALUES (?, ?, 'source_url', ?, '2026-01-01T00:00:00Z')""",
+            (post_id, int(link_cursor.lastrowid), raw_observation_id),
+        )
+    return post_id
+
+
+def test_artists_import_serves_artist_identifier(tmp_path: Path) -> None:
+    from media_catalog.search_index.importers.e621_artists_export import (
+        import_e621_artists_export,
+    )
+
+    export = tmp_path / "artists.csv.gz"
+    _write_artists_export(export, _artist_rows())
+    projection = tmp_path / "artists-lookup.sqlite"
+    result = import_e621_artists_export(export, destination=projection)
+
+    assert result.scope == "full"
+    assert result.record_count == 2
+    assert result.url_count == 5
+    assert result.columns_absent == ()
+    snapshot = read_snapshot(projection)
+    assert snapshot.capabilities == ("artist_identifier",)
+
+    from media_catalog.search_index.projection import IndexTarget
+
+    target = IndexTarget(
+        name="e621-artists", provider="e621", path=projection, snapshot=snapshot, problem=None
+    )
+    hits = lookup(target, method="artist_identifier", values=[ARTIST_URL])
+    assert len(hits) == 1
+    assert hits[0]["name"] == "shiuk"
+    assert hits[0]["other_names"] == ["shiuk_art", "shuik_salamander"]
+    assert hits[0]["matched_url"] == ARTIST_URL
+    assert hits[0]["is_active"] is True
+    inactive = lookup(target, method="artist_identifier", values=["https://old.example.com/shiuk"])
+    assert len(inactive) == 1 and inactive[0]["name"] == "shiuk"
+
+    # scheme-less export tokens are repaired to https:// and matchable
+    repaired = lookup(
+        target, method="artist_identifier", values=["https://furaffinity.net/user/shiuk/"]
+    )
+    assert len(repaired) == 1 and repaired[0]["name"] == "shiuk"
+
+
+def test_artist_identifier_records_leads_and_replans_on_reimport(
+    catalog: Path, artifact: Path, tmp_path: Path
+) -> None:
+    from media_catalog.search_index.importers.e621_artists_export import (
+        import_e621_artists_export,
+    )
+
+    # The posts index stays registered too: its artist_identifier row must be
+    # excluded by capability, not executed.
+    posts_projection = tmp_path / "posts-lookup.sqlite"
+    import_e621_export(artifact, destination=posts_projection)
+    _register(catalog, "e621", posts_projection)
+
+    export = tmp_path / "artists.csv.gz"
+    _write_artists_export(export, _artist_rows())
+    artists_projection = tmp_path / "artists-lookup.sqlite"
+    import_e621_artists_export(export, destination=artists_projection, max_records=1)
+    _register(catalog, "e621-artists", artists_projection)
+
+    seed_id = _seed_post_with_source_link(catalog, ARTIST_URL)
+    with CatalogDatabase(catalog) as database:
+        first = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["source"], s["method"]): s for s in first["steps"]}
+    lead_step = steps[("index", "e621-artists", "artist_identifier")]
+    assert lead_step["status"] == "complete"
+    assert lead_step["result_count"] == 1
+    posts_step = steps[("index", "e621", "artist_identifier")]
+    assert posts_step["status"] == "excluded"
+    assert posts_step["detail"] == "index does not serve this method"
+    with CatalogDatabase(catalog) as database:
+        lead = database.connection.execute(
+            """SELECT provider, artist_native_id, artist_name, other_names,
+                      matched_url, is_active
+                 FROM discovery_artist_leads"""
+        ).fetchone()
+    assert lead is not None
+    assert lead["provider"] == "e621"
+    assert lead["artist_native_id"] == "1"
+    assert lead["artist_name"] == "shiuk"
+    assert lead["matched_url"] == ARTIST_URL
+    assert lead["is_active"] == 1
+
+    # Fresh under the same revision: skipped.
+    with CatalogDatabase(catalog) as database:
+        again = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["source"], s["method"]): s for s in again["steps"]}
+    assert steps[("index", "e621-artists", "artist_identifier")]["status"] == "skipped"
+
+    # A re-import (expanded scope) is a new revision: replanned.
+    import_e621_artists_export(export, destination=artists_projection)
+    _register(catalog, "e621-artists", artists_projection)
+    with CatalogDatabase(catalog) as database:
+        replanned = DiscoveryOrchestrator(database).start(post_id=seed_id)
+    steps = {(s["source_kind"], s["source"], s["method"]): s for s in replanned["steps"]}
+    assert steps[("index", "e621-artists", "artist_identifier")]["status"] == "complete"
+
+
+def test_review_fixes(catalog: Path, tmp_path: Path) -> None:
+    """Regression tests from the slice review."""
+    import sqlite3 as sqlite3_module
+
+    from media_catalog.search_index.importers.e621_artists_export import (
+        import_e621_artists_export,
+    )
+
+    export = tmp_path / "artists-dup.csv.gz"
+    rows = _artist_rows()
+    duplicate = dict(rows[0])
+    duplicate["active_urls"] = ""
+    duplicate["inactive_urls"] = "https://www.new-home.example/shiuk"
+    duplicate["is_active"] = "f"
+    _write_artists_export(export, [rows[0], duplicate])
+    projection = tmp_path / "dup-lookup.sqlite"
+    import_e621_artists_export(export, destination=projection)
+    connection = sqlite3_module.connect(f"file:{projection}?mode=ro", uri=True)
+    urls = {
+        r[0]: r[1] for r in connection.execute("SELECT normalized_url, active FROM artist_urls")
+    }
+    assert list(urls) == ["https://www.new-home.example/shiuk"]
+    assert urls["https://www.new-home.example/shiuk"] == 0
+    assert connection.execute("SELECT is_active FROM artist_entries").fetchone()[0] == 0
+    connection.close()
+
+    # (2) numeric native ids synthesize nothing
+    from media_catalog.discovery.planning import seed_account_profile_urls
+
+    with CatalogDatabase(catalog) as database, database.transaction():
+        platform = database.connection.execute(
+            "SELECT platform_id FROM platforms WHERE platform_key = 'x'"
+        ).fetchone()
+        assert platform is not None
+        account = database.connection.execute(
+            """INSERT INTO accounts (platform_id, native_account_id, first_seen_at,
+                                     last_seen_at)
+               VALUES (?, '2456065', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')""",
+            (int(platform[0]),),
+        )
+        seed = database.connection.execute("SELECT post_id FROM posts LIMIT 1").fetchone()[0]
+        database.connection.execute(
+            "INSERT INTO post_participants (post_id, account_id, role) VALUES (?, ?, 'author')",
+            (int(seed), int(account.lastrowid)),
+        )
+        assert seed_account_profile_urls(database.connection, int(seed)) == []
+
+    # (1) teach skips the artists projection entirely (provider is shared)
+    artists_projection = tmp_path / "teach-lookup.sqlite"
+    _write_artists_export(export, _artist_rows())
+    import_e621_artists_export(export, destination=artists_projection)
+    _register(catalog, "e621-artists", artists_projection)
+    from media_catalog.remote_sync.persistence import NormalizedPageWriter
+    from media_catalog.writer import CatalogWriter
+
+    with CatalogDatabase(catalog) as database:
+        writer = CatalogWriter(database)
+        page_writer = NormalizedPageWriter(writer)
+        with database.transaction():
+            page_writer.write(
+                _normalized_post_page("e621", "771", MD5_B, "https://e621.net/posts/771"),
+                observed_at="2026-11-10T00:00:00Z",
+                raw_observation_id=_raw_observation(catalog),
+                adapter_version="test-v1",
+            )
+    snapshot = read_snapshot(artists_projection)
+    assert snapshot.overlay_generation == 0
+    probe = sqlite3_module.connect(f"file:{artists_projection}?mode=ro", uri=True)
+    assert probe.execute("SELECT count(*) FROM posts").fetchone()[0] == 0
+    probe.close()
+
+    # (3) register refuses the default name for a non-post projection
+    from argparse import Namespace
+
+    from media_catalog.cli_commands import maintenance as maintenance_cli
+
+    with pytest.raises(ValueError, match="register it with an explicit --name"):
+        maintenance_cli._execute_index(
+            Namespace(
+                catalog=catalog,
+                index_command="register",
+                provider="e621",
+                path=artists_projection,
+                name=None,
+            )
+        )

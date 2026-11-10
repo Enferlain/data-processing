@@ -206,6 +206,16 @@ until `--search-mode active` or a search term implies it. Slice: after index
 read path — the artist exports (e621 7.3 MB, danbooru artists in metadata
 datasets) make identifier→tag resolution a *local* index lookup too.
 
+**Index-side slice landed (2026-11-10):** the e621 artists export imports as
+its own `e621-artists` lookup-v1 target serving exactly `artist_identifier`
+(per-target `index_meta.capabilities`); probes are the seed's account
+identities (participating-account profile URLs; x/twitter status URLs
+derive `https://x.com/<handle>` — the handle is the stable identity) plus
+recorded source URLs, with scheme repair for bare host/path tokens; hits are
+artist-entry leads in `discovery_artist_leads` (never posts, never a fetch
+bridge). The provider-side strategy (live URL search, artist-tag post
+searches from leads) remains the follow-up above.
+
 ## 4. Reverse-image / content-based search (investigation)
 
 Two different problems; keep them separate:

@@ -20,6 +20,18 @@ from media_catalog.output import public_path
 
 LOOKUP_FORMAT = "lookup-v1"
 
+# The method set a posts projection serves when index_meta records no
+# explicit capabilities (artist projections list theirs).
+DEFAULT_CAPABILITIES = (
+    "verified_md5",
+    "declared_md5",
+    "source_post_url",
+    "external_post_id",
+    "artist_exact_name",
+    "artist_alias",
+    "artist_text",
+)
+
 _SCHEMA = """
 CREATE TABLE posts (
     post_id INTEGER PRIMARY KEY,
@@ -52,6 +64,30 @@ CREATE INDEX idx_artists_tag ON post_artists(artist_tag);
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
+_ARTIST_SCHEMA = """
+CREATE TABLE artist_entries (
+    artist_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    group_name TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT
+);
+CREATE TABLE artist_names (
+    artist_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    PRIMARY KEY (artist_id, name, kind)
+);
+CREATE INDEX idx_artist_names_name ON artist_names(name);
+CREATE TABLE artist_urls (
+    artist_id INTEGER NOT NULL,
+    normalized_url TEXT NOT NULL,
+    active INTEGER NOT NULL,
+    PRIMARY KEY (artist_id, normalized_url)
+);
+CREATE INDEX idx_artist_urls_url ON artist_urls(normalized_url);
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class SnapshotInfo:
@@ -73,6 +109,9 @@ class SnapshotInfo:
     format: str
     scope: str = "unknown"
     overlay_generation: int = 0
+    # Methods this projection serves (from index_meta; the post-method set
+    # when the key is absent, so pre-capability projections keep working).
+    capabilities: tuple[str, ...] = ()
 
 
 def _snapshot_from_meta(meta: dict[str, str]) -> SnapshotInfo:
@@ -83,6 +122,13 @@ def _snapshot_from_meta(meta: dict[str, str]) -> SnapshotInfo:
         generation = int(meta.get("overlay_generation", "0"))
     except ValueError:
         generation = 0
+    capabilities = tuple(
+        part.strip() for part in (meta.get("capabilities") or "").split(",") if part.strip()
+    )
+    if not capabilities:
+        # Pre-capability projections (posts-only) keep serving the original
+        # method set; artist projections record an explicit list.
+        capabilities = DEFAULT_CAPABILITIES
     return SnapshotInfo(
         provider=meta.get("provider") or "",
         revision=revision,
@@ -92,6 +138,7 @@ def _snapshot_from_meta(meta: dict[str, str]) -> SnapshotInfo:
         format=meta.get("format") or "",
         scope=meta.get("scope") or "unknown",
         overlay_generation=generation,
+        capabilities=capabilities,
     )
 
 
@@ -138,6 +185,9 @@ class ProjectionBuilder:
         builder_version: str,
         scope: str = "unknown",
         record_count: int | None = None,
+        capabilities: tuple[str, ...] | None = None,
+        count_table: str = "posts",
+        artist_schema: bool = False,
     ) -> None:
         self.provider = provider
         self.destination = Path(destination)
@@ -147,11 +197,52 @@ class ProjectionBuilder:
         self.builder_version = builder_version
         self.scope = scope
         self.record_count = record_count
+        self.capabilities = capabilities
+        self.count_table = count_table
         self._temp = destination.with_name(destination.name + ".build-tmp")
         if self._temp.exists():
             self._temp.unlink()
         self._connection = sqlite3.connect(self._temp)
         self._connection.executescript(_SCHEMA)
+        # Keyed on the builder kind, not on "capabilities were passed": a
+        # posts importer that someday records explicit capabilities must not
+        # silently gain empty artist tables.
+        if artist_schema:
+            self._connection.executescript(_ARTIST_SCHEMA)
+
+    def add_artist(
+        self,
+        *,
+        artist_id: int,
+        name: str,
+        group_name: str | None,
+        is_active: int,
+        updated_at: str | None,
+        other_names: Iterable[str] = (),
+        urls: Iterable[tuple[str, int]] = (),
+    ) -> None:
+        """One artist entry; ``urls`` are (normalized_url, active) pairs."""
+        # Duplicate artist ids in the export must not accumulate child rows:
+        # the later occurrence replaces names/urls entirely.
+        self._connection.execute("DELETE FROM artist_names WHERE artist_id = ?", (artist_id,))
+        self._connection.execute("DELETE FROM artist_urls WHERE artist_id = ?", (artist_id,))
+        self._connection.execute(
+            """INSERT OR REPLACE INTO artist_entries
+                   (artist_id, name, group_name, is_active, updated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (artist_id, name, group_name, is_active, updated_at),
+        )
+        for other in other_names:
+            self._connection.execute(
+                "INSERT OR IGNORE INTO artist_names (artist_id, name, kind) VALUES (?, ?, 'other')",
+                (artist_id, other),
+            )
+        for url, active in urls:
+            self._connection.execute(
+                "INSERT OR IGNORE INTO artist_urls (artist_id, normalized_url, active)"
+                " VALUES (?, ?, ?)",
+                (artist_id, url, active),
+            )
 
     def add_post(
         self,
@@ -211,7 +302,9 @@ class ProjectionBuilder:
             self._temp.unlink()
 
     def commit(self, *, scope: str | None = None) -> Path:
-        count = int(self._connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0])
+        count = int(
+            self._connection.execute(f"SELECT COUNT(*) FROM {self.count_table}").fetchone()[0]
+        )
         self.record_count = count
         if scope is not None:
             self.scope = scope
@@ -220,7 +313,7 @@ class ProjectionBuilder:
                 # (EOF means full); resolve it into the revision so a
                 # bounded shakeout and a full import never share identity.
                 self.snapshot_revision = self.snapshot_revision[: -len("-pending")] + f"-{scope}"
-        meta = {
+        meta: dict[str, str] = {
             "format": LOOKUP_FORMAT,
             "provider": self.provider,
             "snapshot_revision": self.snapshot_revision,
@@ -231,6 +324,8 @@ class ProjectionBuilder:
             "record_count": str(self.record_count if self.record_count is not None else count),
             "builder_version": self.builder_version,
         }
+        if self.capabilities is not None:
+            meta["capabilities"] = ",".join(self.capabilities)
         self._connection.executemany(
             "INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)",
             sorted(meta.items()),
@@ -274,6 +369,12 @@ class IndexTarget:
             return f"{LOOKUP_FORMAT}.unknown"
         return f"{LOOKUP_FORMAT}.{self.snapshot.revision}.g{self.snapshot.overlay_generation}"
 
+    def serves(self, method: str) -> bool:
+        """Whether this projection serves a discovery method."""
+        if self.snapshot is None:
+            return False
+        return method in self.snapshot.capabilities
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "target": self.name,
@@ -283,6 +384,7 @@ class IndexTarget:
             "snapshot_revision": self.snapshot.revision if self.snapshot else None,
             "scope": self.snapshot.scope if self.snapshot else None,
             "overlay_generation": (self.snapshot.overlay_generation if self.snapshot else None),
+            "capabilities": (list(self.snapshot.capabilities) if self.snapshot else []),
             "record_count": self.snapshot.record_count if self.snapshot else None,
             "problem": self.problem,
         }
@@ -352,6 +454,8 @@ def _lookup_plan(method: str) -> _LookupPlan | None:
             " JOIN posts p ON p.post_id = ps.post_id"
             " WHERE ps.normalized_url = ? LIMIT ?"
         )
+    if method == "artist_identifier":
+        return _LookupPlan("SELECT artist_id FROM artist_urls WHERE normalized_url = ? LIMIT ?")
     if method in {"artist_exact_name", "artist_alias", "artist_text"}:
         return _LookupPlan(
             "SELECT pa.post_id, p.md5 FROM post_artists pa"
@@ -359,6 +463,55 @@ def _lookup_plan(method: str) -> _LookupPlan | None:
             " WHERE pa.artist_tag = ? LIMIT ?"
         )
     return None
+
+
+def _artist_identifier_hits(
+    target: IndexTarget,
+    connection: sqlite3.Connection,
+    values: Iterable[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Artist-entry leads for identifier probes; a different hit shape from
+    post lookups (artist entries are not posts and never feed the fetch
+    bridge)."""
+    hits: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for value in values:
+        rows = connection.execute(
+            """SELECT au.artist_id, ae.name, ae.is_active,
+                      au.normalized_url AS matched_url,
+                      (SELECT GROUP_CONCAT(n.name, ' ') FROM artist_names n
+                        WHERE n.artist_id = au.artist_id
+                          AND n.kind = 'other') AS other_names
+                 FROM artist_urls au
+                 JOIN artist_entries ae ON ae.artist_id = au.artist_id
+                WHERE au.normalized_url = ? LIMIT ?""",
+            (value, limit),
+        )
+        for row in rows:
+            artist_id = str(row["artist_id"])
+            if artist_id in seen:
+                continue
+            name = str(row["name"] or "").strip()
+            if not name:
+                # The lead table CHECKs a non-empty bounded name; skip
+                # entries that could not satisfy it instead of aborting the
+                # session mid-run.
+                continue
+            seen.add(artist_id)
+            hits.append(
+                {
+                    "provider": target.provider,
+                    "artist_id": artist_id,
+                    "name": name[:200],
+                    "other_names": str(row["other_names"] or "")[:800].split(),
+                    "matched_url": row["matched_url"],
+                    "is_active": bool(row["is_active"]),
+                }
+            )
+            if len(hits) >= limit:
+                return hits
+    return hits
 
 
 def lookup(
@@ -375,10 +528,12 @@ def lookup(
     """
     assert target.snapshot is not None
     plan = _lookup_plan(method)
-    if plan is None:
+    if plan is None or not target.serves(method):
         raise ValueError(f"index target does not support method {method}")
     connection = open_read_only(target.path)
     try:
+        if method == "artist_identifier":
+            return _artist_identifier_hits(target, connection, values, limit)
         seen: set[str] = set()
         hits: list[dict[str, Any]] = []
         for value in values:
@@ -452,6 +607,11 @@ def teach(
         try:
             snapshot = read_snapshot(path)
             if snapshot.provider != provider:
+                continue
+            if "verified_md5" not in snapshot.capabilities:
+                # Post teach material belongs to post projections only: an
+                # artists projection registered under the same provider must
+                # not grow post rows (and a forever-churning generation).
                 continue
             _TeachWriter(path).teach_batch(batch, seen_at=seen_at)
             written += 1

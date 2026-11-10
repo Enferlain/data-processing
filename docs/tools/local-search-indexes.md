@@ -53,6 +53,34 @@ every affected subject. In
 live sessions, index hits feed the same bounded `fetch_post` follow-up generation as provider
 lookup hits.
 
+## artist_identifier (artists export)
+
+```bash
+uv run catalog index import catalog-output/catalog.sqlite3 \
+   --provider e621 --export artists --download --json
+```
+
+The e621 **artists** export (~7.7 MB daily) builds a second projection
+registered as its own target, `e621-artists`, serving exactly one method:
+`artist_identifier`. Probes are the seed's account identities — participating
+accounts' canonical profile URLs, and profiles derived from x/twitter status
+URLs (`…/<handle>/status/…` → `https://x.com/<handle>`; the handle is the
+stable identity) — plus the recorded source URLs. Hits are artist entries
+(name, other names, matched URL, active flag) recorded as session-scoped
+leads in `discovery_artist_leads`: leads only, never facts, never a fetch
+bridge (artist entries are not posts). Each projection declares its methods
+(`index_meta.capabilities`); the posts projection excludes
+`artist_identifier` by capability and the artists projection excludes the
+post methods. Refreshing artists is its own revision and never invalidates
+posts-index attempts. Export URLs are canonicalized with scheme repair —
+the exports mix full URLs with bare host/path tokens (`furaffinity.net/user/x`),
+which are retried as `https://…` before the raw fallback.
+
+Downstream (deliberately out of scope so far): a provider-side
+`artist_identifier` strategy (live `/artists.json?url=…` search; needs the
+`LookupStrategy` version bump) and artist-tag post searches derived from
+leads (a policy decision about auto-derived search terms).
+
 Every provider post the catalog persists — via `catalog fetch`, metadata sync, candidate lookup,
 or discovery — teaches that provider's registered index at the shared post-commit boundary
 (origin `api`, confirmation time). Index writes are failure-contained: they can never fail or

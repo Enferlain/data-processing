@@ -13,6 +13,35 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise and mention all changes without necessarily detailing each one
 
+## [2026-11-11]
+
+### Added
+
+<!-- artist-identifier entry moved below from 2026-11-10 during wrap-up -->
+
+- **`artist_identifier`: offline artist resolution from the e621 artists export (Bead
+  `data-processing-an1`, change `add-index-artist-identifier`)** — `catalog index import
+  --provider e621 --export artists [--download]` builds a second lookup-v1 projection
+  (target `e621-artists`, real 12-column export: name/other-names/active+inactive URLs)
+  serving exactly `artist_identifier` via per-target `index_meta.capabilities`; posts
+  projections exclude the method by capability, artists projections exclude the post
+  methods. Probes are the seed's account identities — participating-account profile URLs
+  and profiles derived from x/twitter status URLs (`https://x.com/<handle>`; the handle is
+  the stable identity) — plus recorded source URLs; hits are artist entries recorded as
+  session-scoped leads in `discovery_artist_leads` (migration `0033`; leads only, never
+  facts, never a fetch bridge). Artists refreshes carry their own revision and never
+  invalidate posts-index attempts. Also fixes export URL canonicalization for both
+  importers: bare host/path tokens (`furaffinity.net/user/x`, case-preserved) are retried
+  as `https://…` instead of stored unmatchable, and postgres arrays parse in both quoted
+  and unquoted element styles (the artists export ships `{name,name}`). Includes all seven
+  review fixes (teach never touches artists projections; numeric account ids synthesize
+  nothing; explicit `--name` required to register non-post projections; duplicate artist
+  ids replace child rows; lead names bounded at the lookup boundary; prune refuses
+  `--apply` under broken registrations; sqlite failures contained to the step). Validated
+  on real data: X seed resolves `greengird11e` → e621 artist `greengirdle` offline
+  (256 probes, 129k entries, 75 MB projection, integrity ok).
+
+
 ## [2026-11-10]
 
 ### Added

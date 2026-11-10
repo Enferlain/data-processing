@@ -72,8 +72,12 @@ def _parse_array(value: str | None) -> list[str]:
     inner = match.group(1)
     if not inner.strip():
         return []
+    # Postgres quotes array elements only when they need it: the posts
+    # source column ships {"url","url"} while the artists other_names column
+    # ships {name,name} — both styles occur in the real exports.
+    parts = inner.split('","') if '","' in inner else inner.split(",")
     items: list[str] = []
-    for part in inner.split('","'):
+    for part in parts:
         item = part.strip().strip('"')
         if item:
             items.append(item)
@@ -95,11 +99,26 @@ def _element_urls(element: str) -> list[str]:
     return urls
 
 
-def _canonical(value: str) -> str:
+def canonical_export_url(value: str) -> str:
+    """Canonicalize one export URL token with scheme repair.
+
+    e621 exports mix scheme-full URLs with bare host/path tokens
+    (``furaffinity.net/user/x``, case-preserved), which canonicalize_url
+    passes through unchanged — permanently unmatchable against canonical
+    probes.  A bare token whose first segment carries a dot is retried with
+    ``https://`` before the raw fallback.
+    """
+    text = value.strip()
+    if "://" not in text and "." in text.split("/", 1)[0]:
+        text = f"https://{text}"
     try:
-        return canonicalize_url(value.strip()).canonical_url
+        return canonicalize_url(text).canonical_url
     except ValueError:
         return value.strip()
+
+
+def _canonical(value: str) -> str:
+    return canonical_export_url(value)
 
 
 def import_e621_export(

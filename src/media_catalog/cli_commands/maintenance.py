@@ -153,6 +153,13 @@ def register(commands: argparse._SubParsersAction) -> None:
         " by --max-records, which limits only the import",
     )
     index_import.add_argument(
+        "--export",
+        choices=("posts", "artists"),
+        default="posts",
+        help="which e621 db export to import (posts: post lookups; artists:"
+        " artist_identifier resolution, default target <provider>-artists)",
+    )
+    index_import.add_argument(
         "--max-records",
         type=int,
         help="bounded import for testing: only the first N export rows"
@@ -164,7 +171,8 @@ def register(commands: argparse._SubParsersAction) -> None:
     index_import.add_argument(
         "--path",
         type=Path,
-        help="projection destination (default: <catalog-stem>-indexes/<provider>/lookup.sqlite)",
+        help="projection destination (default: <catalog-stem>-indexes/<provider>/lookup.sqlite;"
+        " artists: <catalog-stem>-indexes/<provider>-artists/lookup.sqlite)",
     )
     add_json(index_import)
 
@@ -286,9 +294,19 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.index_command == "prune":
         provider = arguments.provider.strip()
         downloads = _default_downloads_dir(catalog, provider)
-        referenced: set[str] = set()
         with CatalogDatabase(catalog) as database:
             targets = registered_targets(database.connection)
+        broken = [t for t in targets if t.provider == provider and t.problem is not None]
+        if arguments.apply and broken:
+            # A broken registration cannot contribute its artifact
+            # reference; pruning now could delete the artifact its
+            # projection needs for a rebuild.
+            raise ValueError(
+                f"provider {provider} has broken registration(s)"
+                f" ({', '.join(sorted(t.name for t in broken))});"
+                " resolve them before pruning with --apply"
+            )
+        referenced: set[str] = set()
         for target in targets:
             if target.provider != provider or target.snapshot is None:
                 continue
@@ -325,6 +343,15 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
                 f"projection reports provider {snapshot.provider or '?'},"
                 f" registration names {provider}"
             )
+        if arguments.name is None and "verified_md5" not in snapshot.capabilities:
+            # Registering a non-post projection under the default provider
+            # name would silently rebind the posts target and drop its post
+            # methods.  An explicit --name is the operator's confirmation.
+            raise ValueError(
+                f"this projection serves {', '.join(snapshot.capabilities)};"
+                " register it with an explicit --name (e.g."
+                f" --name {provider}-artists)"
+            )
         with CatalogDatabase(catalog) as database:
             _upsert_registration(
                 database, name=name, provider=provider, path=path, revision=snapshot.revision
@@ -341,9 +368,13 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
     provider = arguments.provider
     if provider != "e621":  # pragma: no cover - argparse choices guard this
         raise ValueError(f"no importer for provider {provider}")
-    from media_catalog.search_index.importers.e621_export import import_e621_export
-
-    destination = arguments.path or _default_index_path(catalog, provider)
+    export_name = arguments.export
+    target_name = provider if export_name == "posts" else f"{provider}-artists"
+    destination = arguments.path or (
+        _default_index_path(catalog, provider)
+        if export_name == "posts"
+        else _default_index_path(catalog, target_name)
+    )
     download_note: dict[str, object] | None = None
     artifact_path = arguments.artifact
     checksum = arguments.checksum
@@ -360,26 +391,45 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
 
         artifact_path, listing = download_e621_export(
             _default_downloads_dir(catalog, provider),
-            export_name="posts",
+            export_name=export_name,
             expected_checksum=arguments.checksum,
         )
         checksum = listing.checksum
         download_note = download_result_dict(artifact_path, listing)
-    result = import_e621_export(
-        artifact_path,
-        destination=destination,
-        checksum=checksum,
-        max_records=arguments.max_records,
-    )
+    if export_name == "artists":
+        from media_catalog.search_index.importers.e621_artists_export import (
+            import_e621_artists_export,
+        )
+
+        result = import_e621_artists_export(
+            artifact_path,
+            destination=destination,
+            checksum=checksum,
+            max_records=arguments.max_records,
+        )
+    else:
+        from media_catalog.search_index.importers.e621_export import import_e621_export
+
+        result = import_e621_export(
+            artifact_path,
+            destination=destination,
+            checksum=checksum,
+            max_records=arguments.max_records,
+        )
     with CatalogDatabase(catalog) as database:
         _upsert_registration(
             database,
-            name=provider,
+            name=target_name,
             provider=provider,
             path=destination,
             revision=result.snapshot_revision,
         )
-    payload: dict[str, object] = {"catalog": label, "target": provider, **result.as_dict()}
+    payload: dict[str, object] = {
+        "catalog": label,
+        "target": target_name,
+        "export": export_name,
+        **result.as_dict(),
+    }
     if download_note is not None:
         payload["download"] = download_note
     return payload
