@@ -38,29 +38,58 @@ MD5_B = "fedcba9876543210fedcba9876543210"
 
 
 def _write_export(path: Path, rows: list[dict[str, str]]) -> str:
-    """A small gzipped e621 posts-export fixture; returns its sha256."""
+    """A small gzipped e621 posts-export fixture; returns its sha256.
+
+    The fieldnames pin the REAL posts.csv.gz column order (verified against
+    the 2026-11-09 export): 32 columns, no per-category tag columns — artist
+    tags are NOT separable in this artifact.  ``tag_string_artist`` is
+    appended by ``_write_artist_export`` variants only, to exercise the
+    layout-tolerance path.
+    """
     buffer = io.StringIO()
-    writer = csv.DictWriter(
-        buffer,
-        fieldnames=[
-            "id",
-            "md5",
-            "source",
-            "parent_id",
-            "file_ext",
-            "image_width",
-            "image_height",
-            "created_at",
-            "updated_at",
-            "is_deleted",
-            "tag_string_artist",
-        ],
-    )
+    writer = csv.DictWriter(buffer, fieldnames=[*list(REAL_EXPORT_COLUMNS), "tag_string_artist"])
     writer.writeheader()
     for row in rows:
         writer.writerow(row)
     path.write_bytes(gzip.compress(buffer.getvalue().encode("utf-8")))
     return sha256_file(path)
+
+
+# The real e621 posts.csv.gz header, in order (2026-11-09 export).
+REAL_EXPORT_COLUMNS = (
+    "id",
+    "uploader_id",
+    "created_at",
+    "md5",
+    "source",
+    "rating",
+    "image_width",
+    "image_height",
+    "tag_string",
+    "locked_tags",
+    "fav_count",
+    "file_ext",
+    "parent_id",
+    "change_seq",
+    "approver_id",
+    "file_size",
+    "comment_count",
+    "description",
+    "duration",
+    "updated_at",
+    "is_deleted",
+    "is_pending",
+    "is_flagged",
+    "score",
+    "up_score",
+    "down_score",
+    "is_rating_locked",
+    "is_status_locked",
+    "is_note_locked",
+    "bg_color",
+    "last_noted_at",
+    "last_commented_at",
+)
 
 
 @pytest.fixture()
@@ -178,6 +207,68 @@ def test_import_builds_verified_projection_and_keeps_artifact(
     again = tmp_path / "lookup-2.sqlite"
     import_e621_export(artifact, destination=again)
     assert read_snapshot(again).record_count == 2
+
+
+def test_import_reports_absent_optional_columns(artifact: Path, tmp_path: Path) -> None:
+    """The real posts export has no tag_string_artist; the import must say so."""
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(REAL_EXPORT_COLUMNS))
+    writer.writeheader()
+    writer.writerow(
+        {
+            "id": "9001",
+            "md5": "0" * 32,
+            "source": "",
+            "is_deleted": "f",
+            "tag_string": "general_tag some_artist",
+        }
+    )
+    artifact.write_bytes(gzip.compress(buffer.getvalue().encode("utf-8")))
+
+    destination = tmp_path / "lookup.sqlite"
+    result = import_e621_export(artifact, destination=destination)
+
+    assert result.columns_absent == ("tag_string_artist",)
+    assert result.as_dict()["columns_absent"] == ["tag_string_artist"]
+    # Artist lookups simply find nothing from this artifact; the projection
+    # still serves id/md5/source lookups.
+    with sqlite3.connect(destination) as connection:
+        artists = connection.execute("SELECT count(*) FROM post_artists").fetchone()[0]
+        posts = connection.execute("SELECT count(*) FROM posts").fetchone()[0]
+    assert artists == 0
+    assert posts == 1
+
+
+def test_import_splits_legacy_multi_url_source_elements(artifact: Path, tmp_path: Path) -> None:
+    """Legacy e621 source elements pack several URLs into one element."""
+    _write_export(
+        artifact,
+        [
+            {
+                "id": "777",
+                "md5": "1" * 32,
+                "source": '{"https://www.furaffinity.net/view/267581/\n'
+                "https://d.furaffinity.net/art/x/1.png"
+                'https://www.softwaregap.com/jammed"}',
+                "is_deleted": "f",
+                "tag_string_artist": "",
+            }
+        ],
+    )
+    destination = tmp_path / "lookup.sqlite"
+    import_e621_export(artifact, destination=destination)
+    with sqlite3.connect(destination) as connection:
+        urls = {
+            row[0]
+            for row in connection.execute(
+                "SELECT normalized_url FROM post_sources WHERE post_id = 777"
+            )
+        }
+    # newline-separated AND jammed-without-separator both become
+    # their own lookup keys
+    assert "https://www.furaffinity.net/view/267581/" in urls
+    assert "https://d.furaffinity.net/art/x/1.png" in urls
+    assert "https://www.softwaregap.com/jammed" in urls
 
 
 def test_import_refuses_checksum_mismatch(artifact: Path, tmp_path: Path) -> None:

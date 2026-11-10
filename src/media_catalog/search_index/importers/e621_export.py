@@ -36,6 +36,7 @@ class ImportResult:
     artifact_digest: str
     artifact_path: str
     scope: str = "unknown"
+    columns_absent: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -45,6 +46,7 @@ class ImportResult:
             "record_count": self.record_count,
             "artifact_digest": self.artifact_digest,
             "artifact": self.artifact_path,
+            "columns_absent": list(self.columns_absent),
         }
 
 
@@ -72,6 +74,21 @@ def _parse_array(value: str | None) -> list[str]:
         if item:
             items.append(item)
     return items
+
+
+# Legacy e621 source elements pack SEVERAL URLs into one postgres array
+# element — separated by whitespace/newlines, or jammed together with no
+# separator at all (37% of source-bearing elements in the first 20k rows
+# of the real 2026-11-09 export).  Each embedded URL must become its own
+# lookup key.
+_EMBEDDED_URL = re.compile(r"(?=https?://)")
+
+
+def _element_urls(element: str) -> list[str]:
+    urls: list[str] = []
+    for token in element.split():
+        urls.extend(part for part in _EMBEDDED_URL.split(token) if part)
+    return urls
 
 
 def _canonical(value: str) -> str:
@@ -109,6 +126,21 @@ def import_e621_export(
         raise ValueError("max_records must be positive")
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    # Optional columns degrade to NULLs when the export layout changes; the
+    # import must say so instead of silently dropping that data (the real
+    # e621 posts export has no tag_string_artist — artist tags live in the
+    # tags export, not here).
+    optional_columns = (
+        "source",
+        "parent_id",
+        "file_ext",
+        "image_width",
+        "image_height",
+        "created_at",
+        "updated_at",
+        "is_deleted",
+        "tag_string_artist",
+    )
     truncated = False
     builder: ProjectionBuilder | None = None
     try:
@@ -122,6 +154,7 @@ def import_e621_export(
                     + ", ".join(missing)
                     + f"; available: {', '.join(sorted(header))}"
                 )
+            columns_absent = tuple(name for name in optional_columns if name not in header)
             builder = ProjectionBuilder(
                 provider="e621",
                 destination=destination,
@@ -149,7 +182,11 @@ def import_e621_export(
                     is_deleted=1 if (row.get("is_deleted") or "") == "t" else 0,
                     origin="export",
                     seen_at=row.get("updated_at") or row.get("created_at") or "",
-                    sources=[_canonical(url) for url in _parse_array(row.get("source"))],
+                    sources=[
+                        _canonical(url)
+                        for element in _parse_array(row.get("source"))
+                        for url in _element_urls(element)
+                    ],
                     artists=[tag for tag in (row.get("tag_string_artist") or "").split() if tag],
                 )
         assert builder is not None
@@ -161,6 +198,7 @@ def import_e621_export(
             artifact_digest=digest,
             artifact_path=str(artifact),
             scope=scope_value,
+            columns_absent=columns_absent,
         )
     except BaseException:
         if builder is not None:

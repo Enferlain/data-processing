@@ -134,8 +134,16 @@ def register(commands: argparse._SubParsersAction) -> None:
     artifact_source.add_argument(
         "--download",
         action="store_true",
-        help="fetch the export from the provider (e621 db_exports listing), verify its"
-        " published checksum, retain it under <catalog-stem>-indexes/<provider>/downloads/",
+        help="fetch the complete export from the provider (e621 db_exports listing),"
+        " verify its published checksum, retain it under"
+        " <catalog-stem>-indexes/<provider>/downloads/ — the transfer is never bounded"
+        " by --max-records, which limits only the import",
+    )
+    index_import.add_argument(
+        "--max-records",
+        type=int,
+        help="bounded import for testing: only the first N export rows"
+        " (the artifact download itself is never bounded)",
     )
     index_import.add_argument(
         "--checksum", help="published SHA-256 of the artifact; verified before building"
@@ -144,11 +152,6 @@ def register(commands: argparse._SubParsersAction) -> None:
         "--path",
         type=Path,
         help="projection destination (default: <catalog-stem>-indexes/<provider>/lookup.sqlite)",
-    )
-    index_import.add_argument(
-        "--max-records",
-        type=int,
-        help="bounded import for testing: only the first N export rows",
     )
     add_json(index_import)
 

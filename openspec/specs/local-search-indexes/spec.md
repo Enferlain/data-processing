@@ -78,6 +78,20 @@ row.
   checksum as the retained artifact
 - **THEN** the artifact is reused without a second download
 
+
+#### Scenario: legacy multi-URL source elements split into per-URL keys
+
+- **WHEN** a source array element packs several URLs (newline-separated or
+  concatenated with no separator)
+- **THEN** each embedded URL becomes its own normalized source-URL lookup key
+
+#### Scenario: absent optional export columns are reported
+
+- **WHEN** the export lacks an optional column the builder understands (the
+  real e621 posts export has no `tag_string_artist`)
+- **THEN** the import completes, the result and projection report the absent
+  columns, and no silent data drop occurs
+
 #### Scenario: rebuilt projection replaces atomically
 
 - **WHEN** an import completes while a discovery session holds the previous

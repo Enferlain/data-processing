@@ -27,6 +27,18 @@ Rules:
   index searches. Mutually exclusive with `--artifact`; two mocked-transport tests cover the
   verify/reuse/mismatch paths.
 
+### Fixed
+
+- **e621 export import vs. the real artifact (Bead `data-processing-an1`)** — validated
+  against the real 2026-11-09 posts export (1.99 GB, 6,834,929 rows; fixture now pins the
+  actual 32-column header): (1) legacy source-array elements that pack several URLs —
+  newline-separated or concatenated with no separator (37% of source-bearing rows) — are
+  split into one normalized lookup key per embedded URL; (2) absent optional export columns
+  (the real export has no `tag_string_artist`; artist tags are not separable in this
+  artifact) are reported in the import result instead of silently degrading — artist rows
+  come from teach material until the artist exports land in a later slice.
+
+
 ## [2026-11-08]
 
 ### Added
