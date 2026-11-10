@@ -10,6 +10,7 @@ existing file is reused, so re-running the command is the e621 refresh.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from media_catalog.search_index.importers.e621_export import sha256_file
 
 E621_EXPORTS_URL = "https://e621.net/db_exports.json"
 DOWNLOAD_TIMEOUT_SECONDS = 600.0
+# Progress goes to stderr only; stdout stays machine-readable (--json).
+PROGRESS_INTERVAL_BYTES = 64 * 1024 * 1024
 
 
 class ExportDownloadError(ValueError):
@@ -122,11 +125,23 @@ def download_e621_export(
     owns = client is None
     client = client or _client()
     try:
+        received = 0
+        next_progress = PROGRESS_INTERVAL_BYTES
         with client.stream("GET", entry.url) as response:
             response.raise_for_status()
             with temp.open("wb") as handle:
                 for chunk in response.iter_bytes(1024 * 1024):
                     handle.write(chunk)
+                    received += len(chunk)
+                    if received >= next_progress:
+                        message = f"{entry.file_name}: {received // (1024 * 1024)} MiB"
+                        if entry.file_size:
+                            message += (
+                                f" / {entry.file_size // (1024 * 1024)} MiB"
+                                f" ({received * 100 // entry.file_size}%)"
+                            )
+                        print(message, file=sys.stderr)
+                        next_progress += PROGRESS_INTERVAL_BYTES
         actual = sha256_file(temp)
         if actual != entry.checksum:
             temp.unlink()

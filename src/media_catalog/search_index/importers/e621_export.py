@@ -13,6 +13,7 @@ import csv
 import gzip
 import hashlib
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,9 @@ from media_catalog.links import canonicalize_url
 from media_catalog.search_index.projection import ProjectionBuilder
 
 BUILDER_VERSION = "e621-export-v1"
+
+# Progress goes to stderr only; stdout stays machine-readable (--json).
+PROGRESS_INTERVAL_ROWS = 500_000
 
 # e621 posts export: postgres text[] columns arrive quoted like
 # {"a","b"}; unquoted entries carry no backslashes in practice.
@@ -169,6 +173,8 @@ def import_e621_export(
                 if max_records is not None and index >= max_records:
                     truncated = True
                     break
+                if index and index % PROGRESS_INTERVAL_ROWS == 0:
+                    print(f"e621 export: imported {index:,} rows…", file=sys.stderr)
                 builder.add_post(
                     post_id=int(row["id"]),
                     md5=(row.get("md5") or None),

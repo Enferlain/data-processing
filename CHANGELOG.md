@@ -39,6 +39,11 @@ Rules:
   artifacts are never pruned. e621's export filename is constant, so daily refreshes replace
   the artifact in place rather than accumulating.
 
+- **Progress output for index download/import (Bead `data-processing-an1`)** —
+  `catalog index import --download` now reports transfer progress every 64 MiB and import
+  progress every 500k rows on stderr; stdout remains machine-readable for `--json`. The
+  2 GB download and ~15 min full import previously printed nothing.
+
 ### Fixed
 
 - **e621 export import vs. the real artifact (Bead `data-processing-an1`)** — validated

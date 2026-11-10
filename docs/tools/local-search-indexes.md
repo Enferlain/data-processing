@@ -19,7 +19,8 @@ against the listing before the import reads it, retained under
 reused without a second download — so for e621, re-running `import --download` **is** the
 refresh: a newer export is a new checksum, a new snapshot revision, and every subject's
 index searches replan. Prefer `--artifact` with your own file when you already downloaded
-it (optionally with `--checksum`).
+it (optionally with `--checksum`). Both phases report progress on stderr (download: every
+64 MiB; import: every 500k rows) — stdout stays machine-readable for `--json`.
 
 `import` verifies the published SHA-256 when supplied (always, with `--download`), streams
 the artifact with bounded memory into `<catalog-stem>-indexes/<provider>/lookup.sqlite`
