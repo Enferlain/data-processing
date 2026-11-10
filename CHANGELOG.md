@@ -32,6 +32,13 @@ Rules:
   (pins the exact export revision; a listing that moved on refuses) instead of being
   silently replaced by the listing checksum.
 
+- **`catalog index prune` (Bead `data-processing-an1`)** — retention hygiene for downloaded
+  export artifacts: reports (and with `--apply`, deletes) files under
+  `<catalog-stem>-indexes/<provider>/downloads/` that no registered projection references —
+  stale `.part` temp files from killed downloads and superseded exports. Referenced
+  artifacts are never pruned. e621's export filename is constant, so daily refreshes replace
+  the artifact in place rather than accumulating.
+
 ### Fixed
 
 - **e621 export import vs. the real artifact (Bead `data-processing-an1`)** — validated

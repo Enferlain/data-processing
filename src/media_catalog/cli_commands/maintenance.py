@@ -115,6 +115,19 @@ def register(commands: argparse._SubParsersAction) -> None:
     index_list = index_commands.add_parser("list", description="Show registered indexes")
     index_list.add_argument("catalog", type=Path)
     add_json(index_list)
+    index_prune = index_commands.add_parser(
+        "prune",
+        description=(
+            "Report (and with --apply, delete) download artifacts no registered"
+            " projection references: stale .part temp files and superseded exports"
+        ),
+    )
+    index_prune.add_argument("catalog", type=Path)
+    index_prune.add_argument("--provider", required=True, help="provider platform key")
+    index_prune.add_argument(
+        "--apply", action="store_true", help="delete the reported files (default: report only)"
+    )
+    add_json(index_prune)
     index_import = index_commands.add_parser(
         "import",
         description=(
@@ -269,6 +282,38 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
             "catalog": label,
             "count": len(targets),
             "indexes": [target.as_dict() for target in targets],
+        }
+    if arguments.index_command == "prune":
+        provider = arguments.provider.strip()
+        downloads = _default_downloads_dir(catalog, provider)
+        referenced: set[str] = set()
+        with CatalogDatabase(catalog) as database:
+            targets = registered_targets(database.connection)
+        for target in targets:
+            if target.provider != provider or target.snapshot is None:
+                continue
+            artifact_path = target.snapshot.artifact_path
+            if artifact_path:
+                referenced.add(Path(artifact_path).name)
+        stale: list[dict[str, object]] = []
+        deleted: list[str] = []
+        if downloads.is_dir():
+            for entry in sorted(downloads.iterdir()):
+                if not entry.is_file() or entry.name in referenced:
+                    continue
+                record: dict[str, object] = {"file": entry.name, "byte_size": entry.stat().st_size}
+                if arguments.apply:
+                    entry.unlink()
+                    deleted.append(entry.name)
+                stale.append(record)
+        return {
+            "catalog": label,
+            "provider": provider,
+            "downloads_dir": public_path(downloads),
+            "referenced": sorted(referenced),
+            "prunable": stale,
+            "deleted": deleted,
+            "applied": bool(arguments.apply),
         }
     if arguments.index_command == "register":
         provider = arguments.provider.strip()

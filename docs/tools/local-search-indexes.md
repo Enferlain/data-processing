@@ -34,7 +34,11 @@ artifact), so artist rows come only from teach material until the artist exports
 later slice. The raw artifact is retained untouched — the projection is always rebuildable
 from it, never the reverse. `register` binds an existing projection to a target name (the
 identity — moving the file and re-pointing the registration preserves search history and
-freshness); `list` shows registrations and any file problems.
+freshness); `list` shows registrations and any file problems; `prune` reports (and with
+`--apply`, deletes) download artifacts no registered projection references — stale
+`.part` temp files and superseded exports. e621's export filename is constant, so daily
+refreshes replace the artifact in place rather than accumulating; prune covers killed
+downloads and any future renamed exports.
 
 Registered indexes then appear in `catalog discover` as ordinary `index`-kind targets with the
 same policy filters, freshness skips, and `--dry-run`/`--search-state` explanations as every

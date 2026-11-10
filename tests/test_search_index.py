@@ -298,6 +298,51 @@ def test_download_rejects_operator_checksum_listing_mismatch(
     assert listing.checksum == server.checksum
 
 
+def test_index_prune_reports_and_deletes_only_unreferenced(
+    catalog: Path, artifact: Path, tmp_path: Path
+) -> None:
+    from argparse import Namespace
+
+    from media_catalog.cli_commands.maintenance import _execute_index
+
+    downloads = catalog.parent / f"{catalog.stem}-indexes" / "e621" / "downloads"
+    downloads.mkdir(parents=True)
+    referenced_artifact = downloads / "posts.csv.gz"
+    referenced_artifact.write_bytes(artifact.read_bytes())
+    stale_temp = downloads / "posts.csv.gz.part"
+    stale_temp.write_bytes(b"interrupted")
+    old_export = downloads / "posts-old.csv.gz"
+    old_export.write_bytes(b"superseded")
+
+    projection = tmp_path / "lookup.sqlite"
+    import_e621_export(referenced_artifact, destination=projection)
+    _register(catalog, "e621", projection)
+
+    def prune(apply: bool) -> dict[str, object]:
+        return _execute_index(
+            Namespace(
+                catalog=catalog,
+                index_command="prune",
+                provider="e621",
+                apply=apply,
+            )
+        )
+
+    report = prune(apply=False)
+    assert report["referenced"] == ["posts.csv.gz"]
+    assert {entry["file"] for entry in report["prunable"]} == {
+        "posts.csv.gz.part",
+        "posts-old.csv.gz",
+    }
+    assert report["deleted"] == [] and report["applied"] is False
+    assert all(path.is_file() for path in (referenced_artifact, stale_temp, old_export))
+
+    applied = prune(apply=True)
+    assert applied["deleted"] == ["posts-old.csv.gz", "posts.csv.gz.part"]
+    assert referenced_artifact.is_file()
+    assert not stale_temp.exists() and not old_export.exists()
+
+
 def test_import_refuses_checksum_mismatch(artifact: Path, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="checksum mismatch"):
         import_e621_export(

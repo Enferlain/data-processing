@@ -182,3 +182,17 @@ no-op.
 - **THEN** the projection is rolled back to its pre-batch state — no rows,
   no generation bump, no teach-log entry — and the catalog write that
   triggered it remains committed
+
+### Requirement: download artifacts are prunable without touching references
+
+`catalog index prune` SHALL report download artifacts that no registered
+projection references (stale `.part` temp files, superseded exports) and
+SHALL only delete them when `--apply` is given. Files referenced by a
+registered projection's snapshot identity SHALL never be pruned.
+
+#### Scenario: prune reports by default and deletes only unreferenced files
+
+- **WHEN** the downloads directory holds the referenced artifact, a stale
+  `.part` file, and an old export, and `prune` runs without `--apply`
+- **THEN** the unreferenced files are reported and nothing is deleted; with
+  `--apply` exactly the unreferenced files are deleted
