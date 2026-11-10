@@ -304,15 +304,19 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
     checksum = arguments.checksum
     if arguments.download:
         # Explicit network: listing request + streamed artifact download,
-        # verified against the provider's published checksum.  A matching
-        # existing artifact is reused, so re-running is the refresh.
+        # verified against the provider's published checksum.  An operator
+        # --checksum is compared against the listing (pins intent) before
+        # any transfer.  A matching existing artifact is reused, so
+        # re-running is the refresh.
         from media_catalog.search_index.download import (
             download_e621_export,
             download_result_dict,
         )
 
         artifact_path, listing = download_e621_export(
-            _default_downloads_dir(catalog, provider), export_name="posts"
+            _default_downloads_dir(catalog, provider),
+            export_name="posts",
+            expected_checksum=arguments.checksum,
         )
         checksum = listing.checksum
         download_note = download_result_dict(artifact_path, listing)

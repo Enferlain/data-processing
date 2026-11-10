@@ -27,6 +27,11 @@ Rules:
   index searches. Mutually exclusive with `--artifact`; two mocked-transport tests cover the
   verify/reuse/mismatch paths.
 
+- **`catalog index import --download --checksum`** — an operator-supplied checksum with
+  `--download` is now explicitly compared against the provider listing before any transfer
+  (pins the exact export revision; a listing that moved on refuses) instead of being
+  silently replaced by the listing checksum.
+
 ### Fixed
 
 - **e621 export import vs. the real artifact (Bead `data-processing-an1`)** — validated

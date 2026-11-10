@@ -271,6 +271,33 @@ def test_import_splits_legacy_multi_url_source_elements(artifact: Path, tmp_path
     assert "https://www.softwaregap.com/jammed" in urls
 
 
+def test_download_rejects_operator_checksum_listing_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    from media_catalog.search_index import download as download_module
+    from media_catalog.search_index.download import ExportDownloadError
+
+    server = _FakeExportServer(_export_bytes(1))
+    monkeypatch.setattr(
+        download_module,
+        "_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(server.handler)),
+    )
+    with pytest.raises(ExportDownloadError, match="operator checksum does not match"):
+        download_module.download_e621_export(tmp_path / "d", expected_checksum="a" * 64)
+    # refused before any transfer
+    assert server.file_requests == 0
+
+    # a matching operator checksum proceeds
+    artifact, listing = download_module.download_e621_export(
+        tmp_path / "d", expected_checksum=server.checksum
+    )
+    assert artifact.name == "posts.csv.gz"
+    assert listing.checksum == server.checksum
+
+
 def test_import_refuses_checksum_mismatch(artifact: Path, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="checksum mismatch"):
         import_e621_export(

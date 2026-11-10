@@ -87,12 +87,16 @@ def download_e621_export(
     destination_dir: Path,
     *,
     export_name: str = "posts",
+    expected_checksum: str | None = None,
     client: httpx.Client | None = None,
 ) -> tuple[Path, ExportListing]:
     """Fetch (or reuse) one export artifact, checksum-verified.
 
     Returns the artifact path and its listing entry.  An existing file whose
-    digest matches the listing is reused without a second download.
+    digest matches the listing is reused without a second download.  An
+    operator-supplied ``expected_checksum`` is compared against the listing
+    BEFORE any transfer: it pins intent (the exact export revision), so a
+    listing that moved on refuses rather than silently replacing it.
     """
     destination_dir = Path(destination_dir)
     destination_dir.mkdir(parents=True, exist_ok=True)
@@ -103,6 +107,12 @@ def download_e621_export(
             f" (available: {', '.join(sorted(listing))})"
         )
     entry = listing[export_name]
+    if expected_checksum is not None and expected_checksum.strip().lower() != entry.checksum:
+        raise ExportDownloadError(
+            f"operator checksum does not match the provider listing for"
+            f" {export_name!r}: operator {expected_checksum.strip().lower()[:16]}…,"
+            f" listing {entry.checksum[:16]}… (updated {entry.updated_at})"
+        )
     artifact = destination_dir / entry.file_name
     if artifact.is_file() and sha256_file(artifact) == entry.checksum:
         return artifact, entry
