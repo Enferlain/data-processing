@@ -9,7 +9,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from media_catalog.records import LinkOccurrence, PlatformReferenceRecord
 
-CANONICALIZER_VERSION = "url-canonicalizer-v1"
+CANONICALIZER_VERSION = "url-canonicalizer-v2"
 EXTRACTOR_VERSION = "catalog-links-v1"
 RECOGNIZER_VERSION = "platform-recognizers-v1"
 SCORING_VERSION = "link-evidence-v1"
@@ -108,6 +108,11 @@ def canonicalize_url(value: str) -> CanonicalURL:
             if key.lower() not in TRACKING_KEYS
         ]
         query = urlencode(query_pairs, doseq=True)
+        if host == "x.com" and path.startswith("/i/status/"):
+            # Share parameters (s=20, t=…) are not part of a status URL's
+            # identity — the status id is (see the rewrite above).  Dropping
+            # the query entirely keeps one form per post.
+            query = ""
         canonical = urlunsplit(("https", host, path, query, ""))
     else:
         canonical = urlunsplit(

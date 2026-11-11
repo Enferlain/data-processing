@@ -100,7 +100,7 @@ def test_canonicalization_is_conservative_and_retains_original_parts() -> None:
     # The handle in an x/twitter status URL is decoration: one canonical
     # /i/status/<id> form makes exact URL lookups match across the catalog
     # and provider indexes (which store the handle spelling).
-    assert result.canonical_url == "https://x.com/i/status/42?x=1"
+    assert result.canonical_url == "https://x.com/i/status/42"
     assert result.original_query == "x=1&utm_source=z"
     assert result.original_fragment == "section"
     unknown = canonicalize_url("http://example.test/path?utm_source=meaningful#frag")

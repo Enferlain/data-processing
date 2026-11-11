@@ -52,6 +52,14 @@ Rules:
   (Danbooru/Gelbooru store the same spelling family); stored catalog keys keep their
   original form and never need rewriting.
 
+- **Canonicalizer feedback fixes** — `CANONICALIZER_VERSION` bumps to
+  `url-canonicalizer-v2`: canonicalization semantics materially changed (status-URL
+  normalization), and the version namespaces the `external_links` identity space, so
+  v2 rows coexist with legacy v1 rows instead of silently rebinding link identity
+  (probe folding covers cross-version matching). X status URLs also drop their query
+  entirely now — share parameters (`s=20`, `t=…`) are not part of a status URL's
+  identity; 1,139 of 2.26 M index status keys carried queries and collapse to one form.
+
 ### Fixed
 
 - **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now
