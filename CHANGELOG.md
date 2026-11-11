@@ -59,6 +59,17 @@ Rules:
   and non-www twin): no stored-key changes, no re-import, canonicalization untouched.
   Tests pin both directions for both methods.
 
+- **Three real-data correctness fixes from the acceptance/coverage pass (Bead
+  `data-processing-an1`)** — (1) `discover --search-state` crashed with
+  "'artist_identifier' is not a valid LookupStrategy" once an artists projection was
+  registered: index-only methods now carry the index target version as their strategy
+  version (`lookup-v1.<revision>.g<generation>`), which is what freshness compares anyway.
+  (2) the CLI `--method` vocabulary rejected `artist_identifier`, making the method
+  unselectable; it now derives from `INDEX_METHODS` too. (3) profile derivation treated
+  the literal `/i/` in X's canonical status URLs (`x.com/i/status/N`) as a handle,
+  producing false artist leads against junk export entries (`https://x.com/i`); the
+  canonical path form is now excluded. Regression tests pin all three.
+
 
 ## [2026-11-10]
 

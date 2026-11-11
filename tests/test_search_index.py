@@ -1364,6 +1364,58 @@ def test_www_variant_probes_match_both_spellings(catalog: Path, tmp_path: Path) 
     assert leads[0]["matched_url"] == "https://www.furaffinity.net/user/shiuk/"
 
 
+def test_search_state_covers_index_only_methods(catalog: Path, tmp_path: Path) -> None:
+    """Regression (real-data pass): --search-state crashed with
+    "'artist_identifier' is not a valid LookupStrategy" once an artists
+    projection was registered — index-only methods carry the target version."""
+    from media_catalog.discovery.policy import build_policy
+    from media_catalog.discovery.run import DiscoveryRunService, SubjectInput
+    from media_catalog.search_index.importers.e621_artists_export import (
+        import_e621_artists_export,
+    )
+
+    export = tmp_path / "artists-state.csv.gz"
+    _write_artists_export(export, _artist_rows())
+    artists_projection = tmp_path / "artists-state.sqlite"
+    import_e621_artists_export(export, destination=artists_projection)
+    _register(catalog, "e621-artists", artists_projection)
+    seed_id = _seed_post_with_source_link(catalog, ARTIST_URL)
+
+    with CatalogDatabase(catalog) as database:
+        DiscoveryOrchestrator(database).start(post_id=seed_id)  # record attempts
+    with CatalogDatabase(catalog) as database:
+        policy = build_policy(
+            known_sources=frozenset(),
+            known_methods=frozenset({"artist_identifier", "source_post_url"}),
+        )
+        state = DiscoveryRunService(database).search_state(
+            [SubjectInput(post_id=seed_id)], policy=policy
+        )
+    entries = {
+        (e["source"], e["method"]): e
+        for block in state["state"]
+        for e in block["entries"]
+        if e["source_kind"] == "index"
+    }
+    entry = entries[("e621-artists", "artist_identifier")]
+    assert entry["strategy_version"].startswith("lookup-v1.")
+    assert entry["fresh"] is True
+
+
+def test_x_profile_derivation_ignores_canonical_i_path(catalog: Path) -> None:
+    """Regression (real-data pass): the literal /i/ in X's canonical status
+    URLs (x.com/i/status/N) is not a handle — deriving x.com/i from it
+    produced false artist matches against junk export entries."""
+    from media_catalog.discovery.planning import _x_profile_url
+
+    assert _x_profile_url("https://x.com/i/status/1607582737986310144") is None
+    assert _x_profile_url("https://twitter.com/i/status/12345") is None
+    assert _x_profile_url("https://x.com/greengird11e/status/211667") == (
+        "https://x.com/greengird11e"
+    )
+    assert _x_profile_url("https://twitter.com/star4rats/status/1") == ("https://x.com/star4rats")
+
+
 def test_review_fixes(catalog: Path, tmp_path: Path) -> None:
     """Regression tests from the slice review."""
     import sqlite3 as sqlite3_module

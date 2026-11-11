@@ -209,9 +209,14 @@ def _known_sources() -> frozenset[str]:
 
 
 def _known_methods() -> frozenset[str]:
+    from media_catalog.discovery.planning import INDEX_METHODS
+
+    # INDEX_METHODS includes index-only methods (artist_identifier) that are
+    # deliberately not LookupStrategy values.
     return frozenset(
         {"local_md5", "local_source_url", "local_platform_identity", "fetch_post"}
         | {strategy.value for strategy in LookupStrategy}
+        | set(INDEX_METHODS)
     )
 
 

@@ -82,6 +82,12 @@ class PlannedSearch:
 
     @property
     def strategy_version(self) -> str:
+        # Index-only methods (artist_identifier) are not LookupStrategy
+        # values by design; their freshness version is the target's
+        # lookup-v1.<revision>.g<generation>, exactly what freshness
+        # compares.
+        if self.source_kind == INDEX and self.target:
+            return self.target
         return method_version(self.method)
 
 
@@ -148,7 +154,9 @@ def seed_account_profile_urls(connection: Any, seed_post: int) -> list[str]:
 
 def _x_profile_url(url: str) -> str | None:
     """The profile URL behind an x/twitter URL (`…/<handle>/status/…`)."""
-    match = re.match(r"https://(?:www\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,15})(?:/|$)", url)
+    match = re.match(
+        r"https://(?:www\.)?(?:x|twitter)\.com/(?!i(?:/|$))([A-Za-z0-9_]{1,15})(?:/|$)", url
+    )
     return f"https://x.com/{match.group(1)}" if match else None
 
 
