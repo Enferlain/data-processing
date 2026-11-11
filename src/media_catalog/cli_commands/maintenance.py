@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 from pathlib import Path
 
 from media_catalog.cli_commands.support import (
@@ -296,7 +297,13 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
         downloads = _default_downloads_dir(catalog, provider)
         with CatalogDatabase(catalog) as database:
             targets = registered_targets(database.connection)
-        broken = [t for t in targets if t.provider == provider and t.problem is not None]
+        provider_targets = [t for t in targets if t.provider == provider]
+        broken = [t for t in provider_targets if t.problem is not None]
+        unanchored = [
+            t.name
+            for t in provider_targets
+            if t.problem is None and t.snapshot is not None and not t.snapshot.artifact_path
+        ]
         if arguments.apply and broken:
             # A broken registration cannot contribute its artifact
             # reference; pruning now could delete the artifact its
@@ -306,20 +313,39 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
                 f" ({', '.join(sorted(t.name for t in broken))});"
                 " resolve them before pruning with --apply"
             )
+        if arguments.apply and unanchored:
+            # A projection that records no artifact path cannot protect its
+            # rebuild source either; same stance as broken registrations.
+            raise ValueError(
+                f"provider {provider} has registration(s) without a recorded"
+                f" artifact path ({', '.join(sorted(unanchored))});"
+                " refusing to prune with --apply"
+            )
         referenced: set[str] = set()
-        for target in targets:
-            if target.provider != provider or target.snapshot is None:
+        for target in provider_targets:
+            if target.snapshot is None:
                 continue
             artifact_path = target.snapshot.artifact_path
             if artifact_path:
                 referenced.add(Path(artifact_path).name)
         stale: list[dict[str, object]] = []
+        skipped_recent: list[str] = []
         deleted: list[str] = []
+        grace_seconds = 3600.0
         if downloads.is_dir():
+            now = time.time()
             for entry in sorted(downloads.iterdir()):
                 if not entry.is_file() or entry.name in referenced:
                     continue
                 record: dict[str, object] = {"file": entry.name, "byte_size": entry.stat().st_size}
+                if arguments.apply and now - entry.stat().st_mtime < grace_seconds:
+                    # An import registers its artifact only after the build
+                    # finishes; a fresh file may be in flight and must not
+                    # be deleted from under it.
+                    skipped_recent.append(entry.name)
+                    record["skipped"] = "modified within the last hour (possible in-flight import)"
+                    stale.append(record)
+                    continue
                 if arguments.apply:
                     entry.unlink()
                     deleted.append(entry.name)
@@ -331,6 +357,7 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
             "referenced": sorted(referenced),
             "prunable": stale,
             "deleted": deleted,
+            "skipped_recent": skipped_recent,
             "applied": bool(arguments.apply),
         }
     if arguments.index_command == "register":

@@ -72,6 +72,13 @@ row.
 - **THEN** the download fails, nothing is imported, and no partial artifact
   file remains
 
+#### Scenario: operator checksum with --download pins the exact export revision
+
+- **WHEN** `catalog index import --download --checksum X` runs and the
+  provider listing no longer names checksum X for the export
+- **THEN** the import refuses before any transfer instead of silently
+  downloading the listing's current revision
+
 #### Scenario: re-running the download is the refresh
 
 - **WHEN** `--download` runs again and the listing still names the same
@@ -188,7 +195,11 @@ no-op.
 `catalog index prune` SHALL report download artifacts that no registered
 projection references (stale `.part` temp files, superseded exports) and
 SHALL only delete them when `--apply` is given. Files referenced by a
-registered projection's snapshot identity SHALL never be pruned.
+registered projection's snapshot identity SHALL never be pruned. With
+`--apply`, files modified within an in-flight grace window (one hour)
+SHALL be skipped rather than deleted — an import registers its artifact
+only after the build finishes — and `--apply` SHALL be refused while any
+registration of the provider is broken or records no artifact path.
 
 #### Scenario: prune reports by default and deletes only unreferenced files
 

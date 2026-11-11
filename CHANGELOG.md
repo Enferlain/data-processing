@@ -41,6 +41,16 @@ Rules:
   on real data: X seed resolves `greengird11e` → e621 artist `greengirdle` offline
   (256 probes, 129k entries, 75 MB projection, integrity ok).
 
+### Fixed
+
+- **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now
+  skips files modified within the last hour (an import registers its artifact only after
+  the build finishes; previously a concurrent first-import's `.part` or freshly downloaded
+  artifact could be deleted mid-flight) and refuses to run when a provider registration is
+  broken or records no artifact path (a projection without its artifact reference could
+  not protect its rebuild source). Reviewer found the checksum-compare and progress units
+  clean; the spec gained the operator-checksum pin scenario.
+
 
 ## [2026-11-10]
 

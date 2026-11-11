@@ -13,7 +13,9 @@ import csv
 import gzip
 import io
 import json
+import os
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -310,9 +312,11 @@ def test_index_prune_reports_and_deletes_only_unreferenced(
     referenced_artifact = downloads / "posts.csv.gz"
     referenced_artifact.write_bytes(artifact.read_bytes())
     stale_temp = downloads / "posts.csv.gz.part"
-    stale_temp.write_bytes(b"interrupted")
+    stale_temp.write_bytes(b"interrupted")  # fresh: inside the in-flight grace window
     old_export = downloads / "posts-old.csv.gz"
     old_export.write_bytes(b"superseded")
+    two_hours_ago = time.time() - 7200
+    os.utime(old_export, (two_hours_ago, two_hours_ago))
 
     projection = tmp_path / "lookup.sqlite"
     import_e621_export(referenced_artifact, destination=projection)
@@ -338,9 +342,18 @@ def test_index_prune_reports_and_deletes_only_unreferenced(
     assert all(path.is_file() for path in (referenced_artifact, stale_temp, old_export))
 
     applied = prune(apply=True)
-    assert applied["deleted"] == ["posts-old.csv.gz", "posts.csv.gz.part"]
+    # The fresh .part may belong to an in-flight import: grace-skipped.
+    assert applied["deleted"] == ["posts-old.csv.gz"]
+    assert applied["skipped_recent"] == ["posts.csv.gz.part"]
     assert referenced_artifact.is_file()
-    assert not stale_temp.exists() and not old_export.exists()
+    assert stale_temp.is_file() and not old_export.exists()
+
+    # Once the grace window passes, the leftover temp is deletable.
+    also_old = time.time() - 7200
+    os.utime(stale_temp, (also_old, also_old))
+    late = prune(apply=True)
+    assert late["deleted"] == ["posts.csv.gz.part"]
+    assert not stale_temp.exists()
 
 
 def test_import_refuses_checksum_mismatch(artifact: Path, tmp_path: Path) -> None:

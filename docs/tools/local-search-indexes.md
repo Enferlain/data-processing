@@ -37,7 +37,10 @@ from it, never the reverse. `register` binds an existing projection to a target 
 identity — moving the file and re-pointing the registration preserves search history and
 freshness); `list` shows registrations and any file problems; `prune` reports (and with
 `--apply`, deletes) download artifacts no registered projection references — stale
-`.part` temp files and superseded exports. e621's export filename is constant, so daily
+`.part` temp files and superseded exports. Referenced artifacts are never pruned; `--apply`
+skips files modified within the last hour (an import registers its artifact only after the
+build finishes) and refuses to run while any registration of the provider is broken or
+records no artifact path. e621's export filename is constant, so daily
 refreshes replace the artifact in place rather than accumulating; prune covers killed
 downloads and any future renamed exports.
 
