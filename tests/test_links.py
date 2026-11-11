@@ -97,7 +97,10 @@ def test_recognizers_return_stable_typed_references(
 
 def test_canonicalization_is_conservative_and_retains_original_parts() -> None:
     result = canonicalize_url("http://Twitter.com/A/status/42?x=1&utm_source=z#section")
-    assert result.canonical_url == "https://x.com/A/status/42?x=1"
+    # The handle in an x/twitter status URL is decoration: one canonical
+    # /i/status/<id> form makes exact URL lookups match across the catalog
+    # and provider indexes (which store the handle spelling).
+    assert result.canonical_url == "https://x.com/i/status/42?x=1"
     assert result.original_query == "x=1&utm_source=z"
     assert result.original_fragment == "section"
     unknown = canonicalize_url("http://example.test/path?utm_source=meaningful#frag")
@@ -105,6 +108,20 @@ def test_canonicalization_is_conservative_and_retains_original_parts() -> None:
     assert recognize_url(unknown.original_url).reference is None
     assert recognize_url("https://t.co/abc").canonical.state == "redirect_required"
     assert recognize_url("https://linktr.ee/name").canonical.reason == "link_hub"
+
+
+def test_x_status_urls_normalize_to_one_canonical_form() -> None:
+    handle_form = canonicalize_url("https://x.com/greengird11e/status/2116678912345")
+    twitter_form = canonicalize_url("https://twitter.com/Greengird11E/status/2116678912345/")
+    canonical_form = canonicalize_url("https://x.com/i/status/2116678912345")
+    assert handle_form.canonical_url == canonical_form.canonical_url
+    assert twitter_form.canonical_url == canonical_form.canonical_url
+    # non-status paths and malformed ids keep their shape
+    assert canonicalize_url("https://x.com/handle").canonical_url == "https://x.com/handle"
+    assert (
+        canonicalize_url("https://x.com/handle/status/abc").canonical_url
+        == "https://x.com/handle/status/abc"
+    )
 
 
 def test_ambiguous_or_invalid_urls_do_not_fabricate_references() -> None:

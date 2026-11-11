@@ -41,6 +41,17 @@ Rules:
   on real data: X seed resolves `greengird11e` → e621 artist `greengirdle` offline
   (256 probes, 129k entries, 75 MB projection, integrity ok).
 
+- **X status-URL canonicalization: one form across catalog and indexes (Bead
+  `data-processing-an1`)** — the handle in an x/twitter status URL is decoration:
+  `canonicalize_url` now normalizes `x.com/<handle>/status/N` and
+  `twitter.com/<handle>/status/N` to `https://x.com/i/status/N` (the form the catalog
+  already synthesizes), and index URL probes fold legacy stored handle spellings.
+  Previously catalog probes (`x.com/i/status/N`) could never match provider-stored
+  handle spellings — the e621 index holds 2.26 M x/twitter status URLs. Real-catalog
+  URL hits: 71 → 225 distinct seed source URLs. Benefits every future provider index
+  (Danbooru/Gelbooru store the same spelling family); stored catalog keys keep their
+  original form and never need rewriting.
+
 ### Fixed
 
 - **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now

@@ -10,6 +10,7 @@ writer afterwards.
 from __future__ import annotations
 
 import datetime as _dt
+import re
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -23,13 +24,14 @@ LOOKUP_FORMAT = "lookup-v1"
 
 
 def _url_probe_variants(value: str) -> list[str]:
-    """The www and non-www spellings of one canonical HTTPS URL probe.
+    """Spelling variants of one canonical HTTPS URL probe.
 
-    e621 exports list both spellings of the same page
-    (``furaffinity.net/user/x`` and ``www.furaffinity.net/user/x``) while
-    ``links.py`` deliberately keeps ``www`` for unknown hosts — folding at
-    the probe boundary makes either spelling match without changing
-    canonicalization or re-importing stored keys.
+    Two folds: (1) e621 exports list both ``www`` and non-``www`` spellings
+    of the same page while ``links.py`` deliberately keeps ``www`` for
+    unknown hosts; (2) x/twitter status URLs stored under the legacy handle
+    spelling (``x.com/<handle>/status/N``, from before canonicalization
+    normalized to ``x.com/i/status/N``) still match — folding on the probe
+    side, so stored keys never need rewriting.
     """
     try:
         parts = urlsplit(value)
@@ -39,9 +41,14 @@ def _url_probe_variants(value: str) -> list[str]:
         return [value]
     netloc = parts.netloc
     twin = netloc[4:] if netloc.lower().startswith("www.") else f"www.{netloc}"
-    if twin == netloc:
-        return [value]
-    return [value, urlunsplit(("https", twin, parts.path, parts.query, ""))]
+    variants = [urlunsplit(("https", host, parts.path, parts.query, "")) for host in (netloc, twin)]
+    status = re.fullmatch(r"/(?!i/)[A-Za-z0-9_]{1,15}/status/([0-9]{1,25})", parts.path)
+    if netloc.lower().removeprefix("www.") in {"x.com", "twitter.com"} and status:
+        variants.append(
+            urlunsplit(("https", "x.com", f"/i/status/{status.group(1)}", parts.query, ""))
+        )
+    deduped = list(dict.fromkeys(variants))
+    return deduped if len(deduped) > 1 else [value]
 
 
 # The method set a posts projection serves when index_meta records no

@@ -28,6 +28,8 @@ from media_catalog.seeding import SeedMaterializationService
 NOW = "2026-10-06T00:00:00Z"
 PIXIV_URL = "https://www.pixiv.net/artworks/150422897"
 X_URL = "https://x.com/yyqw7151/status/1950567258528547071"
+# Canonicalized handle decoration away (links.py status normalization).
+X_URL_CANONICAL = "https://x.com/i/status/1950567258528547071"
 
 
 def test_seed_materializes_stub_with_references_and_provenance(tmp_path: Path) -> None:
@@ -79,7 +81,7 @@ def test_seed_materializes_stub_with_references_and_provenance(tmp_path: Path) -
                 (result["post_id"],),
             )
         }
-        assert source_urls == {PIXIV_URL, X_URL}
+        assert source_urls == {PIXIV_URL, X_URL_CANONICAL}
         # ...and as a typed provider_id reference planning can seed from.
         typed = {
             tuple(row)

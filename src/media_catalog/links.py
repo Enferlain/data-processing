@@ -87,6 +87,14 @@ def canonicalize_url(value: str) -> CanonicalURL:
     path = parsed.path or "/"
     if path != "/":
         path = path.rstrip("/")
+    status_path = re.fullmatch(r"/(?!i/)[A-Za-z0-9_]{1,15}/status/([0-9]{1,25})", path)
+    if host == "x.com" and status_path:
+        # The identity of an x/twitter status URL is the status id; the
+        # handle in the path is decoration that differs between who linked
+        # the post (providers store the handle form, the catalog stores
+        # /i/status/<id>).  One canonical form makes exact URL lookups
+        # match across catalog and provider indexes.
+        path = f"/i/status/{status_path.group(1)}"
     recognized_host = host in {
         "x.com",
         "www.pixiv.net",

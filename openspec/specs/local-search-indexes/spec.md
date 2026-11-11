@@ -261,3 +261,11 @@ export replans them.
   prefix for `source_post_url` or `artist_identifier`
 - **THEN** the lookup still matches either spelling without changing the
   stored canonical form
+
+#### Scenario: x/twitter status URLs match in one canonical form
+
+- **WHEN** a probe carries the handle spelling (`x.com/<handle>/status/N`)
+  and the stored key the canonical spelling (`x.com/i/status/N`), or vice
+  versa, for `source_post_url`
+- **THEN** the lookup still matches: canonicalization normalizes the
+  handle decoration away and probe folding covers legacy stored spellings
