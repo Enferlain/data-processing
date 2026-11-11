@@ -15,10 +15,34 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from media_catalog.output import public_path
 
 LOOKUP_FORMAT = "lookup-v1"
+
+
+def _url_probe_variants(value: str) -> list[str]:
+    """The www and non-www spellings of one canonical HTTPS URL probe.
+
+    e621 exports list both spellings of the same page
+    (``furaffinity.net/user/x`` and ``www.furaffinity.net/user/x``) while
+    ``links.py`` deliberately keeps ``www`` for unknown hosts — folding at
+    the probe boundary makes either spelling match without changing
+    canonicalization or re-importing stored keys.
+    """
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return [value]
+    if parts.scheme.lower() != "https" or not parts.netloc:
+        return [value]
+    netloc = parts.netloc
+    twin = netloc[4:] if netloc.lower().startswith("www.") else f"www.{netloc}"
+    if twin == netloc:
+        return [value]
+    return [value, urlunsplit(("https", twin, parts.path, parts.query, ""))]
+
 
 # The method set a posts projection serves when index_meta records no
 # explicit capabilities (artist projections list theirs).
@@ -477,40 +501,41 @@ def _artist_identifier_hits(
     hits: list[dict[str, Any]] = []
     seen: set[str] = set()
     for value in values:
-        rows = connection.execute(
-            """SELECT au.artist_id, ae.name, ae.is_active,
-                      au.normalized_url AS matched_url,
-                      (SELECT GROUP_CONCAT(n.name, ' ') FROM artist_names n
-                        WHERE n.artist_id = au.artist_id
-                          AND n.kind = 'other') AS other_names
-                 FROM artist_urls au
-                 JOIN artist_entries ae ON ae.artist_id = au.artist_id
-                WHERE au.normalized_url = ? LIMIT ?""",
-            (value, limit),
-        )
-        for row in rows:
-            artist_id = str(row["artist_id"])
-            if artist_id in seen:
-                continue
-            name = str(row["name"] or "").strip()
-            if not name:
-                # The lead table CHECKs a non-empty bounded name; skip
-                # entries that could not satisfy it instead of aborting the
-                # session mid-run.
-                continue
-            seen.add(artist_id)
-            hits.append(
-                {
-                    "provider": target.provider,
-                    "artist_id": artist_id,
-                    "name": name[:200],
-                    "other_names": str(row["other_names"] or "")[:800].split(),
-                    "matched_url": row["matched_url"],
-                    "is_active": bool(row["is_active"]),
-                }
+        for probe in _url_probe_variants(value):
+            rows = connection.execute(
+                """SELECT au.artist_id, ae.name, ae.is_active,
+                          au.normalized_url AS matched_url,
+                          (SELECT GROUP_CONCAT(n.name, ' ') FROM artist_names n
+                            WHERE n.artist_id = au.artist_id
+                              AND n.kind = 'other') AS other_names
+                     FROM artist_urls au
+                     JOIN artist_entries ae ON ae.artist_id = au.artist_id
+                    WHERE au.normalized_url = ? LIMIT ?""",
+                (probe, limit),
             )
-            if len(hits) >= limit:
-                return hits
+            for row in rows:
+                artist_id = str(row["artist_id"])
+                if artist_id in seen:
+                    continue
+                name = str(row["name"] or "").strip()
+                if not name:
+                    # The lead table CHECKs a non-empty bounded name; skip
+                    # entries that could not satisfy it instead of aborting
+                    # the session mid-run.
+                    continue
+                seen.add(artist_id)
+                hits.append(
+                    {
+                        "provider": target.provider,
+                        "artist_id": artist_id,
+                        "name": name[:200],
+                        "other_names": str(row["other_names"] or "")[:800].split(),
+                        "matched_url": row["matched_url"],
+                        "is_active": bool(row["is_active"]),
+                    }
+                )
+                if len(hits) >= limit:
+                    return hits
     return hits
 
 
@@ -537,39 +562,43 @@ def lookup(
         seen: set[str] = set()
         hits: list[dict[str, Any]] = []
         for value in values:
-            rows = plan.rows(connection, value, limit)
-            for row in rows:
-                post_id = str(row["post_id"])
-                if post_id in seen:
-                    continue
-                seen.add(post_id)
-                hit_md5 = (
-                    row["md5"]
-                    if "md5" in row.keys()  # noqa: SIM118  (sqlite3.Row has no __contains__)
-                    else None
-                )
-                if hit_md5 is None:
-                    fetched = connection.execute(
-                        "SELECT md5 FROM posts WHERE post_id = ?", (post_id,)
-                    ).fetchone()
-                    hit_md5 = fetched[0] if fetched else None
-                sources = [
-                    str(r["normalized_url"])
-                    for r in connection.execute(
-                        "SELECT normalized_url FROM post_sources WHERE post_id = ?",
-                        (post_id,),
+            # URL methods fold www variants at the probe boundary; the
+            # other methods match exact values.
+            probes = _url_probe_variants(value) if method == "source_post_url" else [value]
+            for probe in probes:
+                rows = plan.rows(connection, probe, limit)
+                for row in rows:
+                    post_id = str(row["post_id"])
+                    if post_id in seen:
+                        continue
+                    seen.add(post_id)
+                    hit_md5 = (
+                        row["md5"]
+                        if "md5" in row.keys()  # noqa: SIM118  (sqlite3.Row has no __contains__)
+                        else None
                     )
-                ]
-                hits.append(
-                    {
-                        "provider": target.provider,
-                        "post_native_id": post_id,
-                        "md5": hit_md5,
-                        "sources": sources,
-                    }
-                )
-                if len(hits) >= limit:
-                    return hits
+                    if hit_md5 is None:
+                        fetched = connection.execute(
+                            "SELECT md5 FROM posts WHERE post_id = ?", (post_id,)
+                        ).fetchone()
+                        hit_md5 = fetched[0] if fetched else None
+                    sources = [
+                        str(r["normalized_url"])
+                        for r in connection.execute(
+                            "SELECT normalized_url FROM post_sources WHERE post_id = ?",
+                            (post_id,),
+                        )
+                    ]
+                    hits.append(
+                        {
+                            "provider": target.provider,
+                            "post_native_id": post_id,
+                            "md5": hit_md5,
+                            "sources": sources,
+                        }
+                    )
+                    if len(hits) >= limit:
+                        return hits
         return hits
     finally:
         connection.close()

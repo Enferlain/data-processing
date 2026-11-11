@@ -1302,6 +1302,68 @@ def test_artist_identifier_records_leads_and_replans_on_reimport(
     assert steps[("index", "e621-artists", "artist_identifier")]["status"] == "complete"
 
 
+def test_www_variant_probes_match_both_spellings(catalog: Path, tmp_path: Path) -> None:
+    """Bead data-processing-dp8: e621 exports list both www and non-www
+    spellings of the same page; either probe spelling must hit."""
+    from media_catalog.search_index.importers.e621_artists_export import (
+        import_e621_artists_export,
+    )
+    from media_catalog.search_index.projection import IndexTarget
+
+    # Stored WITHOUT www; probed WITH www.
+    export = tmp_path / "posts-www.csv.gz"
+    _write_export(
+        export,
+        [
+            {
+                "id": "5501",
+                "md5": MD5_A,
+                "source": '{"https://furaffinity.net/view/9001/"}',
+                "is_deleted": "f",
+            }
+        ],
+    )
+    posts_projection = tmp_path / "posts-www.sqlite"
+    import_e621_export(export, destination=posts_projection)
+    posts_target = IndexTarget(
+        name="e621",
+        provider="e621",
+        path=posts_projection,
+        snapshot=read_snapshot(posts_projection),
+        problem=None,
+    )
+    hits = lookup(
+        posts_target,
+        method="source_post_url",
+        values=["https://www.furaffinity.net/view/9001/"],
+    )
+    assert len(hits) == 1 and hits[0]["post_native_id"] == "5501"
+
+    # Stored WITH www; probed WITHOUT.
+    artists_export = tmp_path / "artists-www.csv.gz"
+    rows = _artist_rows()
+    rows[0]["active_urls"] = "https://www.furaffinity.net/user/shiuk/"
+    rows[0]["inactive_urls"] = ""
+    _write_artists_export(artists_export, rows)
+    artists_projection = tmp_path / "artists-www.sqlite"
+    import_e621_artists_export(artists_export, destination=artists_projection)
+    artists_target = IndexTarget(
+        name="e621-artists",
+        provider="e621",
+        path=artists_projection,
+        snapshot=read_snapshot(artists_projection),
+        problem=None,
+    )
+    leads = lookup(
+        artists_target,
+        method="artist_identifier",
+        values=["https://furaffinity.net/user/shiuk/"],
+    )
+    assert len(leads) == 1
+    assert leads[0]["name"] == "shiuk"
+    assert leads[0]["matched_url"] == "https://www.furaffinity.net/user/shiuk/"
+
+
 def test_review_fixes(catalog: Path, tmp_path: Path) -> None:
     """Regression tests from the slice review."""
     import sqlite3 as sqlite3_module

@@ -51,6 +51,14 @@ Rules:
   not protect its rebuild source). Reviewer found the checksum-compare and progress units
   clean; the spec gained the operator-checksum pin scenario.
 
+- **www-variant URL probes match in index lookups (Bead `data-processing-dp8`)** —
+  e621 exports list both `furaffinity.net/…` and `www.furaffinity.net/…` spellings of the
+  same page while `links.py` deliberately keeps `www` for unknown hosts, so
+  `source_post_url` and `artist_identifier` probes could silently miss the other spelling.
+  The fold happens at the probe boundary in `lookup()` (each HTTPS URL probe tries its www
+  and non-www twin): no stored-key changes, no re-import, canonicalization untouched.
+  Tests pin both directions for both methods.
+
 
 ## [2026-11-10]
 

@@ -254,3 +254,10 @@ export replans them.
 - **WHEN** an `artist_identifier` attempt recorded zero results under revision R
   and the artists export is re-imported under a new revision
 - **THEN** the attempt is not fresh and the step executes again
+
+#### Scenario: URL probes match across www spellings
+
+- **WHEN** a stored URL key and a probe differ only in the `www.` host
+  prefix for `source_post_url` or `artist_identifier`
+- **THEN** the lookup still matches either spelling without changing the
+  stored canonical form
