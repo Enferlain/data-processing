@@ -404,6 +404,32 @@ uv run catalog lookup plan catalog-output/catalog.sqlite3 post:42 \
   --provider gelbooru --strategy declared_md5 --json
 ```
 
+### Whole-catalog cross-check
+
+`catalog crosscheck` batch-checks a selected corpus across the live providers using the
+same candidate-lookup machinery, with durable per-item state (`crosscheck_batches` /
+`crosscheck_items`), serialized writes (one connection, sequential lookups — no
+cross-provider write contention), and budgets that stop at item boundaries:
+
+```bash
+uv run catalog crosscheck catalog-output/catalog.sqlite3 --corpus hash-material \
+  --provider danbooru --provider gelbooru --provider aibooru \
+  --max-requests 60 --max-minutes 10 --json
+```
+
+The corpus is explicit: `hash-material` (default — subjects with md5 or foreign-id query
+material; metadata-only bookmarks never sweep silently), `downloaded` (posts with acquired
+assets), or `all` (every post; metadata-only subjects are labeled as such in reporting).
+Items are subject × provider × strategy with state `checked / matched / skipped / failed /
+pending` and a reason for non-checked states — including `fresh-run-reused` (a complete
+run with the same material digest and versions is never re-queried),
+`no-query-material`, rate limits with their `retry_after`, and provider errors. Re-run the
+same command to resume: completed items are reused, pending items run. Matches are
+recorded exactly as candidate-lookup results (run provenance) — never confirmed
+relationships. `--recheck {unsearched,stale,force}` mirrors discovery policy, with
+`--stale-after 24h|7d` for the stale mode.
+
+
 Single-post gelbooru DAPI fetches request typed tag info (`fields=tag_info`), so detail
 observations land artist/character/copyright/general/meta categories instead of `unknown`;
 listings stay flat. Gelbooru post `parent_id` and `title` normalize like the Danbooru family

@@ -60,6 +60,21 @@ Rules:
   entirely now — share parameters (`s=20`, `t=…`) are not part of a status URL's
   identity; 1,139 of 2.26 M index status keys carried queries and collapse to one form.
 
+- **`catalog crosscheck`: whole-catalog batch provider cross-check (Bead
+  `data-processing-p1t`, change `add-catalog-cross-check`)** — one first-class command
+  over the existing candidate-lookup machinery: explicit corpus selection
+  (`hash-material` default — subjects with md5 or foreign-id material; `downloaded`;
+  `all` with metadata-only bookmarks labeled, never silently swept), serialized writes
+  (one connection, sequential lookups — the jh3 concurrent-writer `OperationalError`
+  class cannot occur), durable per-item state (migration `0034`: batches keyed by
+  corpus+providers+recheck, items subject × provider × strategy with
+  checked/matched/skipped/failed/pending states and reasons incl. `fresh-run-reused`,
+  `no-query-material`, rate limits with `retry_after`), item-boundary budgets with
+  graceful stop, and resume by re-running the same command — completed items are never
+  re-executed. Matches stay candidate-lookup results with run provenance; no
+  relationship facts. Integration tests pin resume/budget/reuse/rate-limit/no-facts
+  behavior.
+
 ### Fixed
 
 - **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now

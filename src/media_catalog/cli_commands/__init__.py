@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from media_catalog.cli_commands import (
     admin,
+    crosscheck,
     discovery,
     export,
     ingest,
@@ -28,6 +29,7 @@ FAMILIES = (
     media,
     metadata,
     lookup,
+    crosscheck,
     export,
     relationships,
     maintenance,
@@ -37,6 +39,7 @@ FAMILIES = (
 __all__ = [
     "FAMILIES",
     "admin",
+    "crosscheck",
     "discovery",
     "export",
     "ingest",

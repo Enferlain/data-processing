@@ -61,13 +61,13 @@ def test_backup_is_consistent_under_an_active_wal_writer(catalog: Path) -> None:
 
         manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
         assert manifest["format"] == "catalog-backup-v1"
-        assert manifest["schema_version"] == 33
+        assert manifest["schema_version"] == 34
         assert manifest["row_counts"]["posts"] == 1
         assert manifest["sha256"] == result.sha256
         assert manifest["byte_size"] == result.byte_size
         # The backup opens cleanly and carries the committed WAL state.
         with CatalogDatabase(result.backup_path) as restored:
-            assert restored.schema_version == 33
+            assert restored.schema_version == 34
             last_seen = restored.connection.execute(
                 "SELECT last_seen_at FROM posts WHERE native_post_id = 'backup-1'"
             ).fetchone()[0]
@@ -147,7 +147,7 @@ def test_doctor_section_is_neutral_without_backups_and_fails_on_drift(
     healthy = backup_doctor_section(catalog)
     assert healthy["backup"]["ok"] is True
     assert healthy["backup"]["digest"] == "verified"
-    assert healthy["backup"]["schema_version"] == 33
+    assert healthy["backup"]["schema_version"] == 34
 
     payload = bytearray(result.backup_path.read_bytes())
     payload[-1] ^= 0xFF
@@ -165,7 +165,7 @@ def test_cli_backup_restore_and_doctor_report(
     main(["backup", str(catalog), "--json"])
     backed_up = json.loads(capsys.readouterr().out)
     assert backed_up["catalog"] == "catalog.sqlite3"
-    assert backed_up["schema_version"] == 33
+    assert backed_up["schema_version"] == 34
     backup_path = catalog.parent / "catalog-backups" / (Path(backed_up["backup"]).name)
     assert backup_path.is_file()
 
@@ -204,7 +204,7 @@ def test_cli_backup_runs_while_a_wal_writer_holds_committed_frames(
         writer.commit()
         main(["backup", str(catalog), "--json"])
         result = json.loads(capsys.readouterr().out)
-        assert result["schema_version"] == 33
+        assert result["schema_version"] == 34
         with CatalogDatabase(
             Path(catalog.parent, "catalog-backups", Path(result["backup"]).name)
         ) as snapshot:
