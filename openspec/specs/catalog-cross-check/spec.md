@@ -1,5 +1,12 @@
 # catalog-cross-check Specification
 
+## Purpose
+
+Batch cross-checking of a selected catalog corpus across the configured live
+providers, coordinated over the existing candidate-lookup machinery with
+durable, resumable, item-level outcomes. Matches stay candidates; the catalog
+remains the sole source of facts.
+
 ## Requirements
 
 ### Requirement: batch cross-check coordinates existing provider lookups
