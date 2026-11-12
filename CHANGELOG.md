@@ -75,6 +75,15 @@ Rules:
   relationship facts. Integration tests pin resume/budget/reuse/rate-limit/no-facts
   behavior.
 
+- **`identical_md5` pairs auto-confirm as `same` (labeling queue)** — operator
+  calibration reached 59/59 `same` with zero exceptions: an identical content md5 means
+  byte-identical assets, so review only re-spent attention. The labeling server confirms
+  such pairs automatically at session start (visible, auditable labels carrying an
+  `auto:` note; idempotent) and they no longer enqueue — the last batch would have been
+  48 of 67 items shorter. Other signals are untouched: `provider_parent` (75% variant),
+  `shared_source_url` (73% variant), and the near-pure-negative `same_artist_*` families
+  still go to the operator.
+
 ### Fixed
 
 - **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now

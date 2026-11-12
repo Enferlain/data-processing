@@ -258,6 +258,12 @@ class LabelingState:
         self.media_root = media_root
         self.revisit_unsure = revisit_unsure
         self._matched_root_ids = self._find_matching_managed_roots()
+        # 59/59 operator calibration: identical md5 pairs are byte-identical
+        # assets and never need review — confirm them before building the
+        # queue so they never consume operator attention.
+        from media_catalog.labeling.queue import autoconfirm_identical_md5_pairs
+
+        autoconfirm_identical_md5_pairs(connection)
         self.queue: CandidateQueue = build_queue(
             connection,
             revisit_unsure=revisit_unsure,

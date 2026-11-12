@@ -84,6 +84,58 @@ def _has_usable_media(
     return False
 
 
+def _now() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+AUTO_IDENTICAL_NOTE = (
+    "auto: identical md5 — byte-identical assets (59/59 operator calibration, zero exceptions)"
+)
+
+
+def autoconfirm_identical_md5_pairs(connection: sqlite3.Connection) -> int:
+    """Label identical-md5 cross-platform pairs `same` without review.
+
+    Operators confirmed 59/59 such pairs as ``same`` with zero exceptions:
+    an identical content md5 means byte-identical assets, so review would
+    only re-spend operator attention.  The pairs never reach the queue; the
+    automatic label stays visible and auditable via its note.  Idempotent:
+    already-labeled pairs are left untouched.
+    """
+    rows = connection.execute(
+        """SELECT DISTINCT m1.post_id, m2.post_id
+             FROM media_occurrences m1
+             JOIN media_occurrences m2
+               ON m1.declared_md5 = m2.declared_md5
+              AND m1.media_occurrence_id < m2.media_occurrence_id
+             JOIN posts p1 ON p1.post_id = m1.post_id
+             JOIN posts p2 ON p2.post_id = m2.post_id
+             JOIN platforms x1 ON x1.platform_id = p1.platform_id
+             JOIN platforms x2 ON x2.platform_id = p2.platform_id
+            WHERE m1.declared_md5 IS NOT NULL
+              AND x1.platform_key != x2.platform_key
+              AND p1.availability = 'available'
+              AND p2.availability = 'available'
+              AND NOT EXISTS (
+                    SELECT 1 FROM pair_labels pl
+                     WHERE pl.post_a_id = m1.post_id AND pl.post_b_id = m2.post_id)"""
+    ).fetchall()
+    now = _now()
+    written = 0
+    for a, b in rows:
+        cursor = connection.execute(
+            """INSERT OR IGNORE INTO pair_labels
+                   (post_a_id, post_b_id, queue_signal, verdict, relation_note, labeled_at)
+               VALUES (?, ?, 'identical_md5', 'same', ?, ?)""",
+            (int(a), int(b), AUTO_IDENTICAL_NOTE, now),
+        )
+        written += cursor.rowcount
+    connection.commit()
+    return written
+
+
 def build_queue(
     connection: sqlite3.Connection,
     *,
@@ -151,8 +203,11 @@ def build_queue(
                     skipped_unusable_count += 1
                     continue
                 candidates_list.append(PairCandidate(a, b, signal, detail))
+                candidates_list.append(PairCandidate(a, b, signal, detail))
 
-    # A1: identical declared md5 across platforms.
+    # A1: identical declared md5 across platforms — auto-confirmed before
+    # the queue is built (autoconfirm_identical_md5_pairs), so this family
+    # only enqueues pairs whose labeling predates the auto rule.
     add(
         _pairs(
             connection,

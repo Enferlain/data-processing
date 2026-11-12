@@ -90,8 +90,31 @@ def test_same_artist_contrast_pairs_queue(catalog: Path) -> None:
     assert signals.get((a, b)) == "same_artist_contrast"
 
 
+def test_identical_md5_pairs_autoconfirm_instead_of_queueing(catalog: Path) -> None:
+    """59/59 operator calibration: identical md5 pairs are byte-identical
+    assets — confirmed automatically, never queued for review."""
+    from media_catalog.labeling.queue import autoconfirm_identical_md5_pairs
+
+    a, b = _seed_pair(catalog, md5_a="9" * 32, md5_b="9" * 32, tag="artist_auto")
+    with CatalogDatabase(catalog) as database:
+        written = autoconfirm_identical_md5_pairs(database.connection)
+    assert written == 1
+    with CatalogDatabase(catalog) as database:
+        row = database.connection.execute(
+            "SELECT verdict, relation_note FROM pair_labels WHERE post_a_id = ? AND post_b_id = ?",
+            (a, b),
+        ).fetchone()
+    assert row["verdict"] == "same"
+    assert row["relation_note"].startswith("auto:")
+    # idempotent, and the pair no longer queues
+    with CatalogDatabase(catalog) as database:
+        assert autoconfirm_identical_md5_pairs(database.connection) == 0
+        queue = build_queue(database.connection)
+    assert all((p.post_a_id, p.post_b_id) != (a, b) for p in queue)
+
+
 def test_labels_record_with_history_and_exclude_requeue(catalog: Path) -> None:
-    a, b = _seed_pair(catalog, md5_a="a" * 32, md5_b="a" * 32, tag="artist_x")
+    a, b = _seed_pair(catalog, md5_a="a" * 32, md5_b="m" * 32, tag="artist_x")
     with CatalogDatabase(catalog) as database:
         state = LabelingState(database.connection, catalog.parent)
         state.record(
@@ -101,7 +124,7 @@ def test_labels_record_with_history_and_exclude_requeue(catalog: Path) -> None:
             NOW,
             expected_post_a_id=a,
             expected_post_b_id=b,
-            expected_queue_signal="identical_md5",
+            expected_queue_signal="same_artist_contrast",
         )
         row = database.connection.execute(
             "SELECT verdict, relation_note FROM pair_labels WHERE post_a_id = ? AND post_b_id = ?",
@@ -202,7 +225,7 @@ def test_storage_root_selection_and_managed_root_identity(catalog: Path, tmp_pat
     st = media_root.stat()
     actual_identity = f"{st.st_dev}:{st.st_ino}"
 
-    a, b = _seed_pair(catalog, md5_a="c" * 32, md5_b="c" * 32, tag="artist_y")
+    a, b = _seed_pair(catalog, md5_a="c" * 32, md5_b="o" * 32, tag="artist_y")
 
     sha_1 = "1" * 64
     sha_2 = "2" * 64
@@ -301,7 +324,7 @@ def test_missing_local_file_feedback(catalog: Path, tmp_path: Path) -> None:
     actual_identity = f"{st.st_dev}:{st.st_ino}"
     sha_3 = "3" * 64
 
-    a, _ = _seed_pair(catalog, md5_a="d" * 32, md5_b="d" * 32, tag="artist_z")
+    a, _ = _seed_pair(catalog, md5_a="d" * 32, md5_b="p" * 32, tag="artist_z")
 
     with CatalogDatabase(catalog) as database:
         conn = database.connection
@@ -485,7 +508,7 @@ def test_thumbnail_does_not_override_original_remote(catalog: Path, tmp_path: Pa
 
 @pytest.mark.parametrize("new_note", [None, "confirmed same after zoom"])
 def test_revisit_unsure_queue_mode(catalog: Path, new_note: str | None) -> None:
-    a, b = _seed_pair(catalog, md5_a="e" * 32, md5_b="e" * 32, tag="artist_revisit")
+    a, b = _seed_pair(catalog, md5_a="e" * 32, md5_b="q" * 32, tag="artist_revisit")
 
     with CatalogDatabase(catalog) as database:
         conn = database.connection
@@ -497,7 +520,7 @@ def test_revisit_unsure_queue_mode(catalog: Path, new_note: str | None) -> None:
             NOW,
             expected_post_a_id=a,
             expected_post_b_id=b,
-            expected_queue_signal="identical_md5",
+            expected_queue_signal="same_artist_contrast",
         )
 
         # In normal mode, labeled pair is excluded
@@ -525,7 +548,7 @@ def test_revisit_unsure_queue_mode(catalog: Path, new_note: str | None) -> None:
             NOW,
             expected_post_a_id=a,
             expected_post_b_id=b,
-            expected_queue_signal="identical_md5",
+            expected_queue_signal="same_artist_contrast",
         )
         row = conn.execute(
             "SELECT verdict, relation_note FROM pair_labels WHERE post_a_id = ? AND post_b_id = ?",
@@ -549,7 +572,7 @@ def test_revisit_unsure_queue_mode(catalog: Path, new_note: str | None) -> None:
 
 
 def test_resaved_unsure_remains_available_for_later_review(catalog: Path) -> None:
-    _seed_pair(catalog, md5_a="e" * 32, md5_b="e" * 32, tag="artist_revisit")
+    _seed_pair(catalog, md5_a="e" * 32, md5_b="q" * 32, tag="artist_revisit")
     with CatalogDatabase(catalog) as database:
         conn = database.connection
         LabelingState(conn, catalog.parent).record(0, "unsure", "first look", NOW)
@@ -564,7 +587,7 @@ def test_resaved_unsure_remains_available_for_later_review(catalog: Path) -> Non
 
 @pytest.mark.parametrize("missing", ["stub", "post", "occurrence", "url"])
 def test_revisit_defers_unusable_pairs_without_losing_labels(catalog: Path, missing: str) -> None:
-    a, b = _seed_pair(catalog, md5_a="e" * 32, md5_b="e" * 32, tag="artist_revisit")
+    a, b = _seed_pair(catalog, md5_a="e" * 32, md5_b="q" * 32, tag="artist_revisit")
     with CatalogDatabase(catalog) as database:
         conn = database.connection
         platform = conn.execute("SELECT platform_id FROM posts WHERE post_id = ?", (a,)).fetchone()[
@@ -737,7 +760,7 @@ def test_production_http_server_media_streaming_and_save_feedback(
         )
         c.commit()
 
-    a, b = _seed_pair(catalog, md5_a="f" * 32, md5_b="f" * 32, tag="artist_net")
+    a, b = _seed_pair(catalog, md5_a="f" * 32, md5_b="r" * 32, tag="artist_net")
 
     # Start PRODUCTION server entirely inside background thread
     server_holder: list[object] = []
@@ -812,7 +835,7 @@ def test_production_http_server_media_streaming_and_save_feedback(
                     "pair": 0,
                     "post_a_id": a,
                     "post_b_id": b,
-                    "queue_signal": "identical_md5",
+                    "queue_signal": "same_artist_contrast",
                     "verdict": "unknown",
                 }
             ),
@@ -850,7 +873,7 @@ def test_production_http_server_media_streaming_and_save_feedback(
                     "pair": 0,
                     "post_a_id": a,
                     "post_b_id": b,
-                    "queue_signal": "identical_md5",
+                    "queue_signal": "same_artist_contrast",
                     "verdict": "same",
                     "note": "FORCE_FAIL",
                 }
@@ -887,7 +910,7 @@ def test_production_http_server_media_streaming_and_save_feedback(
                     "pair": 0,
                     "post_a_id": a,
                     "post_b_id": b,
-                    "queue_signal": "identical_md5",
+                    "queue_signal": "same_artist_contrast",
                     "verdict": "same",
                     "note": "verified identical",
                 }
