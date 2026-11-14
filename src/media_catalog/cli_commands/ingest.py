@@ -24,6 +24,18 @@ def register(commands: argparse._SubParsersAction) -> None:
         source.add_argument("source", type=Path)
         source.add_argument("--catalog", type=Path, required=True)
         add_json(source)
+    folder = sources.add_parser(
+        "folder",
+        description=(
+            "Bulk-record every media file in a directory (non-recursive) as"
+            " idempotent bare-file discovery seeds — hashes are computed from"
+            " bytes, filenames are never trusted; no posts or identities are created"
+        ),
+    )
+    folder.add_argument("--catalog", type=Path, required=True)
+    folder.add_argument("source", type=Path, help="directory to scan non-recursively")
+    folder.add_argument("--note")
+    add_json(folder)
     discover = commands.add_parser("discover-links")
     discover.add_argument("catalog", type=Path)
     add_json(discover)
@@ -60,6 +72,16 @@ def register(commands: argparse._SubParsersAction) -> None:
 
 def execute(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.command == "ingest":
+        if arguments.source_kind == "folder":
+            from media_catalog.imports.folder import ingest_folder
+
+            if not arguments.source.is_dir():
+                raise FileNotFoundError(f"source directory not found: {arguments.source.name}")
+            with CatalogDatabase(arguments.catalog) as database:
+                return {
+                    "catalog": public_path(database.path),
+                    **ingest_folder(database, arguments.source, note=arguments.note),
+                }
         if not arguments.source.is_file():
             raise FileNotFoundError(f"source file not found: {public_path(arguments.source)}")
         with CatalogDatabase(arguments.catalog) as database:

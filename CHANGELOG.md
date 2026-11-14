@@ -84,6 +84,17 @@ Rules:
   `shared_source_url` (73% variant), and the near-pure-negative `same_artist_*` families
   still go to the operator.
 
+- **`catalog ingest folder`: bulk local-folder ingest (Bead `data-processing-an1`)** —
+  records every media file in a directory (non-recursive) as an idempotent bare-file
+  discovery seed under one batch session: md5/sha256 computed from bytes (filenames
+  never trusted), dimensions/MIME derived where possible, sidecar/tag files counted
+  but not parsed (sidecar ingestion is a deliberate follow-up), no posts or platform
+  identities created. Real run on the operator's grabber collection: 24,142 seeds
+  materialized from 24,146 media files in 28 min (1 oversize file rejected loudly).
+  Offline payoff against the existing e621 posts index: 3,123 md5 hits (12.9%),
+  pointing at 3,120 e621 posts not yet in the catalog — previously the whole
+  hash-material corpus was 107 subjects.
+
 ### Fixed
 
 - **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now
