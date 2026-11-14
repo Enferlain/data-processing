@@ -1416,6 +1416,67 @@ def test_x_profile_derivation_ignores_canonical_i_path(catalog: Path) -> None:
     assert _x_profile_url("https://twitter.com/star4rats/status/1") == ("https://x.com/star4rats")
 
 
+def test_danbooru_parquet_import(tmp_path: Path) -> None:
+    """The community snapshot parquet bootstraps a danbooru posts projection
+    incl. artist tags (which the e621 export lacks)."""
+    import datetime as datetime_module
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from media_catalog.search_index.importers.danbooru_parquet import (
+        import_danbooru_parquet,
+    )
+
+    artifact = tmp_path / "posts-snapshot.parquet"
+    table = pa.table(
+        {
+            "id": pa.array([7001, 7002], pa.int64()),
+            "md5": pa.array([MD5_A, MD5_B], pa.string()),
+            "source": pa.array(
+                ["https://www.pixiv.net/artworks/9\nhttps://x.com/handle/status/77", ""],
+                pa.string(),
+            ),
+            "parent_id": pa.array([None, 7001], pa.int64()),
+            "file_ext": pa.array(["png", "jpg"], pa.string()),
+            "image_width": pa.array([900, 800], pa.int64()),
+            "image_height": pa.array([1200, 600], pa.int64()),
+            "created_at": pa.array(
+                [datetime_module.datetime(2024, 1, 1, tzinfo=datetime_module.UTC)] * 2,
+                pa.timestamp("ms", tz="UTC"),
+            ),
+            "updated_at": pa.array(
+                [datetime_module.datetime(2024, 6, 1, tzinfo=datetime_module.UTC)] * 2,
+                pa.timestamp("ms", tz="UTC"),
+            ),
+            "is_deleted": pa.array([False, True], pa.bool_()),
+            "is_banned": pa.array([False, False], pa.bool_()),
+            "tag_string_artist": pa.array(["some_artist", ""], pa.string()),
+        }
+    )
+    pq.write_table(table, artifact)
+
+    destination = tmp_path / "danbooru-lookup.sqlite"
+    result = import_danbooru_parquet(artifact, destination=destination)
+    assert result.scope == "full"
+    assert result.record_count == 2
+    assert result.columns_absent == ()
+    snapshot = read_snapshot(destination)
+    assert "artist_exact_name" in snapshot.capabilities
+    assert "verified_md5" in snapshot.capabilities
+
+    with sqlite3.connect(destination) as connection:
+        artists = connection.execute("SELECT count(*) FROM post_artists").fetchone()[0]
+        urls = {row[0] for row in connection.execute("SELECT normalized_url FROM post_sources")}
+        deleted = connection.execute("SELECT count(*) FROM posts WHERE is_deleted = 1").fetchone()[
+            0
+        ]
+    assert artists == 1  # danbooru carries artist tags, unlike the e621 export
+    assert "https://www.pixiv.net/artworks/9" in urls
+    assert "https://x.com/i/status/77" in urls  # x-status canonicalization applies
+    assert deleted == 1
+
+
 def test_review_fixes(catalog: Path, tmp_path: Path) -> None:
     """Regression tests from the slice review."""
     import sqlite3 as sqlite3_module

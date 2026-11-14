@@ -90,7 +90,29 @@ or discovery — teaches that provider's registered index at the shared post-com
 roll back a catalog write, and rolled-back transactions teach nothing. Gelbooru and Sankaku
 indexes therefore grow into persistent caches of encountered knowledge without any bulk crawl.
 
-The e621 daily database exports (posts, artists, tags; gzipped CSV with published SHA-256,
-listed at `/db_exports.json`) are the first artifact source. A danbooru metadata importer and
-per-provider refresh strategies (watermark/sync) are planned follow-ups; the design is
-`docs/plans/search-indexing-design.md`.
+## danbooru (community snapshot bootstrap)
+
+```bash
+uv run catalog index import catalog-output/catalog.sqlite3 \
+   --provider danbooru \
+   --artifact catalog-output/catalog-indexes/danbooru/downloads/posts-snapshot.parquet --json
+```
+
+Danbooru has no e621-style daily export; per `docs/plans/booru_investigation.md`
+the projection bootstraps from a community snapshot parquet
+(`nyanko-devs/danbooru2026` `metadata/posts-snapshot.parquet`, 4.1 GB, ~11.7M
+rows — operator-supplied; no `--download`). The snapshot is bootstrap material,
+not current truth: the revision identifies digest + builder + scope, misses
+record their revision and fall through to live lookups, and teach-on-result
+maintains encountered knowledge. Because the snapshot carries
+`tag_string_artist`, the danbooru target also serves the artist-name methods
+(the e621 posts export cannot). pyarrow (runtime dependency) streams the
+parquet with bounded memory. Incremental API refresh and `pixiv_id` foreign-id
+lookups are recorded follow-ups.
+
+
+The e621 daily database exports (posts, artists; gzipped CSV with published SHA-256,
+listed at `/db_exports.json`) and the danbooru community snapshot parquet are the first
+artifact sources; per-provider refresh strategies (watermark/sync) are planned
+follow-ups; the design is `docs/plans/search-indexing-design.md` and
+`docs/plans/booru_investigation.md`.

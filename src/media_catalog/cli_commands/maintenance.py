@@ -139,7 +139,10 @@ def register(commands: argparse._SubParsersAction) -> None:
     )
     index_import.add_argument("catalog", type=Path)
     index_import.add_argument(
-        "--provider", required=True, choices=("e621",), help="artifact source provider"
+        "--provider",
+        required=True,
+        choices=("e621", "danbooru"),
+        help="artifact source provider (danbooru: posts-snapshot.parquet via --artifact)",
     )
     artifact_source = index_import.add_mutually_exclusive_group(required=True)
     artifact_source.add_argument(
@@ -393,6 +396,36 @@ def _execute_index(arguments: argparse.Namespace) -> dict[str, object]:
         }
     # import
     provider = arguments.provider
+    if provider == "danbooru":
+        if arguments.download:
+            raise ValueError("danbooru imports require --artifact (no provider export listing)")
+        if arguments.export != "posts":
+            raise ValueError("--export is e621-only; danbooru imports are posts snapshots")
+        from media_catalog.search_index.importers.danbooru_parquet import (
+            import_danbooru_parquet,
+        )
+
+        destination = arguments.path or _default_index_path(catalog, provider)
+        result = import_danbooru_parquet(
+            arguments.artifact,
+            destination=destination,
+            checksum=arguments.checksum,
+            max_records=arguments.max_records,
+        )
+        with CatalogDatabase(catalog) as database:
+            _upsert_registration(
+                database,
+                name=provider,
+                provider=provider,
+                path=destination,
+                revision=result.snapshot_revision,
+            )
+        return {
+            "catalog": label,
+            "target": provider,
+            "export": "posts-parquet",
+            **result.as_dict(),
+        }
     if provider != "e621":  # pragma: no cover - argparse choices guard this
         raise ValueError(f"no importer for provider {provider}")
     export_name = arguments.export

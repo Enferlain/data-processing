@@ -95,6 +95,23 @@ Rules:
   pointing at 3,120 e621 posts not yet in the catalog — previously the whole
   hash-material corpus was 107 subjects.
 
+- **danbooru bootstrap index (Bead `data-processing-an1`, change `add-danbooru-index`)** —
+  `catalog index import --provider danbooru --artifact posts-snapshot.parquet` builds a
+  lookup-v1 posts projection from the `nyanko-devs/danbooru2026` community snapshot
+  (4.1 GB parquet, 11,740,666 rows; pyarrow added as a runtime dependency, row-group
+  streaming with bounded memory). Danbooru's schema carries `tag_string_artist`, so the
+  danbooru target serves the artist-name methods the e621 posts export cannot; URLs reuse
+  the proven extraction/canonicalization (incl. x-status normalization) and `is_deleted OR
+  is_banned` folds into the deleted flag. Bootstrap-only semantics per
+  `docs/plans/booru_investigation.md`: the revision identifies snapshot digest + builder +
+  scope; misses fall through to live lookups; incremental refresh and `pixiv_id`
+  foreign-id lookups are recorded follow-ups. Real-data results: full import of
+  11,740,666 rows in 43 min (6.0 GB projection, integrity ok); the grabber
+  file-seed corpus hits danbooru at **66.9%** (16,163/24,160 — vs 12.9% on e621;
+  the collection is largely danbooru-sourced); 12 of the 40 e621-miss subjects
+  now resolve offline. Review pass: `--download`/`--export` rejected with clear
+  errors for danbooru; whitespace-only sources normalized.
+
 ### Fixed
 
 - **Prune review fixes (Bead `data-processing-an1`)** — `catalog index prune --apply` now
