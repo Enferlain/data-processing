@@ -246,3 +246,117 @@ def test_rate_limit_surfaces_as_failed_reason(
         )
     assert result["counts"]["failed"] >= 1
     assert any("retry_after=120" in reason for reason in result["summary"]["reasons"])
+
+
+def _insert_file_seed(connection: sqlite3.Connection, md5: str) -> int:
+    session = connection.execute(
+        "INSERT INTO discovery_sessions (input_kind, started_at)"
+        " VALUES ('local_file', '2026-11-14T00:00:00Z')"
+    )
+    seed = connection.execute(
+        """INSERT INTO discovery_file_seeds
+               (discovery_session_id, verified_md5, verified_sha256, byte_size,
+                source_path, observed_at)
+           VALUES (?, ?, ?, 1, 'seed.bin', '2026-11-14T00:00:00Z')""",
+        (int(session.lastrowid), md5, "s" * 64),
+    )
+    return int(seed.lastrowid)
+
+
+def test_file_seeds_corpus_selects_canonical_bare_file_seeds(catalog: Path) -> None:
+    with CatalogDatabase(catalog) as database, database.transaction():
+        first = _insert_file_seed(database.connection, MD5)
+        second = _insert_file_seed(database.connection, "f" * 32)
+        _insert_file_seed(database.connection, MD5)  # duplicate hash pair, higher id
+    with CatalogDatabase(catalog) as database:
+        subjects = select_corpus(database.connection, "file-seeds")
+    # one canonical subject per verified hash pair: the lowest seed id only
+    assert subjects == [("file", first), ("file", second)]
+
+
+def test_file_seed_subjects_crosscheck_via_verified_md5(
+    catalog: Path, fake_provider: type[_FakeService]
+) -> None:
+    from media_catalog.crosscheck import run_crosscheck
+
+    with CatalogDatabase(catalog) as database, database.transaction():
+        seed_id = _insert_file_seed(database.connection, MD5)
+    _FakeService.results_for = {(f"file:{seed_id}", "verified_md5"): 2}
+
+    with CatalogDatabase(catalog) as database:
+        result = run_crosscheck(
+            database,
+            corpus="file-seeds",
+            providers=("danbooru",),
+            budget=CrosscheckBudget(),
+        )
+
+    assert result["subjects"] == 1
+    # the verified md5 is the only query material a bare file carries
+    assert _FakeService.calls == [(f"file:{seed_id}", "verified_md5")]
+    connection = sqlite3.connect(f"file:{catalog}?mode=ro", uri=True)
+    items = connection.execute(
+        "SELECT strategy, state, matched_count FROM crosscheck_items"
+        " WHERE seed_kind = 'file' ORDER BY strategy"
+    ).fetchall()
+    batch_corpus = connection.execute(
+        "SELECT corpus FROM crosscheck_batches WHERE crosscheck_batch_id = ?",
+        (result["batch_id"],),
+    ).fetchone()[0]
+    pairs = connection.execute("SELECT count(*) FROM pair_labels").fetchone()[0]
+    relations = connection.execute("SELECT count(*) FROM relationships").fetchone()[0]
+    connection.close()
+    assert batch_corpus == "file-seeds"
+    assert [(row[0], row[1], row[2]) for row in items] == [
+        ("declared_md5", "skipped", 0),  # no declared material on a bare file
+        ("verified_md5", "matched", 2),
+    ]
+    assert pairs == 0 and relations == 0  # matches stay candidates
+
+
+def test_corpus_check_widened_by_migration_preserving_batches(tmp_path: Path) -> None:
+    from media_catalog.database import available_migrations, current_schema_version
+
+    path = tmp_path / "v34.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        for number, _name, sql in available_migrations()[:34]:
+            connection.executescript(sql)
+            connection.execute(f"PRAGMA user_version = {number}")
+        batch = connection.execute(
+            """INSERT INTO crosscheck_batches
+                   (batch_key, corpus, providers, recheck, started_at)
+               VALUES ('downloaded|danbooru|unsearched', 'downloaded', 'danbooru',
+                       'unsearched', '2026-11-01T00:00:00Z')"""
+        )
+        connection.execute(
+            """INSERT INTO crosscheck_items
+                   (crosscheck_batch_id, seed_kind, seed_id, provider, strategy,
+                    state, updated_at)
+               VALUES (?, 'post', 1, 'danbooru', 'verified_md5', 'checked',
+                       '2026-11-01T00:00:00Z')""",
+            (int(batch.lastrowid),),
+        )
+        connection.commit()
+
+    with CatalogDatabase(path) as database:
+        assert database.schema_version == current_schema_version()
+        rows = database.connection.execute(
+            "SELECT batch_key, corpus FROM crosscheck_batches ORDER BY crosscheck_batch_id"
+        ).fetchall()
+        checked = database.connection.execute(
+            "SELECT count(*) FROM crosscheck_items WHERE state = 'checked'"
+        ).fetchone()[0]
+        database.connection.execute(
+            """INSERT INTO crosscheck_batches
+                   (batch_key, corpus, providers, recheck, started_at)
+               VALUES ('file-seeds|danbooru|unsearched', 'file-seeds', 'danbooru',
+                       'unsearched', '2026-11-14T00:00:00Z')"""
+        )
+        next_id = database.connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # the pre-migration batch and its item survive the rebuild; the widened
+    # CHECK admits file-seeds; the AUTOINCREMENT sequence continues past 1
+    assert [(row[0], row[1]) for row in rows] == [("downloaded|danbooru|unsearched", "downloaded")]
+    assert checked == 1
+    assert next_id == 2

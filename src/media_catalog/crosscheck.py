@@ -27,7 +27,7 @@ from media_catalog.candidate_lookup.service import CandidateLookupService
 
 PROVIDERS: tuple[str, ...] = ("danbooru", "aibooru", "e621", "gelbooru")
 
-CORPORA = ("hash-material", "downloaded", "all")
+CORPORA = ("hash-material", "downloaded", "file-seeds", "all")
 RECHECK_MODES = ("unsearched", "stale", "force")
 
 TERMINAL_STATES = ("checked", "matched", "skipped", "failed")
@@ -207,6 +207,17 @@ def select_corpus(connection: sqlite3.Connection, corpus: str) -> list[tuple[str
                 ORDER BY 2"""
         )
         subjects = [("post", int(row[1])) for row in rows]
+    elif corpus == "file-seeds":
+        # Canonical identity only: find_file_seed_id defines the subject for a
+        # verified hash pair as the lowest id; the 0031 hash index is
+        # deliberately non-unique, so catalogs may hold duplicate rows.
+        rows = connection.execute(
+            """SELECT min(discovery_file_seed_id) AS id
+                 FROM discovery_file_seeds
+                GROUP BY verified_md5, verified_sha256
+                ORDER BY id"""
+        )
+        subjects = [("file", int(row["id"])) for row in rows]
     else:
         rows = connection.execute("SELECT 'post', post_id FROM posts ORDER BY post_id")
         subjects = [("post", int(row[1])) for row in rows]

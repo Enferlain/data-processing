@@ -13,6 +13,20 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise and mention all changes without necessarily detailing each one
 
+## [2026-11-14]
+
+### Added
+
+- **`catalog crosscheck --corpus file-seeds` (Bead `data-processing-0ui`, change
+  `add-crosscheck-file-seeds-corpus`)** — bare-file discovery seeds (e.g. the 24k
+  grabber-collection seeds from `catalog ingest folder`) are now a cross-checkable
+  corpus beside the post corpora: canonical subject per verified hash pair (lowest
+  seed id, matching `find_file_seed_id`), verified-md5 as the only query material,
+  honest `no-query-material` skips for unsupported strategies, items recorded under
+  seed kind `file` with the same budgets/resume/reuse controls. Migration `0035`
+  widens the `crosscheck_batches.corpus` CHECK via the standard rebuild (existing
+  batches preserved; `crosscheck_items` already accepted `'file'`).
+
 ## [2026-11-11]
 
 ### Added

@@ -419,7 +419,9 @@ uv run catalog crosscheck catalog-output/catalog.sqlite3 --corpus hash-material 
 
 The corpus is explicit: `hash-material` (default — subjects with md5 or foreign-id query
 material; metadata-only bookmarks never sweep silently), `downloaded` (posts with acquired
-assets), or `all` (every post; metadata-only subjects are labeled as such in reporting).
+assets), `file-seeds` (bare-file discovery seeds, e.g. from `catalog ingest folder`;
+verified md5 is their only query material), or `all` (every post; metadata-only subjects
+are labeled as such in reporting).
 Items are subject × provider × strategy with state `checked / matched / skipped / failed /
 pending` and a reason for non-checked states — including `fresh-run-reused` (a complete
 run with the same material digest and versions is never re-queried),

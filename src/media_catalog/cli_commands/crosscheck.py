@@ -35,7 +35,8 @@ def register(commands: argparse._SubParsersAction) -> None:
         default="hash-material",
         help=(
             "hash-material (default): subjects with md5 or foreign-id query material;"
-            " downloaded: posts with acquired assets; all: every post, including"
+            " downloaded: posts with acquired assets; file-seeds: bare-file discovery"
+            " seeds (verified md5 material only); all: every post, including"
             " metadata-only bookmarks (reported as such)"
         ),
     )
