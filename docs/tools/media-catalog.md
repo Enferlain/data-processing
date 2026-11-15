@@ -329,6 +329,14 @@ occurrence key, and declared MD5 must still match. Renewed delivery URLs are cac
 memory; API bearer tokens never go to the CDN. The source link opens the stable provider post.
 Providers without a media policy retain direct browser loading and the original-source link.
 
+### Pool co-membership family
+
+Posts the provider declares to be in the same pool (`post_pool_observations`, recorded
+from payload `pools[]` and backfilled by `catalog reprocess`) enqueue as `pool_member`
+pairs — within one platform only, since pool ids are per-platform namespaces. A pool can
+hold re-encodes, variants, and separate pages, so co-membership never proves a verdict;
+like `provider_parent`, it hands you the content question.
+
 
 ## Tag subjects with operator labels
 

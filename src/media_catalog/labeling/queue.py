@@ -273,6 +273,32 @@ def build_queue(
         ),
     )
 
+    # A4: provider pool co-membership (post_pool_observations, recorded from
+    # post payloads by the metadata writer and replayed offline by
+    # reprocess). A pool can hold re-encodes, variants, and separate pages,
+    # so co-membership never proves a content verdict. Pool ids are scoped
+    # per platform namespace, so pairs join within one platform.
+    add(
+        _pairs(
+            connection,
+            """SELECT DISTINCT o1.post_id, o2.post_id
+                 FROM post_pool_observations o1
+                 JOIN post_pool_observations o2
+                   ON o2.pool_native_id = o1.pool_native_id
+                  AND o1.post_id < o2.post_id
+                 JOIN posts p1 ON p1.post_id = o1.post_id
+                 JOIN posts p2 ON p2.post_id = o2.post_id
+                WHERE p1.platform_id = p2.platform_id
+                  AND p1.availability = 'available'
+                  AND p2.availability = 'available'""",
+        ),
+        "pool_member",
+        (
+            "provider declares both posts in the same pool "
+            "(verdict required; pool membership does not prove same or variant)"
+        ),
+    )
+
     # B1: shared external id across platforms (e.g. both cite one pixiv id).
     add(
         _pairs(

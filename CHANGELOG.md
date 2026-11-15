@@ -17,6 +17,18 @@ Rules:
 
 ### Added
 
+- **`pool_member` labeling family over existing pool observations (Bead
+  `data-processing-rip`, change `add-pool-membership-evidence`)** — provider-declared
+  pool co-membership (`post_pool_observations`, already recorded from payload `pools[]`
+  by the metadata writer and replayable offline via `catalog reprocess`) now enqueues as
+  a labeling family: available-post pairs within one platform namespace get the content
+  question — a pool can hold re-encodes, variants, and separate pages, so membership
+  never decides, and the same pool id on two platforms never pairs. No schema change. An
+  earlier draft duplicated the observation store as a new hints table with its own miner;
+  review caught the duplication and it was dropped in favor of consuming the existing
+  table.
+
+
 - **`catalog tag`: operator labels — free-form local facts on subjects (Bead
   `data-processing-j7l`, change `add-operator-labels`)** — create/retire labels at will and
   apply/revoke them on any subject (file seed / post / asset / work). Assertions are
