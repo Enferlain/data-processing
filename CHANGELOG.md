@@ -13,9 +13,23 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise and mention all changes without necessarily detailing each one
 
+## [2026-11-15]
+
+### Added
+
+- **`catalog tag`: operator labels — free-form local facts on subjects (Bead
+  `data-processing-j7l`, change `add-operator-labels`)** — create/retire labels at will and
+  apply/revoke them on any subject (file seed / post / asset / work). Assertions are
+  append-only and attributed to the operator (latest wins; history kept), provider tag tables
+  are never touched, and search expands a label to identical content regardless of platform
+  (seeds sharing a verified hash pair; posts sharing an md5) while variants never inherit.
+  Doubles as a grouping/collection mechanic with a fully operator-owned vocabulary. Migration
+  `0036` (additive).
+
 ## [2026-11-14]
 
 ### Added
+
 
 - **`catalog crosscheck --corpus file-seeds` (Bead `data-processing-0ui`, change
   `add-crosscheck-file-seeds-corpus`)** — bare-file discovery seeds (e.g. the 24k

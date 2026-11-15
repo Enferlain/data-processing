@@ -329,6 +329,27 @@ occurrence key, and declared MD5 must still match. Renewed delivery URLs are cac
 memory; API bearer tokens never go to the CDN. The source link opens the stable provider post.
 Providers without a media policy retain direct browser loading and the original-source link.
 
+
+## Tag subjects with operator labels
+
+```bash
+uv run catalog tag create catalog-output/catalog.sqlite3 ai-generated --description "nature fact"
+uv run catalog tag apply catalog-output/catalog.sqlite3 ai-generated --file-seed 123 --by imi
+uv run catalog tag show catalog-output/catalog.sqlite3 --file-seed 123
+uv run catalog tag search catalog-output/catalog.sqlite3 ai-generated
+```
+
+Operator labels are free-form local facts on any subject — file seeds, posts, assets, works.
+They are never provider tags (the tag tables stay observation-anchored), and `catalog tag` is
+distinct from `catalog label` (the interactive pair-calibration server). Labels can be created
+and retired freely; retiring keeps history. Applying and revoking append assertions attributed
+to the operator — the current state is the latest assertion, so history stays reconstructable.
+Because a label about content is about the bytes, a label covers identical content regardless of
+platform: search returns directly labeled subjects plus identical-content subjects (file seeds
+sharing a verified md5/sha256 pair, posts sharing an md5), each marked `direct` or
+`identical-content`. Variants and crops never inherit. Use labels as nature facts, review
+queues, or arbitrary groupings — the vocabulary is yours.
+
 ## Look up cross-platform candidates
 
 Candidate lookup is an explicit bridge between retained catalog facts and supported provider

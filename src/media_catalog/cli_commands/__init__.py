@@ -19,6 +19,7 @@ from media_catalog.cli_commands import (
     media,
     metadata,
     relationships,
+    tags,
 )
 
 # Registration order is the help-output order; keep it stable.
@@ -32,6 +33,7 @@ FAMILIES = (
     crosscheck,
     export,
     relationships,
+    tags,
     maintenance,
     library,
 )
@@ -49,4 +51,5 @@ __all__ = [
     "media",
     "metadata",
     "relationships",
+    "tags",
 ]
