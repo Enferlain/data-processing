@@ -224,3 +224,29 @@ the run successfully with zero observations.
 #### Scenario: Commentary never touches default sync
 - **WHEN** default post synchronization runs
 - **THEN** no commentary operation or observation occurs
+
+### Requirement: Bounded pool search by name records full membership
+
+The danbooru family SHALL support a `SEARCH_POOLS` operation rendering
+`GET /pools.json?search[name_matches]=<name>` with the instance page size,
+and a bounded runner that records, under the standard run contract (run
+committed before the request, raw report retained, typed outcome), one pool
+observation per matching pool with its complete provider-declared ordered
+membership — anchored to the search response's raw observation. Re-running a
+name SHALL be skippable when a complete prior `search_pools` run exists for
+that target; unchanged pool memberships SHALL stay digest-deduplicated.
+
+#### Scenario: One search records every matching pool
+
+- **WHEN** a pool search runs for a name and the provider returns N matching
+  pools with ordered `post_ids`
+- **THEN** one complete remote run records N pool observations (ordered
+  members, retained posts linked) anchored to one retained raw report
+
+#### Scenario: Discovery drives artist names under a budget
+
+- **WHEN** discovery runs with name and request budgets
+- **THEN** only artist names with at least three held posts are searched,
+  names with complete prior runs are skipped, requests are paced at the
+  platform floor, and the pass stops at the request budget with per-name
+  results reported

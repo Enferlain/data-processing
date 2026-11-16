@@ -337,6 +337,18 @@ pairs — within one platform only, since pool ids are per-platform namespaces. 
 hold re-encodes, variants, and separate pages, so co-membership never proves a verdict;
 like `provider_parent`, it hands you the content question.
 
+#### Verdict semantics
+
+`same` = the same picture in a different encoding: transcode (jpg vs png), re-compression,
+resolution change — information-preserving transforms. Byte-identical pairs (identical md5)
+never reach the queue; they auto-confirm as `same`. `variant` = different content of one work:
+crop, effects, background or lighting change, censoring, edits, alt versions (composition
+fixed, details changed), sketch vs finished. `different` = a different work: same scene
+re-drawn at another angle, separate captures, same-artist pieces, set members. `unsure` parks
+the pair for revisit — prefer it plus a note over a confident wrong press. Set membership
+(pools, parent/child) is an inherent property the providers declare; the verdicts are only
+about what is in the frame.
+
 
 ## Tag subjects with operator labels
 
