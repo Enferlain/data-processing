@@ -181,6 +181,24 @@ entity/attribute/value table for everything; that path ends in soup.
   bounded interaction policy.
 - The roadmap's ongoing principles apply unchanged; they were already kernel-compatible.
 
+### As-of revision playback (kernel note, 2026-11-16)
+
+`observation_revisions` is append-only (abort triggers on UPDATE/DELETE, as on
+`raw_observations`), so "what was known when" is reverse playback: the latest revision of
+one observation at or before a revision-id cutoff resolves as a single indexed seek on
+`idx_observation_revisions_observation_playback (observation_id, observation_revision_id
+DESC)` — no scan, no sort:
+
+```sql
+SELECT observation_revision_id, observed_at, collection_data, import_run_id,
+       raw_observation_id
+  FROM observation_revisions
+ WHERE observation_id = ? AND observation_revision_id <= ?
+ ORDER BY observation_revision_id DESC
+ LIMIT 1;
+```
+
+
 ## 8. Open questions for the architectural pass
 
 Answered on 2026-10-03:

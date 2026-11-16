@@ -17,6 +17,15 @@ Rules:
 
 ### Added
 
+- **As-of revision playback index (Bead `data-processing-i94`, change
+  `add-observation-revision-asof-index`)** — migration `0039` adds the playback index
+  `observation_revisions(observation_id, observation_revision_id DESC)` so the as-of query
+  (latest revision of an observation at or before a revision-id cutoff) is a single indexed
+  seek — EXPLAIN-pinned in tests (no scan, no temp b-tree). The bead's enforcement half
+  (append-only abort triggers on `raw_observations` and `observation_revisions`) already
+  existed via the 0012 kernel-storage enforcement migrations and is now regression-tested
+  rather than re-added; the as-of query is documented in the provenance kernel plan.
+
 - **Labeling audit stream + calibration report (Bead `data-processing-4o3`, change
   `add-labeling-audit-stream`)** — `catalog label --audit N [--seed S]` serves a
   deterministic seeded sample split across three populations — a slice of
