@@ -29,6 +29,7 @@ class AdapterOperation(StrEnum):
     FETCH_POOL = "fetch_pool"
     FETCH_COMMENTARY = "fetch_commentary"
     FETCH_NOTES = "fetch_notes"
+    SEARCH_POOLS = "search_pools"
 
 
 class LookupStrategy(StrEnum):

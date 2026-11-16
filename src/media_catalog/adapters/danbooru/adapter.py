@@ -377,6 +377,15 @@ class DanbooruAdapter:
         if request.operation is AdapterOperation.FETCH_POOL:
             target = _stable_id(request.target, "pool ID")
             return f"/pools/{target}.json", {}, f"{self.instance_key}:fetch_pool:{target}"
+        if request.operation is AdapterOperation.SEARCH_POOLS:
+            name = request.target.strip()
+            if not 1 <= len(name) <= 100:
+                raise ValueError("pool name must be 1-100 characters")
+            return (
+                "/pools.json",
+                {"search[name_matches]": name, "limit": self.instance.page_size},
+                f"{self.instance_key}:search_pools:{name}",
+            )
         if request.operation is AdapterOperation.FETCH_ATTRIBUTION:
             target = _stable_id(request.target, "artist ID")
             return (

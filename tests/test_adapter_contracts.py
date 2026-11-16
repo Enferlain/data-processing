@@ -30,6 +30,7 @@ def test_adapter_contract_values_are_stable_and_continuations_round_trip() -> No
         "fetch_pool",
         "fetch_commentary",
         "fetch_notes",
+        "search_pools",
     ]
     assert {outcome.value for outcome in AdapterOutcome} >= {
         "success",

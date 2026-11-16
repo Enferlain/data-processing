@@ -106,6 +106,24 @@ def register(commands: argparse._SubParsersAction) -> None:
     remote_show.add_argument("run_id", type=int)
     add_json(remote_show)
 
+    pool_search = metadata_commands.add_parser(
+        "danbooru-pool-search",
+        description=(
+            "Search danbooru pools by name; the response carries full ordered"
+            " membership, so one request per name records every matching pool."
+            " --discover drives the catalog's top artist names instead."
+        ),
+    )
+    pool_search.add_argument("catalog", type=Path)
+    pool_search.add_argument("target", nargs="?", help="pool-name search term")
+    pool_search.add_argument(
+        "--discover",
+        action="store_true",
+        help="search the catalog's top artist names instead of one name",
+    )
+    pool_search.add_argument("--discover-names", type=int, default=50)
+    pool_search.add_argument("--discover-requests", type=int, default=50)
+    add_sync_limits(pool_search, listing=False)
 
 def _factory_sync(
     arguments: argparse.Namespace,
@@ -281,6 +299,43 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
                     database,
                     adapter,
                     int(arguments.target),
+                    clock=utc_now,
+                    time_budget_seconds=int(limits.elapsed_seconds),
+                ),
+            }
+    if command.endswith("-pool-search"):
+        # One request per name: discovery plus full membership, because the
+        # search response carries complete ordered post_ids.
+        if arguments.resume_from is not None:
+            raise ValueError("--resume-from is not supported for pool searches")
+        danbooru_factory, _ = adapter_construction(instance.platform_key)
+        if arguments.discover:
+            from media_catalog.remote_sync.pool_discovery import discover_pools
+
+            with CatalogDatabase(arguments.catalog) as database:
+                return {
+                    "catalog": catalog_label,
+                    **discover_pools(
+                        database,
+                        danbooru_factory,
+                        instance.platform_key,
+                        clock=utc_now,
+                        names_limit=int(arguments.discover_names),
+                        request_budget=int(arguments.discover_requests),
+                    ),
+                }
+        if arguments.target is None:
+            raise ValueError("pool name is required without --discover")
+        from media_catalog.remote_sync.pool_discovery import search_pools
+
+        with httpx.Client() as client, CatalogDatabase(arguments.catalog) as database:
+            adapter = danbooru_factory(client)
+            return {
+                "catalog": catalog_label,
+                **search_pools(
+                    database,
+                    adapter,
+                    arguments.target,
                     clock=utc_now,
                     time_budget_seconds=int(limits.elapsed_seconds),
                 ),

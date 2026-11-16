@@ -17,6 +17,16 @@ Rules:
 
 ### Added
 
+- **`catalog metadata danbooru-pool-search`: pool discovery with membership in one
+  request (Bead `data-processing-rip`, change `add-danbooru-pool-discovery`)** — the new
+  `SEARCH_POOLS` operation renders `GET /pools.json?search[name_matches]=<name>` whose
+  response carries complete ordered `post_ids` (verified by live capture), so one bounded
+  run records every matching pool as an ordered observation anchored to the retained
+  search report; `--discover` drives the catalog's top artist names (>=3 held posts,
+  prior-run skipping, request budget). Migration `0038` widens the three remote-table
+  operation CHECKs with `search_pools` (the 0016/0017 rebuild idiom, every row and
+  trigger preserved). Danbooru pools now feed the `pool_member` labeling family.
+
 - **`pool_member` labeling family over existing pool observations (Bead
   `data-processing-rip`, change `add-pool-membership-evidence`)** — provider-declared
   pool co-membership (`post_pool_observations`, already recorded from payload `pools[]`

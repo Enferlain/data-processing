@@ -63,6 +63,7 @@ REMOTE_OPERATIONS = frozenset(
         "fetch_pool",
         "fetch_commentary",
         "fetch_notes",
+        "search_pools",
     }
 )
 # Per-platform remote-operation registry (non-media-consumer spike F2,
