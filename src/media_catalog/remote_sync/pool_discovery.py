@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from typing import Any
 
 from media_catalog.adapters import AdapterOperation, AdapterRequest, ResponseEnvelope
@@ -239,6 +240,7 @@ def discover_pools(
     names_limit: int = 50,
     request_budget: int = 50,
     client_factory: Any = None,
+    minimum_interval_seconds: float = 0.0,
 ) -> dict[str, Any]:
     """Search pools for the catalog's top artist names, skipping prior runs.
 
@@ -262,6 +264,8 @@ def discover_pools(
                 continue
             if requests_used >= request_budget:
                 break
+            if requests_used and minimum_interval_seconds > 0:
+                time.sleep(minimum_interval_seconds)
             result = search_pools(database, adapter, name, clock=clock)
             result["artist_held_posts"] = held
             results.append(result)

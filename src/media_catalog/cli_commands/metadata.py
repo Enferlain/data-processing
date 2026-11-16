@@ -125,6 +125,7 @@ def register(commands: argparse._SubParsersAction) -> None:
     pool_search.add_argument("--discover-requests", type=int, default=50)
     add_sync_limits(pool_search, listing=False)
 
+
 def _factory_sync(
     arguments: argparse.Namespace,
     catalog_label: str,
@@ -308,7 +309,7 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
         # search response carries complete ordered post_ids.
         if arguments.resume_from is not None:
             raise ValueError("--resume-from is not supported for pool searches")
-        danbooru_factory, _ = adapter_construction(instance.platform_key)
+        danbooru_factory, interval = adapter_construction(instance.platform_key)
         if arguments.discover:
             from media_catalog.remote_sync.pool_discovery import discover_pools
 
@@ -322,6 +323,7 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
                         clock=utc_now,
                         names_limit=int(arguments.discover_names),
                         request_budget=int(arguments.discover_requests),
+                        minimum_interval_seconds=interval,
                     ),
                 }
         if arguments.target is None:
