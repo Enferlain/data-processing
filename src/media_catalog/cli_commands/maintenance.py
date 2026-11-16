@@ -29,7 +29,7 @@ _REPROCESS_PROVIDERS = (
 )
 
 
-COMMANDS = ("reprocess", "seed", "tombstone", "label", "index")
+COMMANDS = ("reprocess", "seed", "tombstone", "label", "label-stats", "index")
 
 
 def register(commands: argparse._SubParsersAction) -> None:
@@ -88,6 +88,20 @@ def register(commands: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Revisit ready unsure pairs; preserve and defer labels with missing media",
     )
+    label.add_argument(
+        "--audit",
+        type=int,
+        metavar="N",
+        help="serve a deterministic audit sample of N pairs instead of the signal queue",
+    )
+    label.add_argument("--seed", type=int, default=0, help="audit sample seed")
+
+    label_stats = commands.add_parser(
+        "label-stats",
+        description="Per-family label counts, same-or-variant rates, Wilson 95% intervals",
+    )
+    label_stats.add_argument("catalog", type=Path)
+    add_json(label_stats)
 
     index_cmd = commands.add_parser(
         "index",
@@ -210,8 +224,18 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             arguments.media_root,
             port=arguments.port,
             revisit_unsure=arguments.revisit_unsure,
+            audit=arguments.audit or 0,
+            seed=arguments.seed,
         )
         return {"status": "stopped"}
+    if arguments.command == "label-stats":
+        from media_catalog.labeling.calibration import calibration_report
+
+        with CatalogDatabase(arguments.catalog) as database:
+            return {
+                "catalog": public_path(arguments.catalog),
+                **calibration_report(database.connection),
+            }
     if arguments.command == "index":
         return _execute_index(arguments)
     if arguments.command == "tombstone":

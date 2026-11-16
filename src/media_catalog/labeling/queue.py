@@ -361,3 +361,105 @@ def build_queue(
     # Stable order, capped.
     candidates_list.sort(key=lambda c: (c.queue_signal, c.post_a_id, c.post_b_id))
     return CandidateQueue(candidates_list[:limit], skipped_count=skipped_unusable_count)
+
+
+def _audit_candidates(
+    connection: sqlite3.Connection, *, seed: int, sample_size: int
+) -> list[PairCandidate]:
+    """Seeded sample for population-error bounds: auto-confirmed pairs
+    (re-verify the auto rule), the unlabeled same-artist backlog, and random
+    cross-artist negatives drawn from sampled post ids (never a cross
+    product)."""
+    import random
+
+    if sample_size <= 0:
+        return []
+    generator = random.Random(seed)
+    labeled = {
+        (int(row[0]), int(row[1]))
+        for row in connection.execute("SELECT post_a_id, post_b_id FROM pair_labels")
+    }
+    # A takes the remainder so the three counts always sum to sample_size.
+    per_population = sample_size // 3
+    auto_count = sample_size - 2 * per_population
+    chosen: list[tuple[str, tuple[int, int]]] = []
+    # A: re-verify a slice of auto-confirmed identical-md5 pairs.  These
+    # carry an auto label by definition; the audit records a re-verdict
+    # under its own signal, so they deliberately bypass the labeled filter.
+    auto_rows = connection.execute(
+        """SELECT post_a_id, post_b_id FROM pair_labels
+            WHERE queue_signal = 'identical_md5' AND verdict = 'same'"""
+    ).fetchall()
+    auto_pairs = sorted({(int(r[0]), int(r[1])) for r in auto_rows})
+    if auto_pairs and auto_count:
+        for pair in generator.sample(auto_pairs, min(auto_count, len(auto_pairs))):
+            chosen.append(("auto", pair))
+    # B: unlabeled same-artist backlog the current builds have not reached
+    backlog_rows = connection.execute(
+        """SELECT DISTINCT p1.post_id, p2.post_id
+             FROM post_tags pt1
+             JOIN tags t ON t.tag_id = pt1.tag_id AND t.category = 'artist'
+             JOIN posts p1 ON p1.post_id = pt1.post_id
+             JOIN post_tags pt2 ON pt2.tag_id = t.tag_id AND pt2.post_id != p1.post_id
+             JOIN posts p2 ON p2.post_id = pt2.post_id
+            WHERE p1.post_id < p2.post_id
+              AND p1.availability = 'available'
+              AND p2.availability = 'available'"""
+    ).fetchall()
+    backlog = sorted({(int(r[0]), int(r[1])) for r in backlog_rows} - labeled)
+    if backlog and per_population:
+        for pair in generator.sample(backlog, min(per_population, len(backlog))):
+            chosen.append(("backlog", pair))
+    # C: random cross-artist negatives.  The pair space is quadratic, so the
+    # sample draws post ids first (seeded) and validates candidate pairs
+    # one at a time until the quota fills.
+    if per_population:
+        post_ids = sorted(
+            int(row[0])
+            for row in connection.execute(
+                "SELECT post_id FROM posts WHERE availability = 'available'"
+            )
+        )
+        drawn = generator.sample(post_ids, min(len(post_ids), per_population * 8))
+        taken = 0
+        for index in range(len(drawn) - 1):
+            if taken >= per_population:
+                break
+            a, b = sorted((drawn[index], drawn[index + 1]))
+            if (a, b) in labeled:
+                continue
+            shares_tag = connection.execute(
+                """SELECT 1 FROM post_tags a1
+                    JOIN post_tags a2 ON a2.tag_id = a1.tag_id
+                   WHERE a1.post_id = ? AND a2.post_id = ? LIMIT 1""",
+                (a, b),
+            ).fetchone()
+            if shares_tag is None:
+                chosen.append(("negative", (a, b)))
+                taken += 1
+    return [
+        PairCandidate(a, b, f"audit_{kind}", f"audit sample ({kind}) — population-error bound")
+        for kind, (a, b) in chosen
+    ]
+
+
+def build_audit_queue(
+    connection: sqlite3.Connection,
+    *,
+    sample_size: int = 30,
+    seed: int = 0,
+    media_root: Path | None = None,
+    matched_root_ids: set[int] | None = None,
+) -> CandidateQueue:
+    """Deterministic audit sample; verdicts record through the normal flow."""
+    candidates = _audit_candidates(connection, seed=seed, sample_size=sample_size)
+    usable: list[PairCandidate] = []
+    skipped = 0
+    for candidate in candidates:
+        if _has_usable_media(
+            connection, candidate.post_a_id, media_root, matched_root_ids
+        ) and _has_usable_media(connection, candidate.post_b_id, media_root, matched_root_ids):
+            usable.append(candidate)
+        else:
+            skipped += 1
+    return CandidateQueue(usable, skipped_count=skipped)

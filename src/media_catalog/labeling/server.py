@@ -253,6 +253,8 @@ class LabelingState:
         media_root: Path,
         *,
         revisit_unsure: bool = False,
+        audit: int = 0,
+        seed: int = 0,
     ) -> None:
         self.connection = connection
         self.media_root = media_root
@@ -260,16 +262,30 @@ class LabelingState:
         self._matched_root_ids = self._find_matching_managed_roots()
         # 59/59 operator calibration: identical md5 pairs are byte-identical
         # assets and never need review — confirm them before building the
-        # queue so they never consume operator attention.
-        from media_catalog.labeling.queue import autoconfirm_identical_md5_pairs
+        # queue so they never consume operator attention.  In audit mode the
+        # confirm still runs: the auto labels are one of the sampled
+        # populations.
+        from media_catalog.labeling.queue import (
+            autoconfirm_identical_md5_pairs,
+            build_audit_queue,
+        )
 
         autoconfirm_identical_md5_pairs(connection)
-        self.queue: CandidateQueue = build_queue(
-            connection,
-            revisit_unsure=revisit_unsure,
-            media_root=media_root,
-            matched_root_ids=self._matched_root_ids,
-        )
+        if audit > 0:
+            self.queue: CandidateQueue = build_audit_queue(
+                connection,
+                sample_size=audit,
+                seed=seed,
+                media_root=media_root,
+                matched_root_ids=self._matched_root_ids,
+            )
+        else:
+            self.queue = build_queue(
+                connection,
+                revisit_unsure=revisit_unsure,
+                media_root=media_root,
+                matched_root_ids=self._matched_root_ids,
+            )
         self.cursor = 0
         self._session_decisions: set[tuple[int, int, str]] = set()
         self.sankaku_media = SankakuDisplayResolver()
@@ -1298,11 +1314,19 @@ def create_server(
     port: int = 8765,
     host: str = "127.0.0.1",
     revisit_unsure: bool = False,
+    audit: int = 0,
+    seed: int = 0,
 ) -> tuple[HTTPServer, CatalogDatabase, LabelingState]:
     """Create the HTTPServer, CatalogDatabase, and LabelingState instances."""
     database = CatalogDatabase(catalog)
     try:
-        state = LabelingState(database.connection, media_root, revisit_unsure=revisit_unsure)
+        state = LabelingState(
+            database.connection,
+            media_root,
+            revisit_unsure=revisit_unsure,
+            audit=audit,
+            seed=seed,
+        )
         handler_class = create_handler(state, media_root)
         server = HTTPServer((host, port), handler_class)
     except BaseException:
@@ -1317,11 +1341,18 @@ def serve(
     *,
     port: int = 8765,
     revisit_unsure: bool = False,
+    audit: int = 0,
+    seed: int = 0,
 ) -> None:
-    server, database, state = create_server(
-        catalog, media_root, port=port, revisit_unsure=revisit_unsure
+    server, database, _state = create_server(
+        catalog,
+        media_root,
+        port=port,
+        revisit_unsure=revisit_unsure,
+        audit=audit,
+        seed=seed,
     )
-    print(f"labeling UI on http://127.0.0.1:{port} ({len(state.queue)} pairs queued)")
+    print(f"labeling UI on http://127.0.0.1:{port} ({len(_state.queue)} pairs queued)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

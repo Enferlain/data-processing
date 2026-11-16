@@ -350,6 +350,21 @@ the pair for revisit — prefer it plus a note over a confident wrong press. Set
 about what is in the frame.
 
 
+### Audit sampling and calibration
+
+```bash
+uv run catalog label catalog-output/catalog.sqlite3 --media-root catalog-output/media --audit 30 --seed 0
+uv run catalog label-stats catalog-output/catalog.sqlite3 --json
+```
+
+Every ordinary label comes from an enqueue signal, so error below the thresholds is invisible.
+`--audit N` serves a deterministic seeded sample split across three populations: a slice of
+auto-confirmed identical-md5 pairs (re-verify the auto rule), unlabeled same-artist backlog
+pairs the current builds have not yet reached, and random cross-artist negatives. Verdicts
+record through the ordinary flow under `audit_*` signals. `label-stats` reports per-family
+counts, same-or-variant rates, and Wilson 95% intervals — each audit pass tightens the
+bounds on the auto rules.
+
 ## Tag subjects with operator labels
 
 ```bash

@@ -17,6 +17,16 @@ Rules:
 
 ### Added
 
+- **Labeling audit stream + calibration report (Bead `data-processing-4o3`, change
+  `add-labeling-audit-stream`)** — `catalog label --audit N [--seed S]` serves a
+  deterministic seeded sample split across three populations — a slice of
+  auto-confirmed identical-md5 pairs, unlabeled same-artist backlog, and random
+  cross-artist negatives drawn from sampled post ids (never a quadratic cross
+  product) — recording verdicts under distinct `audit_*` signals through the
+  ordinary flow. `catalog label-stats` reports per-family label counts, same-or-variant
+  rates, and Wilson 95% intervals — the population-error bound the abstention-first triage
+  asked for. No schema change.
+
 - **`catalog metadata danbooru-pool-search`: pool discovery with membership in one
   request (Bead `data-processing-rip`, change `add-danbooru-pool-discovery`)** — the new
   `SEARCH_POOLS` operation renders `GET /pools.json?search[name_matches]=<name>` whose
