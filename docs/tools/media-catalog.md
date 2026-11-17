@@ -464,8 +464,9 @@ uv run catalog lookup plan catalog-output/catalog.sqlite3 post:42 \
 
 `catalog crosscheck` batch-checks a selected corpus across the live providers using the
 same candidate-lookup machinery, with durable per-item state (`crosscheck_batches` /
-`crosscheck_items`), serialized writes (one connection, sequential lookups — no
-cross-provider write contention), and budgets that stop at item boundaries:
+`crosscheck_items`), per-provider lanes (each lane sequential and paced on its own WAL
+connection — provider lookups overlap, writes serialize, items never collide), and budgets
+that stop at item boundaries:
 
 ```bash
 uv run catalog crosscheck catalog-output/catalog.sqlite3 --corpus hash-material \

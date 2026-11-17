@@ -298,10 +298,20 @@ def run_crosscheck(
     limits: LookupLimits | None = None,
 ) -> dict[str, Any]:
     """One batch pass; returns the durable summary.  Resumable by re-invoking
-    with the same arguments (completed items are never re-executed)."""
+    with the same arguments (completed items are never re-executed).
+
+    Providers run concurrently in per-provider lanes: each lane is a
+    sequential subject loop on its own WAL connection with its own adapter,
+    so per-provider pacing holds and provider-disjoint items never collide;
+    catalog writes serialize through WAL under the connection busy timeout.
+    Budgets and stops are coordinator-owned and checked at item boundaries."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Lock
+
     import httpx
 
     from media_catalog.adapter_factory import adapter_construction
+    from media_catalog.database import CatalogDatabase
 
     if recheck not in RECHECK_MODES:
         raise ValueError(f"unknown recheck mode {recheck!r}")
@@ -319,38 +329,47 @@ def run_crosscheck(
 
     subjects = select_corpus(connection, corpus)
     deadline = budget.deadline()
-    requests_used = 0
-    stop_reason: str | None = None
-    counts: dict[str, int] = dict.fromkeys((*TERMINAL_STATES, "pending", "reused"), 0)
-    material_note = {"metadata-only": 0}
+    max_requests = budget.max_requests or float("inf")
+    shared: dict[str, Any] = {"requests_used": 0, "in_flight": 0, "stop_reason": None}
+    shared_lock = Lock()
+    # metadata-only counting is coordinator-owned: a prepass over post
+    # subjects counts each subject once regardless of lane count
+    material_note = {
+        "metadata-only": sum(
+            1
+            for kind, seed_id in subjects
+            if kind == "post"
+            and not any(items for items in _post_materials(connection, seed_id)[1].values())
+        )
+    }
 
-    adapters: dict[str, tuple[Any, Any, float]] = {}
-    try:
-        for seed_kind, seed_id in subjects:
-            if stop_reason:
-                counts["pending"] += 1
-                continue
-            if seed_kind == "post":
-                _, materials, revision = _post_materials(connection, seed_id)
-                if not any(items for items in materials.values()):
-                    material_note["metadata-only"] += 1
-            else:
-                _, materials, revision = _file_materials(connection, seed_id)
-            for provider in providers:
-                if stop_reason:
-                    break
-                entry = adapters.get(provider)
-                if entry is None:
-                    factory, interval = adapter_construction(provider)
-                    client = httpx.Client()
-                    adapters[provider] = (factory(client), client, interval)
-                    entry = adapters[provider]
-                adapter, _client, interval = entry
-                service = CandidateLookupService(
-                    database, adapter, minimum_interval_seconds=interval
-                )
-                declared = adapter.instance.lookup_plan_context.lookup_capabilities
+    def lane(provider: str) -> dict[str, int]:
+        """One provider's sequential subject loop on its own connection.
+        A lane-level failure trips the shared stop flag so sibling lanes
+        stop issuing requests, then re-raises to the coordinator."""
+        lane_counts: dict[str, int] = dict.fromkeys((*TERMINAL_STATES, "pending", "reused"), 0)
+        lane_database = CatalogDatabase(database.path)
+        lane_connection = lane_database.connection
+        lane_connection.row_factory = sqlite3.Row
+        lane_store = CrosscheckStore(lane_connection)
+        client = httpx.Client()
+        try:
+            factory, interval = adapter_construction(provider)
+            adapter = factory(client)
+            service = CandidateLookupService(
+                lane_database, adapter, minimum_interval_seconds=interval
+            )
+            declared = adapter.instance.lookup_plan_context.lookup_capabilities
+            for seed_kind, seed_id in subjects:
+                if shared["stop_reason"]:
+                    continue
+                if seed_kind == "post":
+                    _, materials, revision = _post_materials(lane_connection, seed_id)
+                else:
+                    _, materials, revision = _file_materials(lane_connection, seed_id)
                 for strategy in LookupStrategy:
+                    if shared["stop_reason"]:
+                        break
                     if not declared.supports(strategy):
                         continue
                     material_list = materials.get(strategy) or []
@@ -359,12 +378,12 @@ def run_crosscheck(
                     if (recheck == "unsearched" and previous in TERMINAL_STATES) or (
                         recheck == "stale" and previous in ("checked", "matched", "skipped")
                     ):
-                        counts["reused"] += 1
+                        lane_counts["reused"] += 1
                         continue
                     if not material_list:
                         if strategy.value.startswith("artist_"):
                             continue  # artist strategies always need a search term
-                        store.record(
+                        lane_store.record(
                             batch_id,
                             seed_kind=seed_kind,
                             seed_id=seed_id,
@@ -373,11 +392,11 @@ def run_crosscheck(
                             state="skipped",
                             reason="no-query-material",
                         )
-                        counts["skipped"] += 1
+                        lane_counts["skipped"] += 1
                         continue
                     for material in material_list:
                         reusable = _reusable_run(
-                            connection,
+                            lane_connection,
                             seed_kind=seed_kind,
                             seed_id=seed_id,
                             provider=provider,
@@ -389,7 +408,7 @@ def run_crosscheck(
                             stale_seconds=stale,
                         )
                         if reusable is not None and recheck != "force":
-                            store.record(
+                            lane_store.record(
                                 batch_id,
                                 seed_kind=seed_kind,
                                 seed_id=seed_id,
@@ -399,11 +418,29 @@ def run_crosscheck(
                                 reason="fresh-run-reused",
                                 run_id=int(reusable["candidate_lookup_run_id"]),
                             )
-                            counts["skipped"] += 1
+                            lane_counts["skipped"] += 1
                             continue
-                        if requests_used >= (budget.max_requests or float("inf")):
-                            stop_reason = "request budget reached"
-                            store.record(
+                        with shared_lock:
+                            # Reserve one request per in-flight item so N
+                            # lanes cannot each pass an unreserved check;
+                            # the overrun bound returns to the sequential
+                            # one item's pagination beyond the budget.
+                            over_budget = shared["requests_used"] + shared[
+                                "in_flight"
+                            ] >= max_requests or (
+                                deadline is not None and time.monotonic() > deadline
+                            )
+                            if not over_budget:
+                                shared["in_flight"] += 1
+                        if over_budget:
+                            with shared_lock:
+                                if shared["stop_reason"] is None:
+                                    shared["stop_reason"] = (
+                                        "request budget reached"
+                                        if shared["requests_used"] >= max_requests
+                                        else "time budget reached"
+                                    )
+                            lane_store.record(
                                 batch_id,
                                 seed_kind=seed_kind,
                                 seed_id=seed_id,
@@ -411,19 +448,6 @@ def run_crosscheck(
                                 strategy=strategy.value,
                                 state="pending",
                             )
-                            counts["pending"] += 1
-                            break
-                        if deadline is not None and time.monotonic() > deadline:
-                            stop_reason = "time budget reached"
-                            store.record(
-                                batch_id,
-                                seed_kind=seed_kind,
-                                seed_id=seed_id,
-                                provider=provider,
-                                strategy=strategy.value,
-                                state="pending",
-                            )
-                            counts["pending"] += 1
                             break
                         try:
                             plan = service.plan(
@@ -432,7 +456,9 @@ def run_crosscheck(
                             results = service.execute(plan)
                         except Exception as error:  # surfaced as the item reason
                             reason = f"{type(error).__name__}: {error}"[:200]
-                            store.record(
+                            with shared_lock:
+                                shared["in_flight"] -= 1
+                            lane_store.record(
                                 batch_id,
                                 seed_kind=seed_kind,
                                 seed_id=seed_id,
@@ -441,10 +467,12 @@ def run_crosscheck(
                                 state="failed",
                                 reason=reason,
                             )
-                            counts["failed"] += 1
+                            lane_counts["failed"] += 1
                             continue
                         total = sum(result.request_count for result in results)
-                        requests_used += total
+                        with shared_lock:
+                            shared["in_flight"] -= 1
+                            shared["requests_used"] += total
                         run_id = next(
                             (
                                 int(result.candidate_lookup_run_id)
@@ -463,7 +491,7 @@ def run_crosscheck(
                             None,
                         )
                         if retry_after:
-                            store.record(
+                            lane_store.record(
                                 batch_id,
                                 seed_kind=seed_kind,
                                 seed_id=seed_id,
@@ -473,9 +501,9 @@ def run_crosscheck(
                                 reason=f"rate-limited retry_after={retry_after}",
                                 run_id=run_id,
                             )
-                            counts["failed"] += 1
+                            lane_counts["failed"] += 1
                         else:
-                            store.record(
+                            lane_store.record(
                                 batch_id,
                                 seed_kind=seed_kind,
                                 seed_id=seed_id,
@@ -485,10 +513,37 @@ def run_crosscheck(
                                 run_id=run_id,
                                 matched_count=matched,
                             )
-                            counts["matched" if matched else "checked"] += 1
-    finally:
-        for _adapter, client, _interval in adapters.values():
+                            lane_counts["matched" if matched else "checked"] += 1
+            return lane_counts
+        except BaseException:
+            with shared_lock:
+                if shared["stop_reason"] is None:
+                    shared["stop_reason"] = "lane failure"
+            raise
+        finally:
             client.close()
+            lane_database.close()
+
+    counts: dict[str, int] = dict.fromkeys((*TERMINAL_STATES, "pending", "reused"), 0)
+    lane_error: list[BaseException] = []
+    with ThreadPoolExecutor(max_workers=len(providers)) as executor:
+        futures = [executor.submit(lane, provider) for provider in providers]
+        for future in futures:
+            try:
+                for key, value in future.result().items():
+                    counts[key] += value
+            except BaseException as error:
+                with shared_lock:
+                    if shared["stop_reason"] is None:
+                        shared["stop_reason"] = "lane failure"
+                lane_error.append(error)
+    if lane_error:
+        raise lane_error[0]
+    stop_reason = shared["stop_reason"]
+    summary = store.summary(batch_id)
+    # pending is the durable row count, not a per-lane tally: subjects a
+    # stopped lane never reached simply have no rows and resume on re-run
+    counts["pending"] = int(summary["states"].get("pending", 0))
     if stop_reason:
         store.stop_batch(batch_id, stop_reason)
     return {
@@ -498,9 +553,9 @@ def run_crosscheck(
         "providers": list(providers),
         "recheck": recheck,
         "subjects": len(subjects),
-        "requests_used": requests_used,
+        "requests_used": shared["requests_used"],
         "stopped_reason": stop_reason,
         "counts": counts,
         "material_note": material_note,
-        "summary": store.summary(batch_id),
+        "summary": summary,
     }

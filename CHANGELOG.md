@@ -16,6 +16,16 @@ Rules:
 ## [2026-11-15]
 
 ### Added
+- **Provider-parallel crosscheck lanes (Bead `data-processing-jq1`, change
+  `add-crosscheck-provider-lanes`)** — `run_crosscheck` now runs each provider in its own
+  lane: a sequential subject loop on its own WAL connection with its own adapter, so the
+  per-provider pacing floors hold trivially, HTTP round-trips overlap across providers
+  (~3× wall-clock on a 3-provider sweep; the sweep was latency-bound, not rate-bound), and
+  provider-disjoint items never collide. Budgets reserve one request per in-flight item
+  (the sequential overrun bound holds), lane failures trip the shared stop flag so sibling
+  lanes stop issuing requests, and batch keys and resume semantics are unchanged; `pending`
+  now reports the durable row count. Spec updated: lanes replace the single-connection
+  sequential clause, with the WAL-serialization rationale documented. No schema change.
 
 - **As-of revision playback index (Bead `data-processing-i94`, change
   `add-observation-revision-asof-index`)** — migration `0039` adds the playback index
