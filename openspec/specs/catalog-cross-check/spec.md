@@ -14,9 +14,12 @@ remains the sole source of facts.
 `catalog crosscheck` SHALL select an explicit corpus (`hash-material` default,
 `downloaded`, `file-seeds`, `all`), cross-check each subject across the
 configured supported providers using the existing candidate-lookup machinery,
-and execute provider lookups sequentially against one writable connection, so
-concurrent catalog writers cannot deadlock. Metadata-only bookmark subjects
-SHALL be labeled as such wherever they appear.
+and execute provider lookups in per-provider lanes: each lane runs its
+provider's subjects sequentially under that provider's pacing, lanes are
+provider-disjoint, and catalog writes serialize through WAL with the
+connection busy timeout, so lanes cannot deadlock and never write the same
+item. Metadata-only bookmark subjects SHALL be labeled as such wherever they
+appear.
 
 #### Scenario: hash-material corpus over providers with resume
 
@@ -24,6 +27,14 @@ SHALL be labeled as such wherever they appear.
   stops at an item boundary
 - **THEN** in-flight runs are finalized or checkpoint-paused, completed items are
   never re-executed by the next invocation, and pending items resume
+
+#### Scenario: lanes overlap network waits without touching each other's items
+
+- **WHEN** the batch runs with multiple providers
+- **THEN** each provider's lane processes the same subject order sequentially
+  and per-provider pacing holds, while items from different providers may be
+  in flight simultaneously; every outcome is recorded exactly once under its
+  lane's provider
 
 #### Scenario: file-seeds corpus cross-checks bare-file discovery seeds
 
