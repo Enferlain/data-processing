@@ -13,6 +13,16 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise and mention all changes without necessarily detailing each one
 
+## [2026-11-20]
+
+### Changed
+
+- **Extracted the e621 shape validators into `adapters/e621/shapes.py` (Bead
+  `data-processing-zw3`, change `extract-e621-shape-validators`)** — the fourteen
+  module-level wire-shape validators and query-render helpers that trailed the
+  `E621Adapter` class moved verbatim to their own sibling module, following the gelbooru
+  package's multi-file convention. Pure move, no behavior change.
+
 ## [2026-11-19]
 
 ### Added
