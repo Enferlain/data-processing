@@ -15,6 +15,15 @@ Rules:
 
 ## [2026-11-20]
 
+### Fixed
+
+- **Pool discovery no longer aborts on one bad name (change
+  `contain-pool-discovery-failures`)** — a live overnight pass died on an
+  uncontained `httpx.ReadTimeout`; `discover_pools` now records a per-name
+  `failed` outcome (mirroring the artist sweep's containment contract), charges
+  the request, and continues, so a single transport hiccup costs one name instead
+  of the whole pass. Failed names retry naturally on the next discovery pass.
+
 ### Changed
 
 - **Extracted the e621 shape validators into `adapters/e621/shapes.py` (Bead

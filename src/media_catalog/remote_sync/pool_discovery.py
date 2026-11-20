@@ -266,7 +266,20 @@ def discover_pools(
                 break
             if requests_used and minimum_interval_seconds > 0:
                 time.sleep(minimum_interval_seconds)
-            result = search_pools(database, adapter, name, clock=clock)
+            try:
+                result = search_pools(database, adapter, name, clock=clock)
+            except Exception as error:
+                results.append(
+                    {
+                        "name": name,
+                        "artist_held_posts": held,
+                        "pools_found": 0,
+                        "outcome": "failed",
+                        "error": f"{type(error).__name__}: {error}"[:200],
+                    }
+                )
+                requests_used += 1
+                continue
             result["artist_held_posts"] = held
             results.append(result)
             requests_used += 1

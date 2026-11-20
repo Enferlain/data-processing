@@ -213,3 +213,57 @@ def test_discover_skips_searched_names_and_respects_budget(catalog: Path) -> Non
     assert result["names_skipped_already_searched"] == 1
     assert result["requests_used"] == 1
     assert ranked_names == [("rare", 3), ("some_artist", 3)]
+
+
+def test_discover_contains_per_name_failures(catalog: Path) -> None:
+    import httpx
+
+    class _FlakyAdapter(_FakeAdapter):
+        def fetch(self, request: AdapterRequest) -> ResponseEnvelope:
+            if request.target == "rare":
+                raise httpx.ReadTimeout("simulated transport failure")
+            return super().fetch(request)
+
+    class _Factory:
+        def __call__(self, client: object) -> _FlakyAdapter:
+            return _FlakyAdapter()
+
+    class _NullClient:
+        def __enter__(self) -> _NullClient:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    with CatalogDatabase(catalog) as database:
+        result = discover_pools(
+            database,
+            _Factory(),
+            "danbooru",
+            clock=_clock(),
+            names_limit=10,
+            request_budget=10,
+            client_factory=_NullClient,
+        )
+        # a failed run leaves no complete search, so a second pass re-attempts
+        # the failed name instead of skipping it
+        second = discover_pools(
+            database,
+            _Factory(),
+            "danbooru",
+            clock=_clock(),
+            names_limit=10,
+            request_budget=10,
+            client_factory=_NullClient,
+        )
+    # the transport failure is recorded per name, not fatal to the pass
+    outcomes = {entry["name"]: entry.get("outcome") for entry in result["results"]}
+    assert outcomes == {"rare": "failed", "some_artist": "success"}
+    failed = result["results"][0]
+    assert failed["error"].startswith("ReadTimeout: simulated transport failure")
+    assert failed["pools_found"] == 0
+    assert result["names_searched"] == 2
+    assert result["requests_used"] == 2
+    assert result["pools_recorded"] >= 1
+    assert second["names_skipped_already_searched"] == 1
+    assert second["names_searched"] == 1
