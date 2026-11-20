@@ -26,6 +26,7 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.output import public_path
 from media_catalog.remote_queries import get_remote_run, list_remote_runs
 from media_catalog.remote_sync import MetadataSyncService, SyncLimits
+from media_catalog.remote_sync.artist_sweep import DEFAULT_PAGES_PER_ARTIST
 from media_catalog.remote_sync.enrichment import fetch_commentary, fetch_notes
 from media_catalog.remote_sync.pools import fetch_pool
 
@@ -125,6 +126,24 @@ def register(commands: argparse._SubParsersAction) -> None:
     pool_search.add_argument("--discover-requests", type=int, default=50)
     add_sync_limits(pool_search, listing=False)
 
+    artist_sweep = metadata_commands.add_parser(
+        "sankaku-sweep",
+        description=(
+            "Bulk-list sankaku posts for the catalog's top artist names"
+            " (bounded keyset listing per name, prior-run skipping, request"
+            " budget), then report the md5 overlap against every other"
+            " platform — the compare half of the sankaku expansion plan."
+        ),
+    )
+    artist_sweep.add_argument("catalog", type=Path)
+    artist_sweep.add_argument("--discover-names", type=int, default=50)
+    artist_sweep.add_argument("--discover-requests", type=int, default=50)
+    artist_sweep.add_argument("--pages-per-artist", type=int, default=DEFAULT_PAGES_PER_ARTIST)
+    artist_sweep.add_argument(
+        "--no-interval", action="store_true", help=argparse.SUPPRESS
+    )  # tests only
+    add_json(artist_sweep)
+
 
 def _factory_sync(
     arguments: argparse.Namespace,
@@ -159,6 +178,25 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
         if result is None:
             raise ValueError("remote run not found")
         return {"catalog": catalog_label, **result}
+    if arguments.metadata_command == "sankaku-sweep":
+        from media_catalog.remote_sync.artist_sweep import (
+            sweep_artists,
+        )
+
+        factory, interval = adapter_construction("sankaku")
+        with CatalogDatabase(arguments.catalog) as database:
+            return {
+                "catalog": catalog_label,
+                **sweep_artists(
+                    database,
+                    factory,
+                    "sankaku",
+                    names_limit=int(arguments.discover_names),
+                    request_budget=int(arguments.discover_requests),
+                    pages_per_artist=int(arguments.pages_per_artist),
+                    minimum_interval_seconds=(0.0 if arguments.no_interval else interval),
+                ),
+            }
     limits = SyncLimits(
         arguments.max_requests,
         arguments.max_pages,

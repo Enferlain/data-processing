@@ -494,6 +494,21 @@ observations land artist/character/copyright/general/meta categories instead of 
 listings stay flat. Gelbooru post `parent_id` and `title` normalize like the Danbooru family
 (directional `parent_of` relation, post title).
 
+### Sankaku artist sweep
+
+```bash
+uv run catalog metadata sankaku-sweep catalog-output/catalog.sqlite3 \
+  --discover-names 50 --discover-requests 50 --pages-per-artist 2 --json
+```
+
+Bulk phase of the sankaku expansion plan: the catalog's top artist names (across
+danbooru, e621, and sankaku itself, ranked by held posts) each get a bounded
+keyset listing — already-complete names are skipped, failures are contained per
+name, requests are paced at the platform floor. Every sweep ends with the md5
+overlap report: how many sankaku posts carry an md5 known on another platform
+versus md5s new to the catalog (the harvest candidates for later phases).
+Single-artist listing remains `sankaku-list`.
+
 ## Materialize a seed for a non-recorded item
 
 Items that were never synced still need a lookup entry point. `catalog seed create` ingests the

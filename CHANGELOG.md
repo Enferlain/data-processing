@@ -13,9 +13,23 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise and mention all changes without necessarily detailing each one
 
+## [2026-11-19]
+
+### Added
+
+- **`catalog metadata sankaku-sweep`: artist sweep + md5 overlap report (Bead
+  `data-processing-hvs` phase 2, change `add-sankaku-artist-sweep`)** — bounded bulk
+  keyset listing of the catalog's top artist names through the existing sankaku adapter
+  (cross-platform name ranking with a 3-post floor, prior-run skipping, per-name failure
+  containment, strict request budgeting — a name runs only when the budget funds all its
+  pages — and platform-floor pacing), concluding with the compare half of the expansion
+  plan: sankaku posts whose declared md5 is known elsewhere versus md5s new to the
+  catalog. No schema change; similarity and media phases stay open.
+
 ## [2026-11-15]
 
 ### Added
+
 - **Provider-parallel crosscheck lanes (Bead `data-processing-jq1`, change
   `add-crosscheck-provider-lanes`)** — `run_crosscheck` now runs each provider in its own
   lane: a sequential subject loop on its own WAL connection with its own adapter, so the
@@ -67,7 +81,6 @@ Rules:
   review caught the duplication and it was dropped in favor of consuming the existing
   table.
 
-
 - **`catalog tag`: operator labels — free-form local facts on subjects (Bead
   `data-processing-j7l`, change `add-operator-labels`)** — create/retire labels at will and
   apply/revoke them on any subject (file seed / post / asset / work). Assertions are
@@ -80,7 +93,6 @@ Rules:
 ## [2026-11-14]
 
 ### Added
-
 
 - **`catalog crosscheck --corpus file-seeds` (Bead `data-processing-0ui`, change
   `add-crosscheck-file-seeds-corpus`)** — bare-file discovery seeds (e.g. the 24k
@@ -220,7 +232,6 @@ Rules:
   producing false artist leads against junk export entries (`https://x.com/i`); the
   canonical path form is now excluded. Regression tests pin all three.
 
-
 ## [2026-11-10]
 
 ### Added
@@ -262,7 +273,6 @@ Rules:
   (the real export has no `tag_string_artist`; artist tags are not separable in this
   artifact) are reported in the import result instead of silently degrading — artist rows
   come from teach material until the artist exports land in a later slice.
-
 
 ## [2026-11-08]
 
@@ -310,6 +320,7 @@ Rules:
   (index/optimization targets) and stage 3 (more providers) extend the same vocabulary.
 
 ### Fixed
+
 - **Danbooru-family media policy sends the identifying User-Agent** — danbooru's CDN
   enforces the site bot policy: browser and library-default agents get 403, and only a
   descriptive custom agent with the site Referer is served (live matrix 2026-11-08:
