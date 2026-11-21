@@ -124,6 +124,7 @@ class LabelingState:
             a,
             b,
             pos=self.cursor + 1,
+            pair_index=self.cursor,
             total=len(self.queue),
             revisit_unsure=self.revisit_unsure,
             skipped_count=getattr(self.queue, "skipped_count", 0),

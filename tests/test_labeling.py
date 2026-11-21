@@ -179,6 +179,73 @@ def test_queue_interleaves_families_round_robin(catalog: Path) -> None:
     ]
 
 
+def test_page_submit_fields_round_trip_through_label_endpoint(
+    catalog: Path,
+) -> None:
+    """The page's own submit fields must save at /label (bead
+    data-processing-v0y): a rendered page once carried pair_index =
+    cursor + 1 while showing queue[cursor], so every real click 400ed as
+    stale while hand-built POSTs in the HTTP suite stayed green."""
+    import http.client
+    import re
+
+    from media_catalog.labeling.server import create_server
+
+    a, b = _seed_pair(catalog, md5_a="5" * 32, md5_b="6" * 32, tag="round_trip")
+    import threading
+
+    server_holder: list[object] = []
+    ready = threading.Event()
+
+    def run_worker() -> None:
+        server, db, _state = create_server(catalog, catalog.parent, port=0)
+        server_holder.extend((server, db))
+        ready.set()
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+            db.close()
+
+    worker = threading.Thread(target=run_worker, daemon=True)
+    worker.start()
+    ready.wait()
+    server = server_holder[0]
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+        conn.request("GET", "/")
+        body = conn.getresponse().read().decode()
+        pair_index = int(re.search(r"pair: (\d+),", body).group(1))
+        post_a = int(re.search(r"post_a_id: (\d+),", body).group(1))
+        post_b = int(re.search(r"post_b_id: (\d+),", body).group(1))
+        signal = json.loads(re.search(r'queue_signal: (".*?"),', body).group(1))
+        assert (post_a, post_b) == (min(a, b), max(a, b))
+        conn.request(
+            "POST",
+            "/label",
+            body=json.dumps(
+                {
+                    "pair": pair_index,
+                    "post_a_id": post_a,
+                    "post_b_id": post_b,
+                    "queue_signal": signal,
+                    "verdict": "different",
+                }
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+        resp = conn.getresponse()
+        assert resp.status == 200, resp.read().decode()
+        with CatalogDatabase(catalog) as check:
+            row = check.connection.execute(
+                "SELECT verdict FROM pair_labels WHERE post_a_id = ? AND post_b_id = ?",
+                (post_a, post_b),
+            ).fetchone()
+        assert row is not None and row[0] == "different"
+    finally:
+        server.shutdown()
+
+
 def test_identical_md5_pairs_autoconfirm_instead_of_queueing(catalog: Path) -> None:
     """59/59 operator calibration: identical md5 pairs are byte-identical
     assets — confirmed automatically, never queued for review."""

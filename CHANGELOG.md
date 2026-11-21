@@ -62,6 +62,16 @@ Rules:
   that specific 400, flashes an explanation, and reloads to the current
   queue. The server-side guard is unchanged; no label ever misapplies.
 
+- **Label UI saves again after the render-extraction off-by-one (bead
+  `data-processing-v0y`)** — the `render.py` extraction mapped both
+  `self.cursor + 1` (display position) and `self.cursor` (submit
+  `pair_index`) onto one `pos` parameter, so every rendered page sent an
+  index one past the pair it showed: each verdict 400ed as a stale mismatch,
+  nothing saved, and the same pair re-rendered forever. `render_pair_page`
+  now takes `pos` and `pair_index` separately, and a new round-trip test
+  parses the page's own submit fields and posts them — the coverage gap that
+  let hand-built HTTP bodies stay green while the real UI was broken.
+
 - **Labeling queue no longer double-adds every candidate pair (bead
   `data-processing-763`)** — `build_queue`'s shared `add()` helper appended
   each `PairCandidate` twice (a paste error in commit `342f4b4`), so a
