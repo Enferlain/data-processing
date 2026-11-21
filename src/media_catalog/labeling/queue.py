@@ -203,7 +203,6 @@ def build_queue(
                     skipped_unusable_count += 1
                     continue
                 candidates_list.append(PairCandidate(a, b, signal, detail))
-                candidates_list.append(PairCandidate(a, b, signal, detail))
 
     # A1: identical declared md5 across platforms — auto-confirmed before
     # the queue is built (autoconfirm_identical_md5_pairs), so this family

@@ -44,6 +44,12 @@ Rules:
 
 ### Fixed
 
+- **Labeling queue no longer double-adds every candidate pair (bead
+  `data-processing-763`)** — `build_queue`'s shared `add()` helper appended
+  each `PairCandidate` twice (a paste error in commit `342f4b4`), so a
+  50-pair session offered only ~25 distinct pairs and the position counter
+  counted skipped duplicates. Identified from an operator report of the
+  queue feeling odd; every family was affected since 2026-11-12.
 - **`openspec/specs/labeling/spec.md` validates again (bead
   `data-processing-fr5`)** — the main spec was a raw delta-format file
   (`## ADDED requirements`, no Purpose), a leftover from a past sync that
