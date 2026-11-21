@@ -28,6 +28,16 @@ Rules:
   `CatalogDatabase`/`serve` globals, request-time `httpx.Client()` lookup) are
   documented in the change's design.md.
 
+- **Labeling queue interleaves signal families round-robin (bead
+  `data-processing-xm9`, change `interleave-labeling-queue-families`)** —
+  `build_queue` now assembles the session queue one pair per signal family
+  per rotation instead of presenting whole family blocks, so a dominant
+  family (e.g. `pool_member`: 7,762 unlabeled pairs, 87% from three large
+  pools) can no longer monopolize a session's queue head. Eligibility,
+  first-family attribution, pair details, and the revisit-unsure path are
+  unchanged. Follow-up to the operator labeling report that also surfaced
+  the double-add bug above.
+
 ### Added
 
 - **Sankaku md5 lookup lane in `catalog crosscheck` (bead `data-processing-hvs`

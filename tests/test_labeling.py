@@ -90,6 +90,95 @@ def test_same_artist_contrast_pairs_queue(catalog: Path) -> None:
     assert signals.get((a, b)) == "same_artist_contrast"
 
 
+def test_queue_interleaves_families_round_robin(catalog: Path) -> None:
+    """A dominant family cannot monopolize the session queue: assembly
+    round-robins one pair per signal family per rotation (bead
+    data-processing-xm9, operator report 2026-11-21)."""
+    import hashlib
+
+    with CatalogDatabase(catalog) as database, database.transaction():
+        connection = database.connection
+        for key in ("e621", "danbooru"):
+            connection.execute(
+                "INSERT OR IGNORE INTO platforms (platform_key, display_name) VALUES (?, ?)",
+                (key, key),
+            )
+        platform_ids = {
+            key: int(
+                connection.execute(
+                    "SELECT platform_id FROM platforms WHERE platform_key = ?", (key,)
+                ).fetchone()[0]
+            )
+            for key in ("e621", "danbooru")
+        }
+
+        def add_post(platform_key: str, native: str, remote: str) -> int:
+            connection.execute(
+                """INSERT INTO posts (platform_id, native_post_id, availability,
+                                          first_seen_at, last_seen_at)
+                   VALUES (?, ?, 'available', '2026-01-01T00:00:00Z',
+                           '2026-01-01T00:00:00Z')""",
+                (platform_ids[platform_key], native),
+            )
+            post_id = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+            connection.execute(
+                """INSERT INTO media_occurrences
+                       (post_id, source_key, media_index, media_type, role,
+                        remote_url, availability, observed_at)
+                   VALUES (?, 'seed', 0, 'original', 'original', ?, 'available',
+                           '2026-01-01T00:00:00Z')""",
+                (post_id, remote),
+            )
+            return post_id
+
+        # three small-family pairs: one same_artist_contrast pair per artist
+        for index in range(3):
+            connection.execute(
+                """INSERT OR IGNORE INTO tags (platform_id, name, category,
+                                                normalization_version, created_at)
+                   VALUES (?, ?, 'artist', 'seed-v1', '2026-01-01T00:00:00Z')""",
+                (platform_ids["e621"], f"artist_pair_{index}"),
+            )
+            tag_id = int(
+                connection.execute(
+                    "SELECT tag_id FROM tags WHERE name = ?", (f"artist_pair_{index}",)
+                ).fetchone()[0]
+            )
+            for suffix in ("a", "b"):
+                post_id = add_post(
+                    "e621", f"art-{index}-{suffix}", f"https://example.invalid/{index}{suffix}.jpg"
+                )
+                connection.execute(
+                    """INSERT INTO post_tags (post_id, tag_id, first_seen_at, last_seen_at)
+                       VALUES (?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')""",
+                    (post_id, tag_id),
+                )
+        # one dominant family: a 4-post pool yields 6 pool_member pairs
+        for index in range(10, 14):
+            post_id = add_post("danbooru", f"pool-post-{index}", "https://example.invalid/p.jpg")
+            connection.execute(
+                """INSERT INTO post_pool_observations
+                       (post_id, pool_native_id, observed_at, observation_digest)
+                   VALUES (?, '777', '2026-01-01T00:00:00Z', ?)""",
+                (post_id, hashlib.sha256(str(index).encode()).hexdigest()),
+            )
+    with CatalogDatabase(catalog) as database:
+        queue = build_queue(database.connection)
+    sequence = [pair.queue_signal for pair in queue]
+    assert len(queue) == 9
+    assert sequence == ["pool_member", "same_artist_contrast"] * 3 + ["pool_member"] * 3
+    assert "provider declares both posts in the same pool" in queue[0].detail
+    # a small session still surfaces every contributing family immediately
+    with CatalogDatabase(catalog) as database:
+        small = build_queue(database.connection, limit=4)
+    assert [pair.queue_signal for pair in small] == [
+        "pool_member",
+        "same_artist_contrast",
+        "pool_member",
+        "same_artist_contrast",
+    ]
+
+
 def test_identical_md5_pairs_autoconfirm_instead_of_queueing(catalog: Path) -> None:
     """59/59 operator calibration: identical md5 pairs are byte-identical
     assets — confirmed automatically, never queued for review."""

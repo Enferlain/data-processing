@@ -13,6 +13,7 @@ import contextlib
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import groupby, zip_longest
 from pathlib import Path
 
 
@@ -357,9 +358,18 @@ def build_queue(
         )
         candidates_list.append(PairCandidate(a, b, signal, detail))
 
-    # Stable order, capped.
+    # Stable order, capped. Sorted by signal for deterministic grouping,
+    # then interleaved one pair per signal per rotation so a dominant
+    # family cannot monopolize a session's queue head.
     candidates_list.sort(key=lambda c: (c.queue_signal, c.post_a_id, c.post_b_id))
-    return CandidateQueue(candidates_list[:limit], skipped_count=skipped_unusable_count)
+    families = [list(group) for _, group in groupby(candidates_list, key=lambda c: c.queue_signal)]
+    interleaved = [
+        candidate
+        for rotation in zip_longest(*families)
+        for candidate in rotation
+        if candidate is not None
+    ]
+    return CandidateQueue(interleaved[:limit], skipped_count=skipped_unusable_count)
 
 
 def _audit_candidates(
