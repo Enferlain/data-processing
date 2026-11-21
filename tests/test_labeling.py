@@ -952,6 +952,15 @@ def test_production_http_server_media_streaming_and_save_feedback(
         resp = conn.getresponse()
         assert resp.status == 400
         assert b"stale pair mismatch" in resp.read()
+        # the page itself carries the stale-recovery branch: a stale 400
+        # flashes and reloads instead of dead-ending the tab (bead
+        # data-processing-xve)
+        conn.request("GET", "/")
+        page = conn.getresponse()
+        body = page.read()
+        assert page.status == 200
+        assert b'err.startsWith("stale pair mismatch")' in body
+        assert b"location.reload()" in body
 
         # 8. Forced DB failure returns 500 and rolls back
         conn.request(

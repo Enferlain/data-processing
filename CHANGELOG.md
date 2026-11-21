@@ -52,7 +52,15 @@ Rules:
   `tests/fixtures/metadata_adapters/sankaku_lookup.json`; verified end-to-end
   with a bounded live smoke (seeded md5 → pending `same_work` candidate).
 
+
 ### Fixed
+
+- **Label UI recovers from a stale page instead of dead-ending (bead
+  `data-processing-xve`)** — after a queue rebuild (server restart, or the
+  interleave change) an already-open tab kept 400ing every verdict with
+  `stale pair mismatch` and left the operator stuck. The page now detects
+  that specific 400, flashes an explanation, and reloads to the current
+  queue. The server-side guard is unchanged; no label ever misapplies.
 
 - **Labeling queue no longer double-adds every candidate pair (bead
   `data-processing-763`)** — `build_queue`'s shared `add()` helper appended
