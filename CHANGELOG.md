@@ -13,6 +13,21 @@ Rules:
 - Keep proper track of days for where entries should go
 - Be concise and mention all changes without necessarily detailing each one
 
+
+## [2026-11-21]
+
+### Changed
+
+- **Split `labeling/server.py` into cohesive modules (bead `data-processing-cne`,
+  change `split-labeling-server-state`)** — the 1,362-line file now keeps only the
+  HTTP surface (`create_handler`, `create_server`, `serve`); post media resolution
+  moved to `labeling/media.py`, HTML rendering to `labeling/render.py`, and the
+  labeling session (`LabelingState`: queue, cursor, verdict application with
+  decision history) to `labeling/state.py`. Pure move with no behavior change:
+  tests stay green with zero edits, and module-boundary invariants (monkeypatched
+  `CatalogDatabase`/`serve` globals, request-time `httpx.Client()` lookup) are
+  documented in the change's design.md.
+
 ## [2026-11-20]
 
 ### Fixed
