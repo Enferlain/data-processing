@@ -72,6 +72,15 @@ Rules:
   parses the page's own submit fields and posts them — the coverage gap that
   let hand-built HTTP bodies stay green while the real UI was broken.
 
+- **Label page script parses again after the flash-message wrap (bead
+  `data-processing-1kf`)** — the stale-reload flash message was split across
+  two adjacent string literals for the source line limit; JavaScript does not
+  implicitly concatenate them, so the whole page script failed to parse
+  (`submit is not defined`) and every verdict button was inert while skip
+  (an inline onclick) kept working. Joined with an explicit `+`; the
+  round-trip test now also rejects quote-newline-quote adjacency inside the
+  served script, and the served page was parse-checked with `node --check`.
+
 - **Labeling queue no longer double-adds every candidate pair (bead
   `data-processing-763`)** — `build_queue`'s shared `add()` helper appended
   each `PairCandidate` twice (a paste error in commit `342f4b4`), so a

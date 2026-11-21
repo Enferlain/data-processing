@@ -169,7 +169,7 @@ async function submit(v) {{
       setStatus("Error saving label (" + res.status + "): " + err, true);
       if (err.startsWith("stale pair mismatch")) {{
         sessionStorage.setItem('label_saved_flash',
-          "The queue changed (server restart or another tab); "
+          "The queue changed (server restart or another tab); " +
           "this page reloaded to the current queue.");
         setTimeout(() => location.reload(), 800);
         return;

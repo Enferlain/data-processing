@@ -242,6 +242,11 @@ def test_page_submit_fields_round_trip_through_label_endpoint(
                 (post_a, post_b),
             ).fetchone()
         assert row is not None and row[0] == "different"
+        # the page script must stay parseable JS: adjacent string literals
+        # (quote-newline-quote with no operator between) are invalid
+        # JavaScript and once broke every handler at once (bead 1kf)
+        script = body[body.index("<script>") : body.index("</script>")]
+        assert not re.search(r"['\"]\s*\n\s*['\"]", script)
     finally:
         server.shutdown()
 
