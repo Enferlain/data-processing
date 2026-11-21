@@ -14,6 +14,11 @@ from media_catalog.adapters import (
     Continuation,
     ResponseEnvelope,
 )
+from media_catalog.adapters.contracts import (
+    LookupQueryMaterial,
+    LookupRequest,
+    LookupStrategy,
+)
 from media_catalog.adapters.fixtures import load_fixture_suite
 from media_catalog.adapters.sankaku import (
     ADAPTER_VERSION,
@@ -30,6 +35,10 @@ FIXTURES = Path(__file__).parent / "fixtures" / "metadata_adapters"
 SUITE = load_fixture_suite(FIXTURES / "sankaku.json")
 POST_CASE = next(case for case in SUITE.cases if case.name == "post_wvaemE6YDaz")
 LISTING_CASE = next(case for case in SUITE.cases if case.name == "keyset_rating_g_first_page")
+LOOKUP_SUITE = load_fixture_suite(FIXTURES / "sankaku_lookup.json")
+MD5_HIT_CASE = next(case for case in LOOKUP_SUITE.cases if case.name == "md5_lookup_hit")
+MD5_MISS_CASE = next(case for case in LOOKUP_SUITE.cases if case.name == "md5_lookup_miss")
+HIT_MD5 = "7ac3fd7a5f668f44a3df7accb7d6572e"
 NOW = "2026-10-29T00:00:00Z"
 NEXT_CURSOR = json.loads(LISTING_CASE.response.payload)["meta"]["next"]
 
@@ -503,3 +512,210 @@ def test_sankaku_cli_routes_and_persists(tmp_path: Path, monkeypatch: pytest.Mon
     main(["metadata", "sankaku-post", str(catalog), "wvaemE6YDaz", "--json"])
     assert len(constructed) == 1
     assert isinstance(constructed[0][1], SankakuCredentials)
+
+
+# ── Bounded md5 lookup (bead data-processing-hvs phase 1) ─────────────
+
+
+def test_lookup_capabilities_declare_only_md5_strategies() -> None:
+    context = SANKAKU.lookup_plan_context
+    assert (context.provider, context.instance_key) == ("sankaku", "sankaku")
+    assert context.adapter_version == ADAPTER_VERSION
+    assert context.schema_version == API_SCHEMA_VERSION
+    declared = context.lookup_capabilities.declarations
+    assert [item.strategy for item in declared] == [
+        LookupStrategy.DECLARED_MD5,
+        LookupStrategy.VERIFIED_MD5,
+    ]
+    for capability in declared:
+        assert capability.result_kind == "post"
+        assert capability.pagination == "keyset"
+    assert not context.lookup_capabilities.supports(LookupStrategy.SOURCE_POST_URL)
+    assert not context.lookup_capabilities.supports(LookupStrategy.ARTIST_EXACT_NAME)
+
+
+def _lookup_handler(case, requests: list[httpx.Request]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/auth/token":
+            return _token_response()
+        return httpx.Response(
+            200,
+            stream=httpx.ByteStream(case.response.payload),
+            headers={"content-type": "application/json"},
+        )
+
+    return handler
+
+
+def _md5_request(strategy: LookupStrategy = LookupStrategy.DECLARED_MD5) -> LookupRequest:
+    return LookupRequest(strategy, LookupQueryMaterial(strategy, HIT_MD5))
+
+
+def test_fetch_lookup_renders_md5_keyset_query() -> None:
+    requests: list[httpx.Request] = []
+    adapter = _adapter(_lookup_handler(MD5_HIT_CASE, requests))
+    request = _md5_request()
+    envelope = adapter.fetch_lookup(request)
+    query = requests[-1]
+    assert query.url.path == "/v2/posts/keyset"
+    assert query.url.params["tags"] == f"md5:{HIT_MD5}"
+    assert query.url.params["lang"] == "en"
+    assert query.headers["authorization"] == f"Bearer {SENTINEL_TOKEN}"
+    assert envelope.operation is AdapterOperation.FETCH_POST
+    assert envelope.lookup_strategy is LookupStrategy.DECLARED_MD5
+    assert envelope.lookup_query_digest == request.material.digest
+    assert envelope.request_target == f"listing:md5:{HIT_MD5}:start"
+    assert SENTINEL_TOKEN not in envelope.request_identity
+
+
+def test_normalize_lookup_hit_returns_evidenced_post_result() -> None:
+    requests: list[httpx.Request] = []
+    adapter = _adapter(_lookup_handler(MD5_HIT_CASE, requests))
+    request = _md5_request()
+    page = adapter.normalize_lookup(adapter.fetch_lookup(request), request)
+    assert page.record_count == 1
+    assert page.continuation is None
+    result = page.results[0]
+    assert result.result_kind == "post"
+    assert result.native_id == "wvaemE6YDaz"
+    assert result.data["platform"] == "sankaku"
+    assert result.data["declared_md5"] == HIT_MD5
+    assert result.data["query_kind"] == "declared_md5"
+    assert result.data["query"] == HIT_MD5
+    assert result.data["canonical_url"] == "https://sankaku.app/posts/wvaemE6YDaz"
+    kinds = {item.object_kind for item in result.items}
+    assert {"post", "media_occurrence"} <= kinds
+
+
+def test_normalize_lookup_miss_completes_with_zero_results() -> None:
+    requests: list[httpx.Request] = []
+    adapter = _adapter(_lookup_handler(MD5_MISS_CASE, requests))
+    request = _md5_request(LookupStrategy.VERIFIED_MD5)
+    page = adapter.normalize_lookup(adapter.fetch_lookup(request), request)
+    assert page.results == ()
+    assert page.record_count == 0
+    assert page.continuation is None
+
+
+def test_normalize_lookup_wraps_provider_next_cursor() -> None:
+    body = json.loads(MD5_HIT_CASE.response.payload)
+    body["meta"]["next"] = "cursor-token-1"
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/auth/token":
+            return _token_response()
+        return httpx.Response(
+            200,
+            stream=httpx.ByteStream(json.dumps(body).encode()),
+            headers={"content-type": "application/json"},
+        )
+
+    adapter = _adapter(handler)
+    request = _md5_request()
+    page = adapter.normalize_lookup(adapter.fetch_lookup(request), request)
+    assert page.continuation is not None
+    assert page.continuation.adapter == "sankaku"
+    assert page.continuation.strategy is LookupStrategy.DECLARED_MD5
+    assert page.continuation.query_digest == request.material.digest
+    assert page.continuation.page == "cursor-token-1"
+    resumed = adapter.fetch_lookup(
+        LookupRequest(
+            LookupStrategy.DECLARED_MD5,
+            request.material,
+            continuation=page.continuation,
+        )
+    )
+    assert requests[-1].url.params["next"] == "cursor-token-1"
+    assert resumed.request_target == f"listing:md5:{HIT_MD5}:cursor-token-1"
+
+
+def test_fetch_lookup_refuses_unsupported_strategy_before_request() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("unsupported strategy must not reach the provider")
+
+    adapter = _adapter(handler)
+    with pytest.raises(ValueError, match="does not support lookup strategy"):
+        adapter.fetch_lookup(
+            LookupRequest(
+                LookupStrategy.ARTIST_EXACT_NAME,
+                LookupQueryMaterial(LookupStrategy.ARTIST_EXACT_NAME, "artist-name"),
+            )
+        )
+
+
+def test_fetch_lookup_without_credentials_fails_typed_before_network() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("absent credentials must not reach the provider")
+
+    adapter = SankakuAdapter(
+        client=httpx.Client(transport=httpx.MockTransport(handler)), credentials=None
+    )
+    with pytest.raises(AdapterFailure) as exc_info:
+        adapter.fetch_lookup(_md5_request())
+    assert exc_info.value.outcome == AdapterOutcome.AUTHENTICATION_REQUIRED
+    assert "configure both" in str(exc_info.value)
+
+
+def test_optional_credentials_resolution_semantics() -> None:
+    assert SankakuCredentials.optional_from_environment(SANKAKU, {}) is None
+    with pytest.raises(ValueError, match="configure both"):
+        SankakuCredentials.optional_from_environment(SANKAKU, {SANKAKU.login_env: "user"})
+    resolved = SankakuCredentials.optional_from_environment(
+        SANKAKU, {SANKAKU.login_env: "user", SANKAKU.password_env: "secret"}
+    )
+    assert resolved is not None
+
+
+def test_normalize_lookup_rejects_non_keyset_shapes() -> None:
+    for payload in (b"[]", b'{"no_data": true}', b'{"data": [], "meta": []}'):
+        envelope = ResponseEnvelope(
+            provider="sankaku",
+            instance="sankaku",
+            operation=AdapterOperation.FETCH_POST,
+            request_identity="sankaku:api_v2:listing:md5:x:start",
+            status_code=200,
+            headers={"content-type": "application/json"},
+            payload=payload,
+            observed_at=NOW,
+            adapter_version=ADAPTER_VERSION,
+            schema_version=API_SCHEMA_VERSION,
+        )
+        adapter = _adapter(lambda _request: httpx.Response(200))
+        with pytest.raises(AdapterFailure) as exc_info:
+            adapter.normalize_lookup(envelope)
+        assert exc_info.value.outcome == AdapterOutcome.MALFORMED_RESPONSE
+
+
+def test_crosscheck_lane_construction_supports_sankaku(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(SANKAKU.login_env, raising=False)
+    monkeypatch.delenv(SANKAKU.password_env, raising=False)
+    from media_catalog.adapter_factory import adapter_construction
+    from media_catalog.crosscheck import PROVIDERS
+
+    assert "sankaku" in PROVIDERS
+    build, interval = adapter_construction("sankaku")
+    assert interval == SANKAKU.minimum_interval_seconds
+    adapter = build(httpx.Client())
+    try:
+        assert adapter.instance.lookup_plan_context.lookup_capabilities.supports(
+            LookupStrategy.VERIFIED_MD5
+        )
+    finally:
+        adapter._client.close()
+
+
+def test_captured_md5_lookup_fixture_provenance() -> None:
+    for case in (MD5_HIT_CASE, MD5_MISS_CASE):
+        assert case.response.status_code == 200
+        body = json.loads(case.response.payload)
+        assert isinstance(body.get("data"), list) and isinstance(body.get("meta"), dict)
+    text = (
+        Path(__file__).parent / "fixtures" / "metadata_adapters" / "sankaku_lookup.json"
+    ).read_text()
+    assert "2026-11-21" in text
+    assert SENTINEL_TOKEN not in text and SENTINEL_LOGIN not in text

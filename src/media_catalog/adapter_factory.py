@@ -79,7 +79,7 @@ def adapter_construction(platform: str) -> tuple[Callable[[httpx.Client], Any], 
 
         def build_sankaku(client: httpx.Client) -> SankakuAdapter:
             return SankakuAdapter(
-                client=client, credentials=SankakuCredentials.from_environment(SANKAKU)
+                client=client, credentials=SankakuCredentials.optional_from_environment(SANKAKU)
             )
 
         return build_sankaku, SANKAKU.minimum_interval_seconds

@@ -19,13 +19,18 @@ from typing import Any
 
 import httpx
 
-from media_catalog.adapters import (
+from media_catalog.adapters.contracts import (
     AdapterFailure,
     AdapterOperation,
     AdapterOutcome,
     AdapterRequest,
     Continuation,
+    LookupCapabilities,
+    LookupContinuation,
+    LookupRequest,
     NormalizedItem,
+    NormalizedLookupPage,
+    NormalizedLookupResult,
     NormalizedPage,
     ResponseEnvelope,
 )
@@ -75,7 +80,7 @@ class SankakuAdapter:
         instance: SankakuInstance = SANKAKU,
         *,
         client: httpx.Client,
-        credentials: SankakuCredentials,
+        credentials: SankakuCredentials | None,
         clock: Callable[[], str] = _utc_now,
     ) -> None:
         self.instance = instance
@@ -101,6 +106,11 @@ class SankakuAdapter:
 
     def _exchange_token(self) -> str:
         """Exchange the external credentials for a process-ephemeral token."""
+        if self._credentials is None:
+            raise AdapterFailure(
+                AdapterOutcome.AUTHENTICATION_REQUIRED,
+                f"configure both {self.instance.login_env} and {self.instance.password_env}",
+            )
         secrets = self._credentials.secret_values()
         try:
             response = self._client.post(
@@ -156,7 +166,13 @@ class SankakuAdapter:
                     },
                 )
             except httpx.HTTPError as error:
-                secrets = (*self._credentials.secret_values(), self._token)
+                secrets = (
+                    (*self._credentials.secret_values(), self._token)
+                    if self._credentials is not None
+                    else (self._token,)
+                    if self._token
+                    else ()
+                )
                 raise AdapterFailure(
                     AdapterOutcome.TRANSIENT_PROVIDER,
                     f"Sankaku transport error: {_scrub(str(error), secrets)}",
@@ -356,6 +372,153 @@ class SankakuAdapter:
             AdapterOutcome.MALFORMED_RESPONSE,
             f"unsupported Sankaku operation: {response.operation.value}",
         )
+
+    # ── Bounded reverse lookup (md5) ────────────────────────────────────
+
+    @property
+    def lookup_capabilities(self) -> LookupCapabilities:
+        return self.instance.lookup_capabilities
+
+    def fetch_lookup(self, request: LookupRequest) -> ResponseEnvelope:
+        """Fetch one bounded md5 lookup page on the authorized keyset path."""
+
+        if not self.lookup_capabilities.supports(request.strategy):
+            raise ValueError(
+                f"{self.instance_key} does not support lookup strategy {request.strategy.value}"
+            )
+        material = request.material
+        cursor = request.continuation
+        if cursor is not None and (
+            cursor.adapter != self.provider_key
+            or cursor.strategy is not request.strategy
+            or cursor.query_digest != material.digest
+        ):
+            raise ValueError("incompatible Sankaku lookup continuation")
+        query = f"md5:{material.values[0]}"
+        listing_continuation = None
+        if cursor is not None and cursor.page is not None:
+            listing_continuation = Continuation(
+                self.instance_key,
+                CONTINUATION_VERSION,
+                {"query": query, "next": cursor.page},
+            )
+        endpoint, params, identity, request_target = self._listing_request(
+            query, listing_continuation
+        )
+        response = self._authorized_get(endpoint, params)
+        if len(response.content) > self.instance.max_response_bytes:
+            raise AdapterFailure(
+                AdapterOutcome.RESPONSE_TOO_LARGE,
+                "Sankaku response exceeded the transport byte limit",
+                status_code=response.status_code,
+            )
+        return ResponseEnvelope(
+            provider=self.provider_key,
+            instance=self.instance_key,
+            operation=request.operation,
+            request_identity=identity,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            payload=response.content or b"{}",
+            observed_at=self._clock(),
+            adapter_version=self.adapter_version,
+            schema_version=self.schema_version,
+            transport_key=self.transport_key,
+            transport_version=self.transport_version,
+            request_target=request_target,
+            lookup_strategy=request.strategy,
+            lookup_query_digest=material.digest,
+            lookup_continuation=cursor,
+            lookup_material=material,
+        )
+
+    def normalize_lookup(
+        self, response: ResponseEnvelope, request: LookupRequest | None = None
+    ) -> NormalizedLookupPage:
+        """Normalize one md5 lookup page into ranked, evidenced post results."""
+
+        self._validate_envelope(response)
+        self._raise_for_outcome(response)
+        try:
+            body = json.loads(response.payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "provider returned invalid JSON",
+            ) from error
+        if (
+            isinstance(body, dict)
+            and body.get("success") is False
+            and isinstance(body.get("code"), str)
+            and body["code"].endswith(_INVALID_TOKEN_SUFFIXES)
+        ):
+            # A repeated invalid-token body after the fetch-time re-exchange.
+            raise AdapterFailure(
+                AdapterOutcome.AUTHENTICATION_REQUIRED,
+                "Sankaku authentication failed",
+                status_code=response.status_code,
+            )
+        if not isinstance(body, dict) or not isinstance(body.get("data"), list):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "Sankaku keyset response is not a data/meta object",
+            )
+        meta = body.get("meta")
+        if not isinstance(meta, dict):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "Sankaku keyset response has no meta object",
+            )
+        results: list[NormalizedLookupResult] = []
+        for rank, post in enumerate(body["data"]):
+            results.append(self._lookup_post_result(post, response, rank))
+        next_cursor = meta.get("next")
+        if next_cursor is not None and (not isinstance(next_cursor, str) or not next_cursor):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "Sankaku keyset meta has a malformed next cursor",
+            )
+        if isinstance(next_cursor, str) and len(next_cursor) > 256:
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE,
+                "Sankaku keyset next cursor is unreasonably long",
+            )
+        continuation = None
+        if next_cursor and request is not None:
+            continuation = LookupContinuation(
+                self.provider_key,
+                self.schema_version,
+                request.strategy,
+                request.material.digest,
+                page=next_cursor,
+            )
+        return NormalizedLookupPage(tuple(results), continuation, len(results))
+
+    def _lookup_post_result(
+        self, post: object, response: ResponseEnvelope, rank: int
+    ) -> NormalizedLookupResult:
+        if not isinstance(post, dict):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "Sankaku post record is not an object"
+            )
+        post_id = post.get("id")
+        if not isinstance(post_id, str) or not _POST_ID_PATTERN.fullmatch(post_id):
+            raise AdapterFailure(
+                AdapterOutcome.MALFORMED_RESPONSE, "Sankaku post record has no opaque id"
+            )
+        items = tuple(self._post_items(post))
+        source = post.get("source")
+        query = self._query_of(response)
+        data = {
+            "platform": self.instance_key,
+            "post_id": post_id,
+            "canonical_url": f"https://sankaku.app/posts/{post_id}",
+            "query_kind": response.lookup_strategy.value if response.lookup_strategy else None,
+            "query": query.removeprefix("md5:") or None,
+            "source": source if isinstance(source, str) and source else None,
+            "declared_md5": _text_or_none(post.get("md5")),
+        }
+        return NormalizedLookupResult("post", post_id, data, rank, items)
 
     @staticmethod
     def _query_of(response: ResponseEnvelope) -> str:

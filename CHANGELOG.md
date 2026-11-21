@@ -28,6 +28,20 @@ Rules:
   `CatalogDatabase`/`serve` globals, request-time `httpx.Client()` lookup) are
   documented in the change's design.md.
 
+### Added
+
+- **Sankaku md5 lookup lane in `catalog crosscheck` (bead `data-processing-hvs`
+  phase 1, change `add-sankaku-md5-lookup`)** — `SankakuInstance` declares
+  `declared_md5`/`verified_md5` capabilities and `SankakuAdapter` implements the
+  `LookupAdapter` protocol by rendering `tags=md5:<hash>` through the existing
+  authorized keyset listing path; `crosscheck` gains a `sankaku` provider lane
+  with the usual budgets, 2.0s pacing floor, and candidate-only outcomes.
+  Credentials may be absent without crashing a batch: construction defers to a
+  typed per-item authentication failure (gelbooru pattern). Live capture
+  fixtures (hit + miss) pin the response contract in
+  `tests/fixtures/metadata_adapters/sankaku_lookup.json`; verified end-to-end
+  with a bounded live smoke (seeded md5 → pending `same_work` candidate).
+
 ## [2026-11-20]
 
 ### Fixed

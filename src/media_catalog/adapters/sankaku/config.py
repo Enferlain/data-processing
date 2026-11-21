@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
+
+from media_catalog.adapters.contracts import (
+    LookupCapabilities,
+    LookupCapability,
+    LookupPlanContext,
+    LookupStrategy,
+)
 
 ADAPTER_VERSION = "sankaku-native-v1"
 API_SCHEMA_VERSION = "sankaku-api-v2-v1"
@@ -47,6 +54,14 @@ class SankakuInstance:
     page_size: int = MAX_PAGE_SIZE
     max_response_bytes: int = MAX_RESPONSE_BYTES
     request_timeout_seconds: float = REQUEST_TIMEOUT_SECONDS
+    lookup_capabilities: LookupCapabilities = field(
+        default_factory=lambda: LookupCapabilities(
+            (
+                LookupCapability(LookupStrategy.DECLARED_MD5, "post", "keyset", MAX_PAGE_SIZE),
+                LookupCapability(LookupStrategy.VERIFIED_MD5, "post", "keyset", MAX_PAGE_SIZE),
+            )
+        )
+    )
 
     def __post_init__(self) -> None:
         if self.platform_key != "sankaku":
@@ -83,6 +98,18 @@ class SankakuInstance:
     @property
     def instance_key(self) -> str:
         return self.platform_key
+
+    @property
+    def lookup_plan_context(self) -> LookupPlanContext:
+        """Provider-neutral planning identity for the Sankaku instance."""
+
+        return LookupPlanContext(
+            provider=self.platform_key,
+            instance_key=self.platform_key,
+            adapter_version=ADAPTER_VERSION,
+            schema_version=API_SCHEMA_VERSION,
+            lookup_capabilities=self.lookup_capabilities,
+        )
 
 
 SANKAKU = SankakuInstance()

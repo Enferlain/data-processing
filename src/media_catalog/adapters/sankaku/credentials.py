@@ -35,6 +35,29 @@ class SankakuCredentials:
             raise ValueError(f"configure both {instance.login_env} and {instance.password_env}")
         return cls(login, password)
 
+    @classmethod
+    def optional_from_environment(
+        cls,
+        instance: SankakuInstance,
+        environ: Mapping[str, str] | None = None,
+    ) -> SankakuCredentials | None:
+        """Resolve credentials for lookup lanes: absent is None, partial refuses.
+
+        Crosscheck lanes construct adapters before any item runs; a fully
+        absent pair defers the typed authentication failure to the first
+        bounded request, while exactly one set value is a misconfiguration
+        and refuses rather than half-authenticating.
+        """
+
+        values = os.environ if environ is None else environ
+        login = values.get(instance.login_env)
+        password = values.get(instance.password_env)
+        if login is None and password is None:
+            return None
+        if login is None or password is None:
+            raise ValueError(f"configure both {instance.login_env} and {instance.password_env}")
+        return cls(login, password)
+
     def secret_values(self) -> tuple[str, str]:
         """Credential values for sanitization passes; never rendered directly."""
         return (self.login, self.password)
