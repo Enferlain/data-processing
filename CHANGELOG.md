@@ -42,6 +42,15 @@ Rules:
   `tests/fixtures/metadata_adapters/sankaku_lookup.json`; verified end-to-end
   with a bounded live smoke (seeded md5 → pending `same_work` candidate).
 
+### Fixed
+
+- **`openspec/specs/labeling/spec.md` validates again (bead
+  `data-processing-fr5`)** — the main spec was a raw delta-format file
+  (`## ADDED requirements`, no Purpose), a leftover from a past sync that
+  failed `openspec validate --specs`. Converted to main-spec format with a
+  Purpose and unchanged requirement content; the spec tree now validates
+  29/29.
+
 ## [2026-11-20]
 
 ### Fixed

@@ -1,6 +1,13 @@
 # labeling Specification
 
-## ADDED requirements
+## Purpose
+
+The operator pair-labeling queue: which provider-declared signal families may
+enqueue candidate pairs for review, under the rule that a signal proposes
+pairs but never decides a relationship. Label semantics and decision history
+live in the operator-labels capability.
+
+## Requirements
 
 ### Requirement: pool co-membership enqueues as a labeling family
 
