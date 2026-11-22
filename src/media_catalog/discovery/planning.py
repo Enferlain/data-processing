@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from media_catalog.adapters.contracts import LookupStrategy
-from media_catalog.adapters.danbooru import AIBOORU, DANBOORU
+from media_catalog.adapters.danbooru import AIBOORU, DANBOORU, SHARKGONE
 from media_catalog.adapters.e621 import E621
 from media_catalog.adapters.gelbooru import GELBOORU
 from media_catalog.candidate_lookup.planning import (
@@ -35,9 +35,11 @@ from media_catalog.discovery.policy import (
 from media_catalog.search_index.projection import registered_targets
 
 # Providers that declare bounded lookup capabilities today; safebooru/rule34/
-# e926 deliberately ship none until captured, and sankaku/pixiv/pawchive have
-# no lookup surface.  Stage 3 extends this registry.
-LOOKUP_PROVIDERS: tuple[Any, ...] = (DANBOORU, AIBOORU, E621, GELBOORU)
+# e926 deliberately ship none until captured, and pixiv/pawchive have no
+# lookup surface.  sharkgone is the operator's personal danbooru-family
+# booru (bead data-processing-9ds): post strategies only, artists endpoint
+# empty.
+LOOKUP_PROVIDERS: tuple[Any, ...] = (DANBOORU, AIBOORU, SHARKGONE, E621, GELBOORU)
 
 LOCAL = "local"
 PROVIDER = "provider"

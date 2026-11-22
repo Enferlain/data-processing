@@ -120,3 +120,34 @@ AIBOORU = DanbooruInstance(
         )
     ),
 )
+
+
+# Operator-provided personal Danbooru-software booru (bead
+# data-processing-9ds): ~185 posts of rehosted X/Discord content with
+# artist tags; a discovery source, never danbooru failover.  The artists
+# endpoint returns zero entries, so artist strategies and attribution
+# enumeration stay unregistered until that changes.  Anonymous requests
+# work; the credential pair exists for authenticated use and lives in the
+# environment only.
+SHARKGONE = DanbooruInstance(
+    platform_key="sharkgone",
+    base_url="https://booru.sharkgone.com",
+    schema_version="sharkgone-json-v1",
+    login_env="SHARKGONE_LOGIN",
+    api_key_env="SHARKGONE_API_KEY",
+    lookup_capabilities=LookupCapabilities(
+        tuple(
+            LookupCapability(
+                strategy,
+                "attribution" if strategy.value.startswith("artist_") else "post",
+                "keyset",
+            )
+            for strategy in (
+                LookupStrategy.SOURCE_POST_URL,
+                LookupStrategy.EXTERNAL_POST_ID,
+                LookupStrategy.DECLARED_MD5,
+                LookupStrategy.VERIFIED_MD5,
+            )
+        )
+    ),
+)

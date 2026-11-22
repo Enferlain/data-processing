@@ -33,6 +33,19 @@ Rules:
   `link-evidence-v2`); prior candidates keep their v1 rows. Unmapped kinds
   keep factor 1.0, so existing suites passed unchanged.
 
+### Added
+
+- **Sharkgone as a Danbooru-family cross-search instance (bead
+  `data-processing-9ds`, change `add-sharkgone-instance`)** — the operator's
+  personal booru (`booru.sharkgone.com`) is registered at every family seam:
+  `SHARKGONE` instance with env-only credentials and the four non-artist post
+  lookup strategies (artists endpoint empty), crosscheck lane, discovery
+  provider, lookup/library/reprocess CLIs, link recognizer + resolution,
+  kernel operations, replay-safe platform migration `0040`, and a doctor
+  surface. Live-captured anonymous fixtures (`sharkgone.json` single post +
+  `sharkgone_lookup.json` md5 hit/miss) pin the contract; independent
+  source, never danbooru failover.
+
 ## [2026-11-21]
 
 ### Changed

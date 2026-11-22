@@ -42,6 +42,7 @@ CASES = {
         "https://pawchive.pw/patreon/user/75232195/post/70439020",
         "patreon:75232195:70439020",
     ),
+    "sharkgone": ("https://booru.sharkgone.com/posts/213", "213"),
 }
 
 

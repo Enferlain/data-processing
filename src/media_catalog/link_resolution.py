@@ -80,6 +80,8 @@ _DANBOORU_HOST_PLATFORMS = {
     "danbooru.donmai.us": "danbooru",
     "aibooru.online": "aibooru",
     "www.aibooru.online": "aibooru",
+    "booru.sharkgone.com": "sharkgone",
+    "www.booru.sharkgone.com": "sharkgone",
 }
 
 
@@ -204,6 +206,8 @@ _HOST_RESOLVERS = {
     "danbooru.donmai.us": _danbooru_family,
     "aibooru.online": _danbooru_family,
     "www.aibooru.online": _danbooru_family,
+    "booru.sharkgone.com": _danbooru_family,
+    "www.booru.sharkgone.com": _danbooru_family,
     "e621.net": _e621_family,
     "e926.net": _e621_family,
     "www.pixiv.net": _pixiv,
@@ -231,6 +235,7 @@ RESOLVED_PLATFORMS: frozenset[str] = frozenset(
     {
         "danbooru",
         "aibooru",
+        "sharkgone",
         "e621",
         "e926",
         "gelbooru",

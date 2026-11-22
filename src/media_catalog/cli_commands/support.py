@@ -9,7 +9,12 @@ from pathlib import Path
 import httpx
 
 from media_catalog.acquisition import AcquisitionSelection
-from media_catalog.adapters.danbooru import AIBOORU, DANBOORU, DanbooruAdapter
+from media_catalog.adapters.danbooru import (
+    AIBOORU,
+    DANBOORU,
+    SHARKGONE,
+    DanbooruAdapter,
+)
 from media_catalog.adapters.e621 import E621_INSTANCES, E621Adapter
 from media_catalog.adapters.gelbooru import GELBOORU_INSTANCES, GelbooruAdapter
 from media_catalog.adapters.pawchive import PAWCHIVE_INSTANCES, PawchiveAdapter
@@ -82,7 +87,9 @@ def offline_replay_adapter(provider: str):
         return E621Adapter(E621_INSTANCES[provider], client=client)
     if provider in PAWCHIVE_INSTANCES:
         return PawchiveAdapter(PAWCHIVE_INSTANCES[provider], client=client)
-    return DanbooruAdapter(AIBOORU if provider == "aibooru" else DANBOORU, client=client)
+    return DanbooruAdapter(
+        {"aibooru": AIBOORU, "sharkgone": SHARKGONE}.get(provider, DANBOORU), client=client
+    )
 
 
 def add_lookup_limits(parser: argparse.ArgumentParser) -> None:

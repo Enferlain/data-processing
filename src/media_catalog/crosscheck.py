@@ -25,7 +25,7 @@ from media_catalog.candidate_lookup.planning import (
 )
 from media_catalog.candidate_lookup.service import CandidateLookupService
 
-PROVIDERS: tuple[str, ...] = ("danbooru", "aibooru", "e621", "gelbooru", "sankaku")
+PROVIDERS: tuple[str, ...] = ("danbooru", "aibooru", "e621", "gelbooru", "sankaku", "sharkgone")
 
 CORPORA = ("hash-material", "downloaded", "file-seeds", "all")
 RECHECK_MODES = ("unsearched", "stale", "force")

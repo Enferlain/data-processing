@@ -9,7 +9,7 @@ import httpx
 
 from media_catalog.adapter_factory import adapter_construction
 from media_catalog.adapters import LookupPlanConfiguration
-from media_catalog.adapters.danbooru import AIBOORU, DANBOORU
+from media_catalog.adapters.danbooru import AIBOORU, DANBOORU, SHARKGONE
 from media_catalog.adapters.e621 import E621_INSTANCES
 from media_catalog.adapters.gelbooru import GELBOORU_INSTANCES
 from media_catalog.candidate_lookup import (
@@ -45,7 +45,7 @@ def register(commands: argparse._SubParsersAction) -> None:
         command.add_argument("seed", metavar="ACCOUNT:ID|POST:ID")
         command.add_argument(
             "--provider",
-            choices=("danbooru", "aibooru", "e621", "gelbooru"),
+            choices=("danbooru", "aibooru", "sharkgone", "e621", "gelbooru"),
             required=True,
         )
         command.add_argument(
@@ -58,7 +58,9 @@ def register(commands: argparse._SubParsersAction) -> None:
     lookup_resume.add_argument("catalog", type=Path)
     lookup_resume.add_argument("run_id", type=int)
     lookup_resume.add_argument(
-        "--provider", choices=("danbooru", "aibooru", "e621", "gelbooru"), required=True
+        "--provider",
+        choices=("danbooru", "aibooru", "sharkgone", "e621", "gelbooru"),
+        required=True,
     )
     add_lookup_limits(lookup_resume)
     add_json(lookup_resume)
@@ -136,6 +138,8 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             else DANBOORU
             if arguments.provider == "danbooru"
             else AIBOORU
+            if arguments.provider == "aibooru"
+            else SHARKGONE
         )
         plan = plan_candidate_lookup(
             arguments.catalog,

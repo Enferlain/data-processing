@@ -20,6 +20,7 @@ from media_catalog.tombstone import tombstone_lookup_run, tombstone_posts
 _REPROCESS_PROVIDERS = (
     "danbooru",
     "aibooru",
+    "sharkgone",
     "gelbooru",
     "safebooru",
     "rule34",

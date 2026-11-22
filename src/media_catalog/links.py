@@ -31,11 +31,12 @@ BOORU_INSTANCES = {
     "api.rule34.xxx": "rule34",
     "sankaku.app": "sankaku",
     "chan.sankakucomplex.com": "sankaku",
-    "pawchive.pw": "pawchive",
+    "booru.sharkgone.com": "sharkgone",
+    "www.booru.sharkgone.com": "sharkgone",
     "www.pawchive.pw": "pawchive",
 }
 # Hosts whose post pages share the danbooru/e621 path grammar.
-_POSTS_PATH_PLATFORMS = frozenset({"danbooru", "aibooru", "e621", "e926", "sankaku"})
+_POSTS_PATH_PLATFORMS = frozenset({"danbooru", "aibooru", "sharkgone", "e621", "e926", "sankaku"})
 # The gelbooru 0.2 query-string post/artist grammar, and each family
 # member's canonical host for reference targets.
 _GELBOORU_QUERY_PLATFORMS = frozenset({"gelbooru", "safebooru", "rule34"})

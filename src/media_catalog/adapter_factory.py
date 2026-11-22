@@ -14,6 +14,7 @@ import httpx
 from media_catalog.adapters.danbooru import (
     AIBOORU,
     DANBOORU,
+    SHARKGONE,
     DanbooruAdapter,
     DanbooruCredentials,
 )
@@ -64,8 +65,8 @@ def adapter_construction(platform: str) -> tuple[Callable[[httpx.Client], Any], 
             return PawchiveAdapter(pawchive_instance, client=client)
 
         return build_pawchive, pawchive_instance.minimum_interval_seconds
-    if platform in {"danbooru", "aibooru"}:
-        danbooru_instance = AIBOORU if platform == "aibooru" else DANBOORU
+    if platform in {"danbooru", "aibooru", "sharkgone"}:
+        danbooru_instance = {"aibooru": AIBOORU, "sharkgone": SHARKGONE}.get(platform, DANBOORU)
 
         def build_danbooru(client: httpx.Client) -> DanbooruAdapter:
             return DanbooruAdapter(

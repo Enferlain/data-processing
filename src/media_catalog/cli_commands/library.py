@@ -111,7 +111,7 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
                     if arguments.library_command == "resume"
                     else service.run(plan)
                 )
-        elif provider in {"danbooru", "aibooru"} or provider in E621_INSTANCES:
+        elif provider in {"danbooru", "aibooru", "sharkgone"} or provider in E621_INSTANCES:
             library_factory, library_interval = adapter_construction(provider)
             with httpx.Client() as client:
                 adapter = library_factory(client)

@@ -28,6 +28,7 @@ from media_catalog.adapters.contracts import AdapterFailure
 from media_catalog.adapters.danbooru import (
     AIBOORU,
     DANBOORU,
+    SHARKGONE,
     DanbooruAdapter,
     DanbooruCredentials,
 )
@@ -219,6 +220,15 @@ DOCTOR_SURFACES: tuple[DoctorSurface, ...] = (
         offline_adapter=_danbooru_offline(AIBOORU),
         live_adapter=_danbooru_live(AIBOORU),
         probe_case="compatible_post",
+    ),
+    DoctorSurface(
+        platform="sharkgone",
+        suite_file="sharkgone.json",
+        provider_key="danbooru",
+        instance_key="sharkgone",
+        offline_adapter=_danbooru_offline(SHARKGONE),
+        live_adapter=_danbooru_live(SHARKGONE),
+        probe_case="post_213",
     ),
     DoctorSurface(
         platform="e621",
