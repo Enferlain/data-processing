@@ -5,6 +5,7 @@ from typing import Any
 
 from media_catalog.discovery.support import STRENGTH_SCORES, digest
 from media_catalog.records import LinkOccurrence
+from media_catalog.scoring import score_candidate_evidence
 
 
 class CandidateGenerator:
@@ -195,18 +196,11 @@ class CandidateGenerator:
                 VALUES (?, ?) ON CONFLICT DO NOTHING""",
             (candidate_id, evidence_id),
         )
-        score = self.connection.execute(
-            f"""SELECT COALESCE(SUM(CASE e.strength WHEN 'exact' THEN 100 WHEN 'strong' THEN 70
-                        WHEN 'moderate' THEN 35 ELSE 10 END), 0), COUNT(*)
-                FROM {join_table} ce JOIN match_evidence e ON e.evidence_id = ce.evidence_id
-                WHERE ce.{id_column} = ? AND e.stance = 'supports'""",
-            (candidate_id,),
-        ).fetchone()
-        components = json.dumps(
-            {"supporting_evidence": score[1], "points": score[0]}, sort_keys=True
+        score, components, generation = score_candidate_evidence(
+            self.connection, join_table, id_column, candidate_id
         )
         self.connection.execute(
             f"""UPDATE {table} SET score = ?, score_components_json = ?,
                     evidence_generation = ?, updated_at = ? WHERE {id_column} = ?""",
-            (score[0], components, score[1], now, candidate_id),
+            (score, components, generation, now, candidate_id),
         )

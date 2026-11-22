@@ -9,9 +9,10 @@ from dataclasses import dataclass
 
 from media_catalog.adapters import LookupStrategy, NormalizedLookupResult
 from media_catalog.links import RECOGNIZER_VERSION, recognize_url
+from media_catalog.scoring import score_candidate_evidence
 
 INTERPRETER_VERSION = "candidate-lookup-interpreter-v1"
-SCORING_VERSION = "candidate-lookup-score-v1"
+SCORING_VERSION = "candidate-lookup-score-v2"
 
 
 def _digest(*parts: object) -> str:
@@ -186,6 +187,24 @@ class LookupInterpreter:
                    VALUES (?, ?, 'symmetric', ?, ?) ON CONFLICT DO NOTHING""",
                 (candidate_id, characteristic, INTERPRETER_VERSION, observed_at),
             )
+
+        shared_artists = self._shared_artist_names(seed_post_id, normalized_post_id)
+        if shared_artists:
+            # Calibrated negative evidence (vo8): same-artist agreement alone
+            # is majority-different in operator labels, so it attaches as a
+            # distinct evidence row whose calibrated weight is negative.
+            self._post_candidate(
+                subject_id,
+                target_id,
+                relation,
+                "weak",
+                "symmetric",
+                "same_artist_overlap",
+                raw_observation_id,
+                observed_at,
+                seed_material_digest,
+            )
+
         return InterpretedResult(
             "post_match",
             stable_digest,
@@ -193,6 +212,20 @@ class LookupInterpreter:
             post_candidate_id=candidate_id,
             match_evidence_id=evidence_id,
         )
+
+    def _shared_artist_names(self, left: int, right: int) -> list[str]:
+        """Artist-category tag names carried by both posts (name-level agreement)."""
+
+        if left == right:
+            return []
+        rows = self.connection.execute(
+            """SELECT DISTINCT t.name
+                 FROM post_tags pa JOIN post_tags pb ON pb.tag_id = pa.tag_id
+                 JOIN tags t ON t.tag_id = pa.tag_id
+                WHERE pa.post_id = ? AND pb.post_id = ? AND t.category = 'artist'""",
+            (left, right),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
 
     def _post_id(self, result: NormalizedLookupResult) -> int:
         row = self.connection.execute(
@@ -309,23 +342,13 @@ class LookupInterpreter:
                VALUES (?, ?) ON CONFLICT DO NOTHING""",
             (candidate_id, evidence_id),
         )
-        score, generation = self.connection.execute(
-            """SELECT COALESCE(SUM(CASE e.strength WHEN 'exact' THEN 100
-                       WHEN 'strong' THEN 70 WHEN 'moderate' THEN 35 ELSE 10 END), 0), COUNT(*)
-               FROM post_candidate_evidence ce JOIN match_evidence e USING(evidence_id)
-               WHERE ce.post_candidate_id = ? AND e.stance = 'supports'""",
-            (candidate_id,),
-        ).fetchone()
+        score, components, generation = score_candidate_evidence(
+            self.connection, "post_candidate_evidence", "post_candidate_id", candidate_id
+        )
         self.connection.execute(
             """UPDATE post_match_candidates SET score = ?, score_components_json = ?,
                       evidence_generation = ?, updated_at = ? WHERE post_candidate_id = ?""",
-            (
-                score,
-                json.dumps({"points": score, "supporting_evidence": generation}, sort_keys=True),
-                generation,
-                observed_at,
-                candidate_id,
-            ),
+            (score, components, generation, observed_at, candidate_id),
         )
         return candidate_id, evidence_id
 
@@ -468,26 +491,17 @@ class LookupInterpreter:
                    VALUES (?, ?) ON CONFLICT DO NOTHING""",
                 (candidate_id, evidence_id),
             )
-            score, generation = self.connection.execute(
-                """SELECT COALESCE(SUM(CASE e.strength WHEN 'exact' THEN 100
-                           WHEN 'strong' THEN 70 WHEN 'moderate' THEN 35 ELSE 10 END), 0), COUNT(*)
-                   FROM account_candidate_evidence ce JOIN match_evidence e USING(evidence_id)
-                   WHERE ce.account_candidate_id = ? AND e.stance = 'supports'""",
-                (candidate_id,),
-            ).fetchone()
+            score, components, generation = score_candidate_evidence(
+                self.connection,
+                "account_candidate_evidence",
+                "account_candidate_id",
+                candidate_id,
+            )
             self.connection.execute(
                 """UPDATE account_match_candidates SET score = ?, score_components_json = ?,
                           evidence_generation = ?, updated_at = ?
                    WHERE account_candidate_id = ?""",
-                (
-                    score,
-                    json.dumps(
-                        {"points": score, "supporting_evidence": generation}, sort_keys=True
-                    ),
-                    generation,
-                    observed_at,
-                    candidate_id,
-                ),
+                (score, components, generation, observed_at, candidate_id),
             )
             return reference_id, candidate_id, evidence_id
         return None

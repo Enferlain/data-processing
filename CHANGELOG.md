@@ -14,6 +14,25 @@ Rules:
 - Be concise and mention all changes without necessarily detailing each one
 
 
+## [2026-11-22]
+
+### Changed
+
+- **Candidate scoring is calibrated by operator label rates (bead
+  `data-processing-vo8`, change `add-calibrated-scoring-policy`)** — a new
+  shared policy (`scoring.py`, `calibrated-evidence-v2`) replaces the three
+  writers' duplicated additive SUM: each evidence family's weight is its
+  strength scaled by a Laplace-smoothed same-or-variant rate from the
+  operator's pair labels (Wilson 95% CI recorded in `score_components_json`),
+  families that are majority `different` contribute negative weight, and
+  correlated identity evidence (artist name inside a source URL) compounds
+  instead of summing. The lookup interpreter now attaches a
+  `same_artist_overlap` evidence row when seed and result share an artist
+  tag — agreement that alone scores negative (same_artist_* labels are
+  96–100% different). Writer versions bumped (`candidate-lookup-score-v2`,
+  `link-evidence-v2`); prior candidates keep their v1 rows. Unmapped kinds
+  keep factor 1.0, so existing suites passed unchanged.
+
 ## [2026-11-21]
 
 ### Changed

@@ -12,7 +12,7 @@ from media_catalog.records import LinkOccurrence, PlatformReferenceRecord
 CANONICALIZER_VERSION = "url-canonicalizer-v2"
 EXTRACTOR_VERSION = "catalog-links-v1"
 RECOGNIZER_VERSION = "platform-recognizers-v1"
-SCORING_VERSION = "link-evidence-v1"
+SCORING_VERSION = "link-evidence-v2"
 
 URL_PATTERN = re.compile(r"https?://[^\s<>\]\[(){}\"']+", re.IGNORECASE)
 TRACKING_KEYS = frozenset({"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"})

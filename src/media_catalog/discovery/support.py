@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-STRENGTH_SCORES = {"weak": 10, "moderate": 35, "strong": 70, "exact": 100}
+from media_catalog.scoring import STRENGTH_SCORES as STRENGTH_SCORES
 
 
 def digest(*values: object) -> str:

@@ -5,6 +5,7 @@ from typing import Any
 
 from media_catalog.discovery.support import STRENGTH_SCORES, digest, now, parse_match_ref
 from media_catalog.records import validate_relation
+from media_catalog.scoring import score_candidate_evidence
 
 
 class PostMatchManager:
@@ -102,33 +103,12 @@ class PostMatchManager:
                    VALUES (?, ?) ON CONFLICT DO NOTHING""",
                 (candidate_id, evidence_id),
             )
-            score = int(
-                self.connection.execute(
-                    """SELECT COALESCE(SUM(CASE e.strength WHEN 'exact' THEN 100
-                               WHEN 'strong' THEN 70 WHEN 'moderate' THEN 35 ELSE 10 END), 0)
-                       FROM post_candidate_evidence ce JOIN match_evidence e USING (evidence_id)
-                       WHERE ce.post_candidate_id = ? AND e.stance = 'supports'""",
-                    (candidate_id,),
-                ).fetchone()[0]
-            )
-            generation = int(
-                self.connection.execute(
-                    """SELECT COUNT(*) FROM post_candidate_evidence
-                       WHERE post_candidate_id = ?""",
-                    (candidate_id,),
-                ).fetchone()[0]
+            score, components, generation = score_candidate_evidence(
+                self.connection, "post_candidate_evidence", "post_candidate_id", candidate_id
             )
             self.connection.execute(
                 """UPDATE post_match_candidates SET score = ?, score_components_json = ?,
                           evidence_generation = ?, updated_at = ? WHERE post_candidate_id = ?""",
-                (
-                    score,
-                    json.dumps(
-                        {"supporting_evidence": generation, "points": score}, sort_keys=True
-                    ),
-                    generation,
-                    timestamp,
-                    candidate_id,
-                ),
+                (score, components, generation, timestamp, candidate_id),
             )
         return f"post:{candidate_id}"
