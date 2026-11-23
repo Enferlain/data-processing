@@ -29,6 +29,17 @@ Rules:
   evidence-only by decision: no resolution, no candidate targets (guards
   enforce), no seed role. Unblocks cyp's series-membership slice.
 
+- **Grabber sidecar tags parsed and retained on folder ingest (bead
+  `data-processing-h6d`, change `parse-grabber-sidecars`)** — `<image>.txt`
+  sidecars now parse during the ingest walk (danbooru-style category
+  prefixes mapped onto the kernel tag vocabulary, `pool:` metatags counted
+  apart) and land as one categorized raw observation per file seed under an
+  idempotent `folder_sidecar` import run — operator-supplied declared
+  material from the original download. Provider tag tables stay untouched
+  (live lookup remains authoritative for matched files), orphan sidecars are
+  counted but never opened, and the ingest result reports
+  `sidecar_parsed`/`sidecar_orphan`/`sidecar_pool_tags`.
+
 ### Fixed
 
 - **Two sharkgone-night regressions the full suite caught** — the sharkgone
