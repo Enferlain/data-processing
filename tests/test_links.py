@@ -38,6 +38,14 @@ from media_catalog.records import (
             "https://www.pixiv.net/users/27631291",
         ),
         (
+            "https://www.pixiv.net/artworks/series/987654",
+            "pixiv",
+            "",
+            "series",
+            "987654",
+            "https://www.pixiv.net/artworks/series/987654",
+        ),
+        (
             "https://pixiv.net/artworks/133416234",
             "pixiv",
             "",

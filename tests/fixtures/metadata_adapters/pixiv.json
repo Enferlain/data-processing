@@ -11,7 +11,7 @@
    "profile text shortened",
    "tokens and headers removed"
   ],
-  "source": "minimal redacted contract derived from the pinned gallery-dl 1.32.2 field mapping; total_view/total_bookmarks/total_comments and the series key added 2026-10-07 reference-corroborated from the App API field inventory (gallery-dl 1.32.2) for engagement normalization"
+  "source": "minimal redacted contract derived from the pinned gallery-dl 1.32.2 field mapping; total_view/total_bookmarks/total_comments and the series key added 2026-10-07 reference-corroborated from the App API field inventory (gallery-dl 1.32.2) for engagement normalization ; artwork_in_series case added 2026-11-23 reference-corroborated from the same App API field inventory: the single_page_artwork capture with a non-null series object (id/title/language) to pin series-membership retention (bead data-processing-7jx)"
  },
  "cases": [
   {
@@ -279,6 +279,66 @@
    "expected": {
     "outcome": "authentication_required",
     "normalized_records": 0
+   }
+  },
+  {
+   "name": "artwork_in_series",
+   "operation": "fetch_post",
+   "target": "2001",
+   "request_identity": "pixiv:fetch_post:2001",
+   "response": {
+    "status_code": 200,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": {
+     "illust": {
+      "id": 2001,
+      "title": "Work A",
+      "caption": "caption",
+      "type": "illust",
+      "user": {
+       "id": 1001,
+       "name": "Artist A",
+       "account": "artist_a"
+      },
+      "create_date": "2026-01-01T00:00:00+00:00",
+      "page_count": 1,
+      "width": 1200,
+      "height": 1600,
+      "tags": [
+       {
+        "name": "original",
+        "translated_name": "Original"
+       }
+      ],
+      "meta_single_page": {
+       "original_image_url": "https://i.pximg.net/img-original/example_p0.jpg"
+      },
+      "image_urls": {
+       "large": "https://i.pximg.net/img-master/example_p0.jpg"
+      },
+      "visible": true,
+      "total_view": 4321,
+      "total_bookmarks": 321,
+      "total_comments": 12,
+      "series": {
+       "id": 987654,
+       "title": "Reference Series",
+       "language": "ja"
+      }
+     }
+    }
+   },
+   "expected": {
+    "outcome": "success",
+    "post_ids": [
+     "2001"
+    ],
+    "media_source_keys": [
+     "2001:p0"
+    ],
+    "tag_count": 1
    }
   }
  ]

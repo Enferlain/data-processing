@@ -32,7 +32,7 @@ SOURCE_CONTEXTS = frozenset(
         "attribution.url",
     }
 )
-OBJECT_KINDS = frozenset({"account", "post", "artist", "media_asset"})
+OBJECT_KINDS = frozenset({"account", "post", "artist", "media_asset", "series"})
 IDENTIFIER_KINDS = frozenset({"stable_id", "handle", "slug", "hash", "opaque"})
 ACCOUNT_RELATIONS = frozenset({"same_identity", "officially_linked"})
 POST_RELATIONS = frozenset(
@@ -81,6 +81,7 @@ SOURCE_OPERATIONS: dict[str, frozenset[str]] = {
     "pixiv": REMOTE_OPERATIONS,
     "rule34": REMOTE_OPERATIONS,
     "safebooru": REMOTE_OPERATIONS,
+    "sankaku": REMOTE_OPERATIONS,
     "sharkgone": REMOTE_OPERATIONS,
     "pawchive": REMOTE_OPERATIONS,
 }

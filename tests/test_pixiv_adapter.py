@@ -252,3 +252,31 @@ def test_pixiv_catalog_integration_preserves_profile_artwork_and_page_metadata(
             "app-api.pixiv.net",
             "app-api.pixiv.net",
         ]
+
+
+def test_series_membership_normalizes_as_evidence_only_external_reference() -> None:
+    """(bead data-processing-7jx) a non-null series key lands exactly one
+    external_reference item targeting the pixiv series stable id; null (the
+    captured artworks) lands none."""
+    adapter = PixivAdapter(refresh_token_env=None)
+    in_series = adapter.normalize(_suite_case("artwork_in_series").response)
+    series_items = [
+        item
+        for item in in_series.items
+        if item.object_kind == "external_reference" and item.data.get("object_kind") == "series"
+    ]
+    assert len(series_items) == 1
+    item = series_items[0]
+    assert item.native_id.endswith(":series:987654")
+    assert item.data["target_platform"] == "pixiv"
+    assert item.data["identifier_kind"] == "stable_id"
+    assert item.data["native_identifier"] == "987654"
+    assert item.data["value"] == "https://www.pixiv.net/artworks/series/987654"
+    assert item.data["evidence_only"] is True
+
+    captured = adapter.normalize(_suite_case("single_page_artwork").response)
+    assert not [
+        item
+        for item in captured.items
+        if item.object_kind == "external_reference" and item.data.get("object_kind") == "series"
+    ]

@@ -14,6 +14,28 @@ Rules:
 - Be concise and mention all changes without necessarily detailing each one
 
 
+
+## [2026-11-23]
+
+### Added
+
+- **Series references as typed evidence (bead `data-processing-7jx`, change
+  `add-series-references`)** — `platform_references.object_kind` widens with
+  `series` (replay-safe rebuild migration `0041`, guard triggers recreated),
+  `OBJECT_KINDS` follows, pixiv series URLs
+  (`www.pixiv.net/artworks/series/<id>`) recognize as `series`/`stable_id`
+  references, and the pixiv adapter retains a non-null artwork `series` key
+  as exactly one external series reference per post. Series references are
+  evidence-only by decision: no resolution, no candidate targets (guards
+  enforce), no seed role. Unblocks cyp's series-membership slice.
+
+### Fixed
+
+- **Two sharkgone-night regressions the full suite caught** — the sharkgone
+  registration had displaced the `sankaku` entry in `SOURCE_OPERATIONS` and
+  the `pawchive.pw` host mapping (both restored); platform-count and backup
+  schema-version test pins re-pinned for migrations 0040/0041.
+
 ## [2026-11-22]
 
 ### Changed

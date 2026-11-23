@@ -820,6 +820,7 @@ class PixivAdapter:
         }
         post_item = NormalizedItem("post", native_id, data)
         items: list[NormalizedItem] = [post_item]
+        items.extend(self._series_items(native_id, illust))
         if author is None:
             items.extend(self._tag_items(native_id, tags))
             items.extend(self._media_items(native_id, occurrences))
@@ -854,6 +855,40 @@ class PixivAdapter:
         items.extend(self._tag_items(native_id, tags))
         items.extend(self._media_items(native_id, occurrences))
         return NormalizedPage(tuple(items))
+
+    def _series_items(self, post_id: str, illust: Mapping[str, Any]) -> list[NormalizedItem]:
+        """Series membership as evidence (bead data-processing-7jx).
+
+        The App API reports ``series`` as an object with the series id (null
+        outside any series).  Membership lands as one external reference on
+        the post — the provider-declared grouping signal, retained without
+        fetching series pages or drawing relationship conclusions.
+        """
+
+        series = illust.get("series")
+        if not isinstance(series, Mapping):
+            return []
+        series_id = series.get("id")
+        if isinstance(series_id, bool) or not isinstance(series_id, int) or series_id <= 0:
+            return []
+        native = str(series_id)
+        return [
+            NormalizedItem(
+                "external_reference",
+                f"{post_id}:series:{native}",
+                {
+                    "platform": self.provider_key,
+                    "post_id": post_id,
+                    "reference_kind": "series",
+                    "value": f"https://www.pixiv.net/artworks/series/{native}",
+                    "target_platform": "pixiv",
+                    "object_kind": "series",
+                    "identifier_kind": "stable_id",
+                    "native_identifier": native,
+                    "evidence_only": True,
+                },
+            )
+        ]
 
     def _tag_items(self, post_id: str, tags: list[dict[str, Any]]) -> list[NormalizedItem]:
         return [

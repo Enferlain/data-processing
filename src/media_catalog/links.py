@@ -33,6 +33,7 @@ BOORU_INSTANCES = {
     "chan.sankakucomplex.com": "sankaku",
     "booru.sharkgone.com": "sharkgone",
     "www.booru.sharkgone.com": "sharkgone",
+    "pawchive.pw": "pawchive",
     "www.pawchive.pw": "pawchive",
 }
 # Hosts whose post pages share the danbooru/e621 path grammar.
@@ -174,6 +175,20 @@ def recognize_url(
             native_id,
             f"https://www.pixiv.net/users/{native_id}",
             "pixiv-user",
+        )
+    elif host == "www.pixiv.net" and (
+        match := re.fullmatch(r"/(?:[a-z]{2}/)?artworks/series/(\d+)", path)
+    ):
+        # A series is a distinct evidence-only namespace (bead
+        # data-processing-7jx): stable provider id, never a post reference.
+        native_id = match.group(1)
+        reference = _reference(
+            "pixiv",
+            "",
+            "series",
+            native_id,
+            f"https://www.pixiv.net/artworks/series/{native_id}",
+            "pixiv-series",
         )
     elif host == "www.pixiv.net" and (
         match := re.fullmatch(r"/(?:[a-z]{2}/)?artworks/(\d+)", path)

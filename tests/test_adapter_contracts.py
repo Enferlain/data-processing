@@ -98,6 +98,7 @@ def test_source_operation_registry_covers_the_adapter_vocabulary() -> None:
         "rule34",
         "safebooru",
         "sankaku",
+        "sharkgone",
     }
     assert set().union(*SOURCE_OPERATIONS.values()) == {
         operation.value for operation in AdapterOperation
