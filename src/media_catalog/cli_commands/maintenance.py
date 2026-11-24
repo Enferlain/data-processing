@@ -30,7 +30,15 @@ _REPROCESS_PROVIDERS = (
 )
 
 
-COMMANDS = ("reprocess", "seed", "tombstone", "label", "label-stats", "index")
+COMMANDS = (
+    "reprocess",
+    "seed",
+    "tombstone",
+    "label",
+    "label-stats",
+    "as-of",
+    "index",
+)
 
 
 def register(commands: argparse._SubParsersAction) -> None:
@@ -103,6 +111,34 @@ def register(commands: argparse._SubParsersAction) -> None:
     )
     label_stats.add_argument("catalog", type=Path)
     add_json(label_stats)
+
+    as_of_cmd = commands.add_parser(
+        "as-of",
+        description=(
+            "As-of review reports from retained history: state snapshot at a"
+            " cutoff or the change report between two cutoffs (read-only)"
+        ),
+    )
+    as_of_cmd.add_argument("catalog", type=Path)
+    mode = as_of_cmd.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--at",
+        metavar="TIMESTAMP",
+        help="reconstruct every review ledger's state at this ISO-8601 UTC cutoff",
+    )
+    mode.add_argument(
+        "--from",
+        dest="start",
+        metavar="TIMESTAMP",
+        help="change-report window start (exclusive)",
+    )
+    as_of_cmd.add_argument(
+        "--to",
+        dest="end",
+        metavar="TIMESTAMP",
+        help="change-report window end (inclusive); required with --from",
+    )
+    add_json(as_of_cmd)
 
     index_cmd = commands.add_parser(
         "index",
@@ -236,6 +272,29 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             return {
                 "catalog": public_path(arguments.catalog),
                 **calibration_report(database.connection),
+            }
+    if arguments.command == "as-of":
+        from media_catalog.temporal import (
+            change_report,
+            review_state_snapshot,
+            validate_cutoff,
+        )
+
+        if (arguments.start is None) != (arguments.end is None):
+            raise ValueError("--from and --to must be given together")
+        if arguments.at is not None:
+            cutoff = validate_cutoff(arguments.at, name="--at")
+            with CatalogDatabase(arguments.catalog) as database:
+                return {
+                    "catalog": public_path(arguments.catalog),
+                    **review_state_snapshot(database.connection, cutoff),
+                }
+        start = validate_cutoff(arguments.start, name="--from")
+        end = validate_cutoff(arguments.end, name="--to")
+        with CatalogDatabase(arguments.catalog) as database:
+            return {
+                "catalog": public_path(arguments.catalog),
+                **change_report(database.connection, start, end),
             }
     if arguments.command == "index":
         return _execute_index(arguments)

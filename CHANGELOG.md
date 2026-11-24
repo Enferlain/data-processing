@@ -15,6 +15,22 @@ Rules:
 
 
 
+## [2026-11-24]
+
+### Added
+
+- **As-of review snapshots and change reports (bead `data-processing-2ai`,
+  change `add-asof-review-reports`)** — `catalog as-of <catalog> --at T`
+  reconstructs every review ledger's state at a cutoff (latest decision at
+  or before T across pair labels, account/post/attribution candidates, and
+  relationship reviews, with birth-state reconstruction for never-decided
+  relationships and reversal counts), and `--from T1 --to T2` reports what
+  was decided and what arrived in the half-open window (decisions,
+  transitions, reversals, first-time labelings, new candidates and
+  relationships, observations landed, runs finished). Cutoffs are
+  calendar-validated, comparisons parse both sides for mixed
+  whole/fractional-second precision, and the reports write nothing.
+
 ## [2026-11-23]
 
 ### Added
