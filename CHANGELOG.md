@@ -31,6 +31,18 @@ Rules:
   calendar-validated, comparisons parse both sides for mixed
   whole/fractional-second precision, and the reports write nothing.
 
+- **Provenance timelines and accounts-as-of (bead `data-processing-2ai`,
+  change `add-provenance-timelines`)** — `catalog timeline <catalog> --post
+  N | --account N [--limit]` lists every retained event about one subject
+  in time order: source observations with their originating
+  remote/import run, metadata observations, account snapshots, pair labels
+  with their decision history, match candidates, and relationships. The
+  as-of snapshot report gains an `accounts` section (accounts known at the
+  cutoff and retained snapshot volume from the append-only ledger).
+  Read-only, bounded, validated subjects. The attribution-worklist as-of
+  follow-on stays parked: the relationships table holds one row, so the
+  worklist it would reconstruct does not exist yet.
+
 ## [2026-11-23]
 
 ### Added

@@ -129,6 +129,25 @@ def review_state_snapshot(connection: sqlite3.Connection, as_of: str) -> dict[st
         "by_state": relationship_states,
         "created": sum(relationship_states.values()),
     }
+    # Accounts known at the cutoff: the append-only snapshot ledger is the
+    # account analogue of the decision ledgers (first snapshot <= T means
+    # the account existed in our knowledge by then).
+    snapshot["accounts"] = {
+        "known": int(
+            connection.execute(
+                f"""SELECT count(DISTINCT account_id) FROM account_snapshots
+                     WHERE {_at_or_before("observed_at", as_of)}""",
+                (as_of,),
+            ).fetchone()[0]
+        ),
+        "snapshots_retained": int(
+            connection.execute(
+                f"""SELECT count(*) FROM account_snapshots
+                     WHERE {_at_or_before("observed_at", as_of)}""",
+                (as_of,),
+            ).fetchone()[0]
+        ),
+    }
     return snapshot
 
 
@@ -237,3 +256,176 @@ def change_report(connection: sqlite3.Connection, start: str, end: str) -> dict[
         "runs_finished": int(runs_finished),
     }
     return report
+
+
+def timeline(
+    connection: sqlite3.Connection,
+    *,
+    post_id: int | None = None,
+    account_id: int | None = None,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """The chronological provenance chain for one subject (bead 2ai).
+
+    Every retained event about the subject in parsed-time order: source
+    observations with their originating run, metadata observations, account
+    snapshots, pair labels and label decisions, match candidates and their
+    decisions, relationships and their review decisions.  Read-only and
+    bounded by ``limit``.
+    """
+
+    if (post_id is None) == (account_id is None):
+        raise ValueError("timeline takes exactly one of post_id or account_id")
+    if post_id is not None:
+        subject = {"kind": "post", "id": int(post_id)}
+        exists = connection.execute("SELECT 1 FROM posts WHERE post_id = ?", (post_id,)).fetchone()
+        native = connection.execute(
+            """SELECT p.native_post_id, pl.platform_key
+                 FROM posts p JOIN platforms pl USING(platform_id)
+                WHERE p.post_id = ?""",
+            (post_id,),
+        ).fetchone()
+    else:
+        assert account_id is not None
+        subject = {"kind": "account", "id": int(account_id)}
+        exists = connection.execute(
+            "SELECT 1 FROM accounts WHERE account_id = ?", (account_id,)
+        ).fetchone()
+        native = None
+    if exists is None:
+        raise ValueError(f"{subject['kind']} {subject['id']} does not exist")
+
+    events: list[dict[str, Any]] = []
+
+    def add(at: object, kind: str, **detail: Any) -> None:
+        events.append({"at": str(at), "kind": kind, "detail": detail})
+
+    if post_id is not None and native is not None:
+        for row in connection.execute(
+            """SELECT o.observed_at, o.object_kind, pl.platform_key,
+                      CASE WHEN rr.remote_run_id IS NOT NULL THEN rr.operation
+                           ELSE ir.source_kind END AS origin,
+                      CASE WHEN rr.remote_run_id IS NOT NULL THEN rr.status
+                           ELSE ir.status END AS origin_status
+                 FROM raw_observations o
+                 JOIN platforms pl ON pl.platform_id = o.platform_id
+                 LEFT JOIN remote_runs rr USING(remote_run_id)
+                 LEFT JOIN import_runs ir USING(import_run_id)
+                WHERE pl.platform_key = ? AND o.native_id = ?
+                ORDER BY o.observed_at""",
+            (str(native["platform_key"]), str(native["native_post_id"])),
+        ):
+            add(
+                row["observed_at"],
+                "source_observation",
+                provider=row["platform_key"],
+                object_kind=row["object_kind"],
+                origin=row["origin"],
+                origin_status=row["origin_status"],
+            )
+        for row in connection.execute(
+            """SELECT observed_at, score_total, favorite_count, comment_count,
+                      flag_deleted
+                 FROM post_metadata_observations
+                WHERE post_id = ? ORDER BY observed_at""",
+            (post_id,),
+        ):
+            add(
+                row["observed_at"],
+                "metadata_observation",
+                score_total=row["score_total"],
+                favorite_count=row["favorite_count"],
+                comment_count=row["comment_count"],
+                flag_deleted=row["flag_deleted"],
+            )
+    if account_id is not None:
+        for row in connection.execute(
+            """SELECT observed_at, handle, display_name, followers, verified
+                 FROM account_snapshots WHERE account_id = ? ORDER BY observed_at""",
+            (account_id,),
+        ):
+            add(
+                row["observed_at"],
+                "account_snapshot",
+                handle=row["handle"],
+                display_name=row["display_name"],
+                followers=row["followers"],
+                verified=row["verified"],
+            )
+
+    if post_id is not None:
+        for row in connection.execute(
+            """SELECT l.labeled_at, l.queue_signal, l.verdict,
+                      (SELECT group_concat(d.verdict || ' > ' || d.prior_verdict, '; ')
+                         FROM pair_label_decisions d
+                        WHERE d.pair_label_id = l.pair_label_id
+                        ORDER BY d.pair_label_decision_id) history
+                 FROM pair_labels l
+                WHERE l.post_a_id = ? OR l.post_b_id = ?
+                ORDER BY l.labeled_at""",
+            (post_id, post_id),
+        ):
+            add(
+                row["labeled_at"],
+                "pair_label",
+                queue_signal=row["queue_signal"],
+                verdict=row["verdict"],
+                decision_history=row["history"],
+            )
+        for row in connection.execute(
+            """SELECT c.created_at, c.relation_kind, c.score, c.current_state,
+                      (c.subject_post_id = ?) AS is_subject
+                 FROM post_match_candidates c
+                WHERE c.subject_post_id = ? OR c.target_post_id = ?
+                ORDER BY c.created_at""",
+            (post_id, post_id, post_id),
+        ):
+            add(
+                row["created_at"],
+                "candidate",
+                relation_kind=row["relation_kind"],
+                score=row["score"],
+                state=row["current_state"],
+                role="subject" if row["is_subject"] else "target",
+            )
+        for row in connection.execute(
+            """SELECT r.created_at, r.relation_kind, r.review_state,
+                      (r.subject_id = ?) AS is_subject
+                 FROM relationships r
+                WHERE (r.subject_kind = 'post' AND r.subject_id = ?)
+                   OR (r.target_kind = 'post' AND r.target_id = ?)
+                ORDER BY r.created_at""",
+            (post_id, post_id, post_id),
+        ):
+            add(
+                row["created_at"],
+                "relationship",
+                relation_kind=row["relation_kind"],
+                review_state=row["review_state"],
+                role="subject" if row["is_subject"] else "target",
+            )
+    else:
+        assert account_id is not None
+        for row in connection.execute(
+            """SELECT c.created_at, c.current_state, c.score
+                 FROM account_match_candidates c
+                WHERE c.subject_account_id = ? OR c.target_account_id = ?
+                ORDER BY c.created_at""",
+            (account_id, account_id),
+        ):
+            add(
+                row["created_at"],
+                "candidate",
+                relation_kind="same_identity",
+                score=row["score"],
+                state=row["current_state"],
+            )
+
+    events.sort(key=lambda event: (event["at"], event["kind"]))
+    truncated = max(0, len(events) - limit)
+    return {
+        "subject": subject,
+        "events": events[:limit],
+        "event_count": len(events),
+        "truncated": truncated,
+    }

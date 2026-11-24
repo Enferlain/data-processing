@@ -12,6 +12,7 @@ from media_catalog.database import CatalogDatabase
 from media_catalog.temporal import (
     change_report,
     review_state_snapshot,
+    timeline,
     validate_cutoff,
 )
 
@@ -89,6 +90,28 @@ def _seed(catalog: Path) -> None:
                     decision, note, decided_at)
                VALUES (1, 'pending', 'confirmed', NULL, ?)""",
             (FEB,),
+        )
+        # an account with two snapshots (February, March)
+        connection.execute(
+            """INSERT INTO accounts (platform_id, native_account_id, first_seen_at,
+                                      last_seen_at)
+               VALUES ((SELECT platform_id FROM platforms WHERE platform_key='e621'),
+                       'user-1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"""
+        )
+        for at, followers in ((FEB, 10), (MAR, 25)):
+            connection.execute(
+                """INSERT INTO account_snapshots (account_id, observed_at, handle,
+                          display_name, followers, snapshot_digest)
+                   VALUES (1, ?, 'handle', 'Display', ?, ?)""",
+                (at, followers, f"{followers}" * 32),
+            )
+        # a metadata observation on post 1 (January)
+        connection.execute(
+            """INSERT INTO post_metadata_observations (post_id, observed_at,
+                      score_total, favorite_count, comment_count, flag_deleted,
+                      observation_digest)
+               VALUES (1, ?, 7, 5, 2, 0, ?)""",
+            (JAN, "m" * 64),
         )
 
 
@@ -196,4 +219,66 @@ def test_cli_surface_round_trips(tmp_path: Path, capsys) -> None:
         main(["as-of", str(catalog), "--at", "garbage", "--json"])
     with pytest.raises(SystemExit, match="together"):
         main(["as-of", str(catalog), "--from", FEB, "--json"])
+    capsys.readouterr()
+
+
+def test_snapshot_accounts_known_at_cutoff(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog)
+    with CatalogDatabase(catalog) as database:
+        january = review_state_snapshot(database.connection, JAN)
+        february = review_state_snapshot(database.connection, FEB)
+        april = review_state_snapshot(database.connection, "2026-04-01T00:00:00Z")
+    assert january["accounts"] == {"known": 0, "snapshots_retained": 0}
+    assert february["accounts"] == {"known": 1, "snapshots_retained": 1}
+    assert april["accounts"] == {"known": 1, "snapshots_retained": 2}
+
+
+def test_post_timeline_orders_events_across_kinds(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog)
+    with CatalogDatabase(catalog) as database:
+        result = timeline(database.connection, post_id=1)
+    kinds = [event["kind"] for event in result["events"]]
+    # metadata (January), pair label (January), candidate (February),
+    # relationship (January) — sorted by parsed time then kind
+    assert result["subject"] == {"kind": "post", "id": 1}
+    assert set(kinds) == {"metadata_observation", "pair_label", "candidate", "relationship"}
+    ats = [event["at"] for event in result["events"]]
+    assert ats == sorted(ats)
+    label = next(e for e in result["events"] if e["kind"] == "pair_label")
+    assert label["detail"]["queue_signal"] == "same_artist_contrast"
+    assert label["detail"]["verdict"] == "unsure"
+
+
+def test_account_timeline_lists_snapshots(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog)
+    with CatalogDatabase(catalog) as database:
+        result = timeline(database.connection, account_id=1)
+        assert result["subject"] == {"kind": "account", "id": 1}
+        snapshots = [e for e in result["events"] if e["kind"] == "account_snapshot"]
+        assert [s["detail"]["followers"] for s in snapshots] == [10, 25]
+        with pytest.raises(ValueError, match="does not exist"):
+            timeline(database.connection, account_id=99)
+        with pytest.raises(ValueError, match="exactly one"):
+            timeline(database.connection)
+
+
+def test_timeline_cli_round_trips(tmp_path: Path, capsys) -> None:
+    catalog = tmp_path / "catalog.sqlite3"
+    _seed(catalog)
+    import json as _json
+
+    from media_catalog.cli import main
+
+    main(["timeline", str(catalog), "--post", "1", "--json"])
+    result = _json.loads(capsys.readouterr().out)
+    assert result["subject"] == {"kind": "post", "id": 1}
+    assert result["event_count"] >= 3
+    main(["timeline", str(catalog), "--account", "1", "--json"])
+    account_result = _json.loads(capsys.readouterr().out)
+    assert account_result["subject"] == {"kind": "account", "id": 1}
+    with pytest.raises(SystemExit, match="does not exist"):
+        main(["timeline", str(catalog), "--post", "99", "--json"])
     capsys.readouterr()

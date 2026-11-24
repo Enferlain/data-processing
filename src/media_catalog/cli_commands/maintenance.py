@@ -37,6 +37,7 @@ COMMANDS = (
     "label",
     "label-stats",
     "as-of",
+    "timeline",
     "index",
 )
 
@@ -139,6 +140,22 @@ def register(commands: argparse._SubParsersAction) -> None:
         help="change-report window end (inclusive); required with --from",
     )
     add_json(as_of_cmd)
+
+    timeline_cmd = commands.add_parser(
+        "timeline",
+        description=(
+            "Provenance timeline for one subject: every retained event in"
+            " time order (observations, snapshots, labels, candidates)"
+        ),
+    )
+    timeline_cmd.add_argument("catalog", type=Path)
+    timeline_subject = timeline_cmd.add_mutually_exclusive_group(required=True)
+    timeline_subject.add_argument("--post", type=int, metavar="ID", help="post timeline")
+    timeline_subject.add_argument("--account", type=int, metavar="ID", help="account timeline")
+    timeline_cmd.add_argument(
+        "--limit", type=int, default=200, help="maximum events listed (default 200)"
+    )
+    add_json(timeline_cmd)
 
     index_cmd = commands.add_parser(
         "index",
@@ -295,6 +312,19 @@ def execute(arguments: argparse.Namespace) -> dict[str, object]:
             return {
                 "catalog": public_path(arguments.catalog),
                 **change_report(database.connection, start, end),
+            }
+    if arguments.command == "timeline":
+        from media_catalog.temporal import timeline
+
+        with CatalogDatabase(arguments.catalog) as database:
+            return {
+                "catalog": public_path(arguments.catalog),
+                **timeline(
+                    database.connection,
+                    post_id=arguments.post,
+                    account_id=arguments.account,
+                    limit=arguments.limit,
+                ),
             }
     if arguments.command == "index":
         return _execute_index(arguments)
